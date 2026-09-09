@@ -1,4 +1,5 @@
 import asyncio
+import random
 
 import discord
 from redbot.core import Config, commands
@@ -52,28 +53,19 @@ class JuiceVaultPanelView(discord.ui.View):
         super().__init__(timeout=None)
         self.panel = panel
         self.guild_id = guild_id
-
-        start = discord.ui.Button(label="Start", emoji="▶️", style=discord.ButtonStyle.success, custom_id=f"juicevault:start:{guild_id}")
-        start.callback = self._start
-        self.add_item(start)
-        stop = discord.ui.Button(label="Stop", emoji="⏹️", style=discord.ButtonStyle.danger, custom_id=f"juicevault:stop:{guild_id}")
-        stop.callback = self._stop
-        self.add_item(stop)
-        next_button = discord.ui.Button(label="Skip", emoji="⏭️", style=discord.ButtonStyle.primary, custom_id=f"juicevault:next:{guild_id}")
-        next_button.callback = self._next
-        self.add_item(next_button)
-        skip10 = discord.ui.Button(label="Skip 10", emoji="⏩", style=discord.ButtonStyle.primary, custom_id=f"juicevault:skip10:{guild_id}")
-        skip10.callback = self._skip10
-        self.add_item(skip10)
-        shuffle = discord.ui.Button(label="Shuffle", emoji="🔀", style=discord.ButtonStyle.secondary, custom_id=f"juicevault:shuffle:{guild_id}")
-        shuffle.callback = self._shuffle
-        self.add_item(shuffle)
-        category = discord.ui.Button(label="Category", emoji="🎚️", style=discord.ButtonStyle.secondary, custom_id=f"juicevault:category:{guild_id}")
-        category.callback = self._category
-        self.add_item(category)
-        refresh = discord.ui.Button(label="Refresh", emoji="🔄", style=discord.ButtonStyle.secondary, custom_id=f"juicevault:refresh:{guild_id}")
-        refresh.callback = self._refresh
-        self.add_item(refresh)
+        buttons = [
+            ("Start", "▶️", discord.ButtonStyle.success, self._start, "start"),
+            ("Stop", "⏹️", discord.ButtonStyle.danger, self._stop, "stop"),
+            ("Skip", "⏭️", discord.ButtonStyle.primary, self._next, "next"),
+            ("Skip 10", "⏩", discord.ButtonStyle.primary, self._skip10, "skip10"),
+            ("Shuffle", "🔀", discord.ButtonStyle.secondary, self._shuffle, "shuffle"),
+            ("Category", "🎚️", discord.ButtonStyle.secondary, self._category, "category"),
+            ("Refresh", "🔄", discord.ButtonStyle.secondary, self._refresh, "refresh"),
+        ]
+        for label, emoji, style, callback, key in buttons:
+            button = discord.ui.Button(label=label, emoji=emoji, style=style, custom_id=f"juicevault:{key}:{guild_id}")
+            button.callback = callback
+            self.add_item(button)
 
     async def _start(self, interaction):
         await interaction.response.defer()
@@ -158,7 +150,6 @@ class JuiceVaultPanelView(discord.ui.View):
         if not queue:
             await interaction.followup.send("Queue-ul este gol.", ephemeral=True)
             return
-        import random
         random.shuffle(queue)
         await self.panel.update_panel(self.guild_id)
         await interaction.followup.send(f"🔀 Queue amestecat — `{len(queue)}` piese.", ephemeral=True)
@@ -170,7 +161,7 @@ class JuiceVaultPanelView(discord.ui.View):
             await interaction.followup.send("JuiceVault cog nu este încărcat.", ephemeral=True)
             return
         try:
-            categories = await cog.get_categories()
+            categories = await cog.categories()
             await interaction.followup.send("🎚️ Alege categoria:", view=JuiceVaultCategoryView(self.panel, self.guild_id, categories), ephemeral=True)
         except Exception as exc:
             await interaction.followup.send(f"Nu pot încărca categoriile: `{exc}`", ephemeral=True)
@@ -286,27 +277,46 @@ class JuiceVaultUI(commands.Cog):
             embed.add_field(name="Voice", value=f"🔊 {voice.channel.name}", inline=True)
         return embed
 
-    async def _get_panel_message(self, guild_id, create=False, channel=None):
+    async def _get_panel_message(self, guild_id):
         guild = self.bot.get_guild(guild_id)
         if guild is None:
             return None
         settings = await self.config.guild(guild).all()
         channel_id = settings.get("panel_channel_id")
         message_id = settings.get("panel_message_id")
-        target = channel or (guild.get_channel(channel_id) if channel_id else None)
-        if not isinstance(target, discord.TextChannel):
+        target = guild.get_channel(channel_id) if channel_id else None
+        if not isinstance(target, discord.TextChannel) or not message_id:
             return None
         self._register_view(guild_id)
-        if message_id:
-            try:
-                return await target.fetch_message(message_id)
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                pass
-        if not create:
+        try:
+            return await target.fetch_message(message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             return None
-        message = await target.send(embed=await self._make_embed(guild_id), view=JuiceVaultPanelView(self, guild_id))
-        await self.config.guild(guild).panel_channel_id.set(target.id)
+
+    async def ensure_panel(self, guild_id, channel):
+        """Always create a fresh panel in the requested channel."""
+        guild = self.bot.get_guild(guild_id)
+        if guild is None or not isinstance(channel, discord.TextChannel):
+            return None
+        settings = await self.config.guild(guild).all()
+        old_channel_id = settings.get("panel_channel_id")
+        old_message_id = settings.get("panel_message_id")
+        message = await channel.send(
+            embed=await self._make_embed(guild_id),
+            view=JuiceVaultPanelView(self, guild_id),
+        )
+        await self.config.guild(guild).panel_channel_id.set(channel.id)
         await self.config.guild(guild).panel_message_id.set(message.id)
+        self._register_view(guild_id)
+        if old_channel_id and old_message_id:
+            old_channel = guild.get_channel(old_channel_id)
+            if old_channel:
+                try:
+                    old_message = await old_channel.fetch_message(old_message_id)
+                    if old_message.id != message.id:
+                        await old_message.delete()
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass
         return message
 
     async def update_panel(self, guild_id):
@@ -334,9 +344,11 @@ class JuiceVaultUI(commands.Cog):
     @commands.command(name="jvpanel", aliases=["jvui"])
     @commands.guild_only()
     async def jvpanel(self, ctx):
-        await self.config.guild(ctx.guild).panel_channel_id.set(ctx.channel.id)
-        self._register_view(ctx.guild.id)
-        message = await self._get_panel_message(ctx.guild.id, create=True, channel=ctx.channel)
-        if message:
-            await message.edit(embed=await self._make_embed(ctx.guild.id), view=JuiceVaultPanelView(self, ctx.guild.id))
-            await ctx.send("✨ Panoul JuiceVault este aici și se actualizează automat.", delete_after=8)
+        try:
+            message = await self.ensure_panel(ctx.guild.id, ctx.channel)
+            if message:
+                await ctx.send("✨ Panoul JuiceVault a fost recreat în acest canal și se actualizează automat.", delete_after=8)
+            else:
+                await ctx.send("❌ Nu pot crea panoul în acest canal.")
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            await ctx.send(f"❌ Nu pot crea panoul: `{type(exc).__name__}: {exc}`")
