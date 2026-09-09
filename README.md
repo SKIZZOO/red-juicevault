@@ -2,6 +2,12 @@
 
 A polished 24/7 JuiceVault music player for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot).
 
+## UI Preview
+
+The JuiceVault control panel provides a live Now Playing display with playback status, voice channel, category, queue information, Lyrics, EQ, and interactive playback controls.
+
+![JuiceVault UI Preview](docs/ui-preview.png)
+
 ## Features
 
 - 🎵 **24/7 JuiceVault playback** — continuously plays tracks from the JuiceVault archive.
