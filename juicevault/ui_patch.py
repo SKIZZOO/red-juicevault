@@ -13,7 +13,6 @@ async def polished_make_embed(self, guild_id):
     if main is None or guild_id not in main.tasks:
         embed.title = "Player Offline"
         embed.description = "Press **Start** or use `4jv start` to begin playback."
-        embed.set_footer(text="JuiceVault Archive • 24/7 Player")
         return embed
     guild = self.bot.get_guild(guild_id)
     track = main.current.get(guild_id)
@@ -65,14 +64,12 @@ async def polished_make_embed(self, guild_id):
                 plays_text = "plays"
             footer_line = f"[JuiceVault Archive](https://juicevault.xyz/) • {plays_text} • 24/7 • [made by SKIZZOO](https://guns.lol/skizzoo)"
         embed.add_field(name="‎", value=footer_line, inline=False)
-        embed.set_footer(text="JuiceVault Archive • 24/7 Player")
     else:
         embed.title = "Loading Next Track…"
         embed.description = "Preparing the next track from the archive."
         embed.add_field(name="📚 LIBRARY", value=f"**{category_label(category)}**", inline=True)
         embed.add_field(name="🎶 QUEUE", value=f"`{queue_size}`", inline=True)
         embed.add_field(name="‎", value="[JuiceVault Archive](https://juicevault.xyz/) • 24/7 • [made by SKIZZOO](https://guns.lol/skizzoo)", inline=False)
-        embed.set_footer(text="JuiceVault Archive • 24/7 Player")
     if voice and voice.is_connected():
         embed.add_field(name="🔊 VOICE", value=f"`{voice.channel.name}`", inline=False)
     return embed
