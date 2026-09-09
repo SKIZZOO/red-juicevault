@@ -69,9 +69,7 @@ class JuiceVault(commands.Cog):
             if guild_id not in self.tasks:
                 self.stop_events[guild_id] = asyncio.Event()
                 self.skip_events[guild_id] = asyncio.Event()
-                self.tasks[guild_id] = asyncio.create_task(
-                    self._player(guild, channel)
-                )
+                self.tasks[guild_id] = asyncio.create_task(self._player(guild, channel))
 
     def _ffmpeg_executable(self):
         if imageio_ffmpeg is not None:
@@ -132,9 +130,7 @@ class JuiceVault(commands.Cog):
                     )
                 except json.JSONDecodeError:
                     detail = text[:200]
-                raise RuntimeError(
-                    f"JuiceVault API HTTP {response.status}: {detail}"
-                )
+                raise RuntimeError(f"JuiceVault API HTTP {response.status}: {detail}")
 
         try:
             payload = json.loads(text)
@@ -152,9 +148,7 @@ class JuiceVault(commands.Cog):
                 continue
             song_id = song.get("id")
             file_name = str(song.get("file_name", ""))
-            if not song_id or not file_name.lower().split("?", 1)[0].endswith(
-                self.AUDIO_EXTENSIONS
-            ):
+            if not song_id or not file_name.lower().split("?", 1)[0].endswith(self.AUDIO_EXTENSIONS):
                 continue
 
             song_id = str(song_id)
@@ -227,8 +221,6 @@ class JuiceVault(commands.Cog):
         gid = guild.id
         task = asyncio.current_task()
 
-        # Never allow an old player task to keep controlling the guild after
-        # a reload/restart created a newer task.
         if self.tasks.get(gid) is not task:
             return
 
@@ -302,9 +294,7 @@ class JuiceVault(commands.Cog):
                     )
                     voice.play(source, after=after)
                 except Exception as exc:
-                    self.last_error[gid] = (
-                        f"Playback: {type(exc).__name__}: {exc}"
-                    )
+                    self.last_error[gid] = f"Playback: {type(exc).__name__}: {exc}"
                     print(
                         f"[JuiceVault] could not play {track['url']}: "
                         f"{type(exc).__name__}: {exc}"
@@ -348,14 +338,8 @@ class JuiceVault(commands.Cog):
                 if playback_error["value"] or elapsed < self.SHORT_PLAYBACK_SECONDS:
                     self.failure_counts[gid] = self.failure_counts.get(gid, 0) + 1
                     error = playback_error["value"]
-                    detail = (
-                        ffmpeg_log[-1800:]
-                        if ffmpeg_log
-                        else str(error or "stream ended too quickly")
-                    )
-                    self.last_error[gid] = (
-                        f"FFmpeg: piesa s-a oprit după {elapsed:.1f}s. {detail}"
-                    )
+                    detail = ffmpeg_log[-1800:] if ffmpeg_log else str(error or "stream ended too quickly")
+                    self.last_error[gid] = f"FFmpeg: piesa s-a oprit după {elapsed:.1f}s. {detail}"
                     print(
                         f"[JuiceVault] track failed after {elapsed:.1f}s: "
                         f"{self._track_text(track)}"
@@ -377,7 +361,6 @@ class JuiceVault(commands.Cog):
         except asyncio.CancelledError:
             pass
         finally:
-            # An old task must never disconnect a newer player's voice client.
             if self.tasks.get(gid) is task:
                 await self._disconnect(guild)
                 self.current.pop(gid, None)
@@ -387,7 +370,7 @@ class JuiceVault(commands.Cog):
     async def jv(self, ctx):
         """JuiceVault commands."""
         await ctx.send(
-            "`jv start` `jv stop` `jv skip` `jv search <nume>` "
+            "`jv start` `jv stop` `jv skip`/`jv next` `jv search <nume>` "
             "`jv play <nume>` `jv refresh` `jv status`"
         )
 
@@ -404,9 +387,6 @@ class JuiceVault(commands.Cog):
             if voice and voice.is_connected():
                 await ctx.send("JuiceVault rulează deja și sunt în voice.")
                 return
-
-            # Do not merely remove the task reference: the old task may still
-            # be alive and could otherwise create a second player.
             await self._stop(gid)
 
         try:
@@ -423,9 +403,7 @@ class JuiceVault(commands.Cog):
             voice = await self._connect(ctx.guild, ctx.author.voice.channel)
         except Exception as exc:
             self.last_error[gid] = f"Voice: {type(exc).__name__}: {exc}"
-            await ctx.send(
-                f"❌ Nu pot intra în voice: `{type(exc).__name__}: {exc}`"
-            )
+            await ctx.send(f"❌ Nu pot intra în voice: `{type(exc).__name__}: {exc}`")
             return
 
         self.queues[gid] = tracks
@@ -433,9 +411,7 @@ class JuiceVault(commands.Cog):
         self.skip_events[gid] = asyncio.Event()
         self.failure_counts[gid] = 0
         await self.config.guild(ctx.guild).enabled.set(True)
-        await self.config.guild(ctx.guild).channel_id.set(
-            ctx.author.voice.channel.id
-        )
+        await self.config.guild(ctx.guild).channel_id.set(ctx.author.voice.channel.id)
         self.tasks[gid] = asyncio.create_task(
             self._player(ctx.guild, ctx.author.voice.channel)
         )
@@ -454,9 +430,9 @@ class JuiceVault(commands.Cog):
         await self._stop(ctx.guild.id)
         await ctx.send("⏹️ Oprit.")
 
-    @jv.command(name="skip")
+    @jv.command(name="skip", aliases=["next"])
     async def skip(self, ctx):
-        """Skip exactly the current track."""
+        """Skip exactly the current track. Also available as jv next."""
         gid = ctx.guild.id
         voice = ctx.guild.voice_client
         event = self.skip_events.get(gid)
@@ -479,13 +455,10 @@ class JuiceVault(commands.Cog):
 
         query_normalized = query.casefold().strip()
         if not query_normalized:
-            await ctx.send("Scrie un nume după `jv search`.")
+            await ctx.send("Scrie un nume după `jv search`." )
             return
 
-        matches = [
-            track for track in tracks
-            if query_normalized in self._search_text(track)
-        ]
+        matches = [track for track in tracks if query_normalized in self._search_text(track)]
 
         def score(track):
             title = str(track.get("title") or "").casefold()
@@ -523,8 +496,7 @@ class JuiceVault(commands.Cog):
             lines.append(f"`{index}.` {label}")
 
         lines.append(
-            "Folosește `jv play <număr>` sau `jv play <nume>` "
-            "pentru a o pune următoarea."
+            "Folosește `jv play <număr>` sau `jv play <nume>` pentru a o pune următoarea."
         )
         await ctx.send("\n".join(lines)[:1900])
 
@@ -566,10 +538,7 @@ class JuiceVault(commands.Cog):
             if exact:
                 selected = exact[0]
             else:
-                matches = [
-                    track for track in tracks
-                    if query_normalized in self._search_text(track)
-                ]
+                matches = [track for track in tracks if query_normalized in self._search_text(track)]
                 if len(matches) == 1:
                     selected = matches[0]
                 elif matches:
@@ -585,9 +554,7 @@ class JuiceVault(commands.Cog):
             return
 
         self.queues.setdefault(gid, []).insert(0, selected)
-        await ctx.send(
-            f"⏭️ Am pus **{self._track_text(selected)}** ca următoarea piesă."
-        )
+        await ctx.send(f"⏭️ Am pus **{self._track_text(selected)}** ca următoarea piesă.")
 
     @jv.command(name="refresh")
     async def refresh(self, ctx):
