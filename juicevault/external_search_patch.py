@@ -6,7 +6,7 @@ import tempfile
 import discord
 
 from .juicevault import JuiceVault
-from .juicevault_ui import JuiceVaultPanelView
+from .juicevault_ui import JuiceVaultPanelView, JuiceVaultUI
 
 try:
     import yt_dlp
@@ -114,10 +114,6 @@ def _download_external(info):
         try:
             return _download_with_ytdlp(url, tempdir)
         except Exception as first_error:
-            # YouTube links can occasionally return a transient 403. If that
-            # happens, try another public source for the same query before
-            # giving up. This also prevents the player from getting stuck on a
-            # single unavailable result.
             query = str(info.get("_query") or info.get("title") or "").strip()
             source = str(info.get("_source") or "").casefold()
             if query and source == "youtube":
@@ -167,8 +163,6 @@ class JuiceVaultSearchModeView(discord.ui.View):
         self.add_item(external)
 
     async def _vault(self, interaction):
-        # Lazy import avoids a ui_patch <-> external_search_patch circular
-        # import during cog startup.
         from .ui_patch import JuiceVaultSearchModal
         await interaction.response.send_modal(JuiceVaultSearchModal(self.panel, self.guild_id))
 
@@ -247,7 +241,6 @@ class JuiceVaultOtherSearchModal(discord.ui.Modal, title="Search Music Online"):
 
 
 def patch_external_search():
-    # Search on the main panel opens the source chooser. No extra panel button.
     JuiceVaultPanelView._search = _open_search
 
     original_download = JuiceVault._download_track
@@ -271,3 +264,18 @@ def patch_external_search():
 
     JuiceVault._download_track = download_track
     JuiceVault._remove_file = remove_file
+
+    # Keep VOICE directly under the Now Playing / PLAYING section.
+    original_make_embed = JuiceVaultUI._make_embed
+
+    async def make_embed_with_voice_under_playing(self, guild_id):
+        embed = await original_make_embed(self, guild_id)
+        for index, field in enumerate(list(embed.fields)):
+            if field.name == "🔊 VOICE":
+                name, value, inline = field.name, field.value, field.inline
+                embed.remove_field(index)
+                embed.insert_field_at(0, name=name, value=value, inline=inline)
+                break
+        return embed
+
+    JuiceVaultUI._make_embed = make_embed_with_voice_under_playing
