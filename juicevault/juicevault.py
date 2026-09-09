@@ -21,6 +21,14 @@ class JuiceVault(commands.Cog):
 
     API_BASE = "https://api.juicevault.xyz"
     MUSIC_LIST_URL = f"{API_BASE}/music/list"
+    CATEGORY_URLS = {
+        "instrumentals": f"{API_BASE}/music/instrumentals/list",
+        "remasters": f"{API_BASE}/music/remasters/list",
+        "stems": f"{API_BASE}/music/stems/list",
+        "released": f"{API_BASE}/music/released/list",
+        "cuts": f"{API_BASE}/music/cuts/list",
+        "cut": f"{API_BASE}/music/cuts/list",
+    }
     AUDIO_EXTENSIONS = (".mp3", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".flac", ".webm")
     FAILURE_BACKOFF_SECONDS = 8
     MAX_CONSECUTIVE_FAILURES = 3
@@ -132,37 +140,27 @@ class JuiceVault(commands.Cog):
 
     @classmethod
     def _category_key(cls, value):
-        """Normalize category spelling so API/UI variants such as CUT, cut_, cut- or ' cut ' match."""
         value = cls._category_name(value)
         return "".join(ch for ch in value if ch.isalnum())
 
     @classmethod
     def _resolve_category(cls, tracks, requested):
-        """Return the real API category name matching a user/UI selection."""
         requested = cls._category_name(requested)
         if requested == "all":
             return "all"
-
         categories = []
         seen = set()
         for track in tracks:
-            raw = track.get("category")
-            category = cls._category_name(raw)
+            category = cls._category_name(track.get("category"))
             if category not in seen:
                 seen.add(category)
                 categories.append(category)
-
         if requested in seen:
             return requested
-
         requested_key = cls._category_key(requested)
         for category in categories:
             if cls._category_key(category) == requested_key:
                 return category
-
-        # Some JuiceVault/API revisions expose a category with a suffix/prefix
-        # while the UI presents the shorter name (for example cut vs cut_edit).
-        # Prefer an unambiguous fuzzy match instead of immediately reporting 0 tracks.
         fuzzy = [category for category in categories if requested_key and requested_key in cls._category_key(category)]
         if len(fuzzy) == 1:
             return fuzzy[0]
@@ -175,9 +173,9 @@ class JuiceVault(commands.Cog):
         wanted = self._category_key(category)
         return [track for track in tracks if self._category_key(track.get("category")) == wanted]
 
-    async def fetch_tracks(self):
+    async def _fetch_tracks_from_url(self, url):
         await self._ensure_session()
-        async with self.session.get(self.MUSIC_LIST_URL) as response:
+        async with self.session.get(url) as response:
             text = await response.text(errors="ignore")
         if response.status != 200:
             try:
@@ -211,15 +209,30 @@ class JuiceVault(commands.Cog):
             tracks.append(track)
         return tracks
 
+    async def fetch_tracks(self, category=None):
+        category = self._category_name(category)
+        if category in self.CATEGORY_URLS:
+            return await self._fetch_tracks_from_url(self.CATEGORY_URLS[category])
+        return await self._fetch_tracks_from_url(self.MUSIC_LIST_URL)
+
     async def get_categories(self):
         counts = {}
         for track in await self.fetch_tracks():
             category = self._category_name(track.get("category"))
             counts[category] = counts.get(category, 0) + 1
+        for name, url in self.CATEGORY_URLS.items():
+            if name != "cut":
+                try:
+                    dedicated = await self._fetch_tracks_from_url(url)
+                    if dedicated:
+                        counts[name] = len(dedicated)
+                except Exception as exc:
+                    print(f"[JuiceVault] category endpoint {name} failed: {exc}")
+        if "cuts" in counts:
+            counts["cut"] = counts.pop("cuts")
         return counts
 
     async def categories(self):
-        """Backward-compatible alias used by older JuiceVault UI files."""
         return await self.get_categories()
 
     async def _connect(self, guild, channel):
@@ -322,9 +335,10 @@ class JuiceVault(commands.Cog):
                     return
                 if not self.queues.get(gid):
                     try:
-                        all_tracks = await self.fetch_tracks()
                         category = await self.config.guild(guild).category()
-                        tracks = self._filter_tracks(all_tracks, category)
+                        tracks = await self.fetch_tracks(category)
+                        if category not in self.CATEGORY_URLS:
+                            tracks = self._filter_tracks(tracks, category)
                         if not tracks:
                             self.last_error[gid] = f"Categoria `{category}` nu are piese."
                             await asyncio.sleep(15)
@@ -467,13 +481,14 @@ class JuiceVault(commands.Cog):
                 await ctx.send("JuiceVault rulează deja.")
                 return
             await self._stop(gid)
+        category = await self.config.guild(ctx.guild).category()
         try:
-            tracks = await self.fetch_tracks()
+            tracks = await self.fetch_tracks(category)
+            if category not in self.CATEGORY_URLS:
+                tracks = self._filter_tracks(tracks, category)
         except Exception as exc:
             await ctx.send(f"Nu pot accesa JuiceVault API: `{exc}`")
             return
-        category = await self.config.guild(ctx.guild).category()
-        tracks = self._filter_tracks(tracks, category)
         if not tracks:
             await ctx.send(f"Categoria `{category}` nu conține piese.")
             return
@@ -540,22 +555,23 @@ class JuiceVault(commands.Cog):
     async def category(self, ctx, *, category: str):
         category = self._category_name(category)
         try:
-            tracks = await self.fetch_tracks()
+            tracks = await self.fetch_tracks(category)
+            if category not in self.CATEGORY_URLS:
+                resolved = self._resolve_category(tracks, category)
+                tracks = self._filter_tracks(tracks, resolved)
+            else:
+                resolved = category
         except Exception as exc:
             await ctx.send(f"Nu pot accesa API-ul: `{exc}`")
             return
-        resolved = self._resolve_category(tracks, category)
-        filtered = self._filter_tracks(tracks, resolved)
-        if category != "all" and not filtered:
-            available = sorted({self._category_name(t.get("category")) for t in tracks})
-            preview = ", ".join(available[:30]) or "niciuna"
-            await ctx.send(f"Categoria `{category}` nu există sau nu are piese. Categorii disponibile: `{preview}`")
+        if category != "all" and not tracks:
+            await ctx.send(f"Categoria `{category}` nu există sau nu are piese.")
             return
         await self.config.guild(ctx.guild).category.set(resolved)
         if ctx.guild.id in self.tasks:
-            self.queues[ctx.guild.id] = filtered
+            self.queues[ctx.guild.id] = tracks
             self.failure_counts[ctx.guild.id] = 0
-        await ctx.send(f"🎚️ Categoria setată pe **{resolved}** — `{len(filtered)}` piese.")
+        await ctx.send(f"🎚️ Categoria setată pe **{resolved}** — `{len(tracks)}` piese.")
 
     @jv.command(name="search")
     async def search(self, ctx, *, query: str):
@@ -591,7 +607,7 @@ class JuiceVault(commands.Cog):
             candidates = [item for item in tracks if query.casefold().strip() in self._search_text(item)]
             track = candidates[0] if candidates else None
         if not track:
-            await ctx.send("Nu am găsit piesa. Folosește `4jv search <nume>`.")
+            await ctx.send("Nu am găsit piesa. Folosește `4jv search <nume>`." )
             return
         if gid not in self.tasks:
             await ctx.send("Playerul nu rulează. Folosește `4jv start` întâi.")
@@ -601,18 +617,14 @@ class JuiceVault(commands.Cog):
 
     @jv.command(name="refresh")
     async def refresh(self, ctx):
+        category = await self.config.guild(ctx.guild).category()
         try:
-            tracks = await self.fetch_tracks()
+            filtered = await self.fetch_tracks(category)
+            if category not in self.CATEGORY_URLS:
+                filtered = self._filter_tracks(filtered, category)
         except Exception as exc:
             await ctx.send(f"Refresh eșuat: `{exc}`")
             return
-        category = await self.config.guild(ctx.guild).category()
-        filtered = self._filter_tracks(tracks, category)
-        if not filtered and category != "all":
-            category = self._resolve_category(tracks, category)
-            filtered = self._filter_tracks(tracks, category)
-            if filtered:
-                await self.config.guild(ctx.guild).category.set(category)
         if not filtered:
             await ctx.send(f"Categoria `{category}` nu conține piese.")
             return
