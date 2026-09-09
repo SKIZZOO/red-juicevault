@@ -26,18 +26,29 @@ async def polished_make_embed(self, guild_id):
         title = str(track.get("title") or track.get("name") or track.get("file_name") or "Untitled track").strip()
         state = "⏸️ PAUSED" if voice and voice.is_paused() else "🔊 PLAYING"
         embed.title = "Now Playing"
-        embed.description = f"**{title}**\n*{artist}*\n\n`{state}`  •  **JuiceVault Archive**"
+        if track.get("_external"):
+            source = str(track.get("_source") or "External").strip()
+            embed.description = f"**{title}**\n*{artist}*\n\n`{state}`  •  **{source}**"
+            embed.add_field(name="🌐 SOURCE", value=f"**{source}**", inline=True)
+        else:
+            embed.description = f"**{title}**\n*{artist}*\n\n`{state}`  •  **JuiceVault Archive**"
         embed.add_field(name="🎚️ CATEGORY", value=f"**{category_label(track.get('category') or 'archive')}**", inline=True)
         embed.add_field(name="⏱️ LENGTH", value=f"`{track.get('length') or '—'}`", inline=True)
         embed.add_field(name="📚 LIBRARY", value=f"**{category_label(category)}**", inline=True)
         embed.add_field(name="📥 REQUESTED", value=f"`{requested_size}`", inline=True)
         embed.add_field(name="🎶 QUEUE", value=f"`{queue_size}`", inline=True)
         embed.add_field(name="🔁 REPEAT", value="`ON`" if self.repeat_enabled.get(guild_id, False) else "`OFF`", inline=True)
-        cover_url = self._cover_url(track)
-        if cover_url:
-            embed.set_thumbnail(url=cover_url)
+        # External sources (YouTube/SoundCloud/Bandcamp) do not have a
+        # JuiceVault cover. Never attempt the JuiceVault cover endpoint for them.
+        if not track.get("_external"):
+            cover_url = self._cover_url(track)
+            if cover_url:
+                embed.set_thumbnail(url=cover_url)
         plays = track.get("play_count")
-        embed.set_footer(text=f"JuiceVault Archive • {int(plays):,} plays • 24/7" if plays is not None else "JuiceVault Archive • 24/7")
+        if track.get("_external"):
+            embed.set_footer(text=f"External source • {str(track.get('_source') or 'Web')} • 24/7")
+        else:
+            embed.set_footer(text=f"JuiceVault Archive • {int(plays):,} plays • 24/7" if plays is not None else "JuiceVault Archive • 24/7")
     else:
         embed.title = "Loading Next Track…"
         embed.description = "Preparing the next track from the archive."
@@ -72,9 +83,10 @@ class JuiceVaultSearchSelect(discord.ui.Select):
         title = str(track.get("title") or track.get("name") or track.get("file_name") or "Untitled track")
         artist = str(track.get("artist") or "Unknown artist")
         embed = discord.Embed(title="✅ Track Selected", description=f"**{title}**\n*{artist}*\n\nAdded directly to **Requested**.", color=self.panel.PANEL_COLOR)
-        cover_url = self.panel._cover_url(track)
-        if cover_url:
-            embed.set_thumbnail(url=cover_url)
+        if not track.get("_external"):
+            cover_url = self.panel._cover_url(track)
+            if cover_url:
+                embed.set_thumbnail(url=cover_url)
         embed.set_footer(text="Search result selected • queued for playback")
         await interaction.response.edit_message(content="", embed=embed, view=None)
         await self.panel.update_panel(self.guild_id)
@@ -194,7 +206,6 @@ def _install_smart_controls():
             b.callback = callback
             self.add_item(b)
 
-        # Exact compact layout: tools, playback, navigation, repeat, seek.
         add("🎚 Category", discord.ButtonStyle.secondary, self._category, "category", 0)
         add("🔎 Search", discord.ButtonStyle.secondary, self._search, "search", 0)
         add("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh, "refresh", 0, disabled=not running)
@@ -207,19 +218,57 @@ def _install_smart_controls():
 
         add("⏮ Previous", discord.ButtonStyle.secondary, self._previous, "previous", 2, disabled=not has_history)
         add("Next ⏭", discord.ButtonStyle.primary, self._next, "next", 2, disabled=not playing)
-
         add("🔁 Repeat ON" if repeating else "🔁 Repeat", discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 3, disabled=not running)
         add("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 3, disabled=not has_queue)
-
         add("⏮ Past 10s", discord.ButtonStyle.secondary, self._seek_back, "seek_back", 4, disabled=not (has_track and (playing or paused)))
         add("Next 10s ⏭", discord.ButtonStyle.secondary, self._seek_forward, "seek_forward", 4, disabled=not (has_track and (playing or paused)))
 
     JuiceVaultPanelView.__init__ = styled_init
 
 
+def _panel_signature(panel, guild_id):
+    main = panel.bot.get_cog("JuiceVault")
+    guild = panel.bot.get_guild(guild_id)
+    voice = guild.voice_client if guild else None
+    track = main.current.get(guild_id) if main else None
+    queue = main.queues.get(guild_id, []) if main else []
+    manual = main.manual_queues.get(guild_id, []) if main else []
+    category = None
+    if main and guild:
+        category = str(main.config.guild(guild).category) if False else None
+    return (
+        bool(main and guild_id in main.tasks),
+        str(track.get("id")) if track else None,
+        id(track) if track else None,
+        bool(voice and voice.is_playing()),
+        bool(voice and voice.is_paused()),
+        voice.channel.id if voice and voice.is_connected() else None,
+        len(queue),
+        len(manual),
+        panel.repeat_enabled.get(guild_id, False),
+        tuple(str(item.get("id")) for item in manual[:10]),
+    )
+
+
 def patch_ui(JuiceVaultUI):
     JuiceVaultUI._make_embed = polished_make_embed
     _install_smart_controls()
+    original_update_panel = JuiceVaultUI.update_panel
+    original_ensure_panel = JuiceVaultUI.ensure_panel
+
+    async def debounced_update_panel(self, guild_id):
+        signature = _panel_signature(self, guild_id)
+        if self.__dict__.setdefault("_panel_signatures", {}).get(guild_id) == signature:
+            return
+        await original_update_panel(self, guild_id)
+        self.__dict__["_panel_signatures"][guild_id] = signature
+
+    async def ensure_panel_with_reset(self, guild_id, channel):
+        self.__dict__.setdefault("_panel_signatures", {}).pop(guild_id, None)
+        return await original_ensure_panel(self, guild_id, channel)
+
+    JuiceVaultUI.update_panel = debounced_update_panel
+    JuiceVaultUI.ensure_panel = ensure_panel_with_reset
     search_command = JuiceVault.jv.all_commands.get("search")
     if search_command is not None:
         search_command.callback = pretty_search_command
