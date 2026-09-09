@@ -1,8 +1,7 @@
 import asyncio
 
 import discord
-from discord.ext import commands
-from redbot.core import Config
+from redbot.core import Config, commands
 
 
 class JuiceVaultPanelView(discord.ui.View):
