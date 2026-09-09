@@ -1,6 +1,6 @@
 import discord
 
-from .juicevault_ui import category_label
+from .juicevault_ui import category_label, JuiceVaultPanelView
 
 
 async def polished_make_embed(self, guild_id):
@@ -60,5 +60,21 @@ async def polished_make_embed(self, guild_id):
     return embed
 
 
+def polished_panel_init(self, panel, guild_id):
+    """Build the controls in intentional groups instead of Discord's auto-flow."""
+    _ORIGINAL_PANEL_INIT(self, panel, guild_id)
+
+    # Row 1: primary playback controls
+    # Row 2: queue/playback modes
+    # Row 3: utility controls
+    rows = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2]
+    for item, row in zip(self.children, rows):
+        item.row = row
+
+
+_ORIGINAL_PANEL_INIT = JuiceVaultPanelView.__init__
+
+
 def patch_ui(JuiceVaultUI):
     JuiceVaultUI._make_embed = polished_make_embed
+    JuiceVaultPanelView.__init__ = polished_panel_init
