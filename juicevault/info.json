@@ -3,8 +3,8 @@
   "name": "JuiceVault",
   "short": "24/7 JuiceVault music player for Red.",
   "description": "Continuously plays audio from JuiceVault's Music archive in a Discord voice channel and loops the archive.",
-  "install_msg": "Install FFmpeg on the machine running Red. Then use [p]jv start while you are in the target voice channel.",
+  "install_msg": "No system-wide FFmpeg install is required: this cog uses imageio-ffmpeg to provide FFmpeg from the Python environment. Then use [p]jv start while you are in the target voice channel.",
   "end_user_data_statement": "This cog stores only the configured guild voice channel ID and enabled state. It does not store personal user data.",
-  "requirements": ["aiohttp"],
+  "requirements": ["aiohttp", "imageio-ffmpeg>=0.5"],
   "tags": ["music", "audio", "juicevault", "24/7"]
 }
