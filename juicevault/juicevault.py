@@ -225,11 +225,21 @@ class JuiceVault(commands.Cog):
 
     async def _player(self, guild, channel):
         gid = guild.id
+        task = asyncio.current_task()
+
+        # Never allow an old player task to keep controlling the guild after
+        # a reload/restart created a newer task.
+        if self.tasks.get(gid) is not task:
+            return
+
         stop = self.stop_events[gid]
         skip = self.skip_events[gid]
 
         try:
             while not stop.is_set():
+                if self.tasks.get(gid) is not task:
+                    return
+
                 if not self.queues.get(gid):
                     try:
                         tracks = await self.fetch_tracks()
@@ -253,6 +263,9 @@ class JuiceVault(commands.Cog):
                     print(f"[JuiceVault] voice error: {type(exc).__name__}: {exc}")
                     await asyncio.sleep(10)
                     continue
+
+                if self.tasks.get(gid) is not task:
+                    return
 
                 track = self.queues[gid].pop(0)
                 self.current[gid] = track
@@ -311,8 +324,8 @@ class JuiceVault(commands.Cog):
                     {stop_task, finish_task, skip_task},
                     return_when=asyncio.FIRST_COMPLETED,
                 )
-                for task in pending:
-                    task.cancel()
+                for pending_task in pending:
+                    pending_task.cancel()
 
                 try:
                     log_file.flush()
@@ -324,8 +337,8 @@ class JuiceVault(commands.Cog):
                 elapsed = time.monotonic() - started_at
                 was_skipped = skip.is_set()
 
-                if stop.is_set():
-                    break
+                if stop.is_set() or self.tasks.get(gid) is not task:
+                    return
 
                 if was_skipped:
                     skip.clear()
@@ -335,7 +348,11 @@ class JuiceVault(commands.Cog):
                 if playback_error["value"] or elapsed < self.SHORT_PLAYBACK_SECONDS:
                     self.failure_counts[gid] = self.failure_counts.get(gid, 0) + 1
                     error = playback_error["value"]
-                    detail = ffmpeg_log[-1800:] if ffmpeg_log else str(error or "stream ended too quickly")
+                    detail = (
+                        ffmpeg_log[-1800:]
+                        if ffmpeg_log
+                        else str(error or "stream ended too quickly")
+                    )
                     self.last_error[gid] = (
                         f"FFmpeg: piesa s-a oprit după {elapsed:.1f}s. {detail}"
                     )
@@ -360,8 +377,10 @@ class JuiceVault(commands.Cog):
         except asyncio.CancelledError:
             pass
         finally:
-            await self._disconnect(guild)
-            self.current.pop(gid, None)
+            # An old task must never disconnect a newer player's voice client.
+            if self.tasks.get(gid) is task:
+                await self._disconnect(guild)
+                self.current.pop(gid, None)
 
     @commands.group(name="jv", invoke_without_command=True)
     @commands.guild_only()
@@ -384,14 +403,11 @@ class JuiceVault(commands.Cog):
             voice = ctx.guild.voice_client
             if voice and voice.is_connected():
                 await ctx.send("JuiceVault rulează deja și sunt în voice.")
-            else:
-                self.tasks.pop(gid, None)
-                await self.config.guild(ctx.guild).enabled.set(False)
-                await ctx.send(
-                    "Playerul era blocat fără conexiune voice. "
-                    "Am resetat starea; rulează din nou `jv start`."
-                )
-            return
+                return
+
+            # Do not merely remove the task reference: the old task may still
+            # be alive and could otherwise create a second player.
+            await self._stop(gid)
 
         try:
             tracks = await self.fetch_tracks()
