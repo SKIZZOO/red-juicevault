@@ -26,6 +26,7 @@ class JuiceVault(commands.Cog):
     SHORT_PLAYBACK_SECONDS = 4.0
     FAILURE_BACKOFF_SECONDS = 8
     MAX_CONSECUTIVE_FAILURES = 3
+    VOICE_STOP_TIMEOUT = 3.0
 
     def __init__(self, bot):
         self.bot = bot
@@ -171,12 +172,35 @@ class JuiceVault(commands.Cog):
             return voice
         return await channel.connect(reconnect=True, timeout=30)
 
+    async def _wait_for_voice_idle(self, voice):
+        """Wait until discord.py has fully released the previous FFmpeg source."""
+        if not voice:
+            return True
+
+        deadline = time.monotonic() + self.VOICE_STOP_TIMEOUT
+        while voice.is_playing() or voice.is_paused():
+            if time.monotonic() >= deadline:
+                return False
+            await asyncio.sleep(0.10)
+        return True
+
+    async def _prepare_voice_for_playback(self, voice):
+        """Prevent voice.play() from racing the previous FFmpeg player."""
+        if not voice:
+            return False
+
+        if voice.is_playing() or voice.is_paused():
+            voice.stop()
+
+        return await self._wait_for_voice_idle(voice)
+
     async def _disconnect(self, guild):
         voice = guild.voice_client
         if voice:
             try:
                 if voice.is_playing():
                     voice.stop()
+                await self._wait_for_voice_idle(voice)
                 await voice.disconnect(force=True)
             except Exception:
                 pass
@@ -259,6 +283,14 @@ class JuiceVault(commands.Cog):
                 if self.tasks.get(gid) is not task:
                     return
 
+                if not await self._prepare_voice_for_playback(voice):
+                    self.last_error[gid] = (
+                        "Voice: playerul Discord nu s-a eliberat la timp; "
+                        "aștept și reîncerc."
+                    )
+                    await asyncio.sleep(1)
+                    continue
+
                 track = self.queues[gid].pop(0)
                 self.current[gid] = track
                 finished = asyncio.Event()
@@ -317,6 +349,14 @@ class JuiceVault(commands.Cog):
                 for pending_task in pending:
                     pending_task.cancel()
 
+                was_skipped = skip.is_set()
+                if was_skipped and voice.is_playing():
+                    voice.stop()
+
+                # after() may fire just before discord.py has released the
+                # old FFmpeg player. Wait before starting the next track.
+                await self._wait_for_voice_idle(voice)
+
                 try:
                     log_file.flush()
                     log_file.close()
@@ -325,7 +365,6 @@ class JuiceVault(commands.Cog):
 
                 ffmpeg_log = await self._read_ffmpeg_log(log_path)
                 elapsed = time.monotonic() - started_at
-                was_skipped = skip.is_set()
 
                 if stop.is_set() or self.tasks.get(gid) is not task:
                     return
@@ -338,8 +377,14 @@ class JuiceVault(commands.Cog):
                 if playback_error["value"] or elapsed < self.SHORT_PLAYBACK_SECONDS:
                     self.failure_counts[gid] = self.failure_counts.get(gid, 0) + 1
                     error = playback_error["value"]
-                    detail = ffmpeg_log[-1800:] if ffmpeg_log else str(error or "stream ended too quickly")
-                    self.last_error[gid] = f"FFmpeg: piesa s-a oprit după {elapsed:.1f}s. {detail}"
+                    detail = (
+                        ffmpeg_log[-1800:]
+                        if ffmpeg_log
+                        else str(error or "stream ended too quickly")
+                    )
+                    self.last_error[gid] = (
+                        f"FFmpeg: piesa s-a oprit după {elapsed:.1f}s. {detail}"
+                    )
                     print(
                         f"[JuiceVault] track failed after {elapsed:.1f}s: "
                         f"{self._track_text(track)}"
@@ -455,7 +500,7 @@ class JuiceVault(commands.Cog):
 
         query_normalized = query.casefold().strip()
         if not query_normalized:
-            await ctx.send("Scrie un nume după `jv search`." )
+            await ctx.send("Scrie un nume după `jv search`.")
             return
 
         matches = [track for track in tracks if query_normalized in self._search_text(track)]
