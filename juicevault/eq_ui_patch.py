@@ -23,35 +23,23 @@ class JuiceVaultEQSelect(discord.ui.Select):
             discord.SelectOption(label=label, value=value, description=description[:100])
             for value, label, description in EQ_OPTIONS
         ]
-        super().__init__(
-            placeholder="Choose an EQ / audio effect…",
-            min_values=1,
-            max_values=1,
-            options=options,
-            custom_id=f"juicevault:eq_select:{guild_id}",
-        )
+        super().__init__(placeholder="Choose an EQ / audio effect…", min_values=1, max_values=1, options=options, custom_id=f"juicevault:eq_select:{guild_id}")
 
     async def callback(self, interaction: discord.Interaction):
         cog = self.panel.bot.get_cog("JuiceVault")
         if cog is None:
             await interaction.response.send_message("JuiceVault is not loaded.", ephemeral=True)
             return
-
         effect = self.values[0]
         cog.effects[self.guild_id] = effect
         restarted = False
         if cog.current.get(self.guild_id):
             restarted = await cog._request_seek(self.guild_id, -999999) is not None
-
         label = next((label for value, label, _ in EQ_OPTIONS if value == effect), effect)
         await interaction.response.edit_message(
             embed=discord.Embed(
                 title="🎚️ EQ / Audio Effect",
-                description=f"**{label}**\n\n" + (
-                    "Applied and restarted the current song."
-                    if restarted
-                    else "Selected — it will apply to the next playback."
-                ),
+                description=f"**{label}**\n\n" + ("Applied and restarted the current song." if restarted else "Selected — it will apply to the next playback."),
                 color=self.panel.PANEL_COLOR,
             ),
             view=None,
@@ -67,11 +55,7 @@ class JuiceVaultEQView(discord.ui.View):
 
 async def eq_button(self, interaction):
     await interaction.response.send_message(
-        embed=discord.Embed(
-            title="🎚️ EQ / Audio Effects",
-            description="Choose an audio profile for JuiceVault.",
-            color=self.panel.PANEL_COLOR,
-        ),
+        embed=discord.Embed(title="🎚️ EQ / Audio Effects", description="Choose an audio profile for JuiceVault.", color=self.panel.PANEL_COLOR),
         view=JuiceVaultEQView(self.panel, self.guild_id),
         ephemeral=True,
     )
@@ -89,57 +73,35 @@ def patch_eq_controls():
         voice = guild.voice_client if guild else None
         playing = bool(voice and voice.is_playing())
         paused = bool(voice and voice.is_paused())
+        has_history = bool(panel.history.get(guild_id))
+        has_queue = bool(cog and cog.queues.get(guild_id))
+        repeating = panel.repeat_enabled.get(guild_id, False)
 
-        # Replace the playback row so its labels and EQ placement match the reference.
-        row_one = [item for item in self.children if getattr(item, "row", None) == 1]
-        for item in row_one:
-            self.remove_item(item)
+        def remove_row(row):
+            for item in list(self.children):
+                if getattr(item, "row", None) == row:
+                    self.remove_item(item)
 
-        def add(label, style, callback, key, disabled=False):
-            button = discord.ui.Button(
-                label=label,
-                style=style,
-                custom_id=f"juicevault:{key}:{guild_id}",
-                row=1,
-                disabled=disabled,
-            )
+        def add(label, style, callback, key, row, disabled=False):
+            button = discord.ui.Button(label=label, style=style, custom_id=f"juicevault:{key}:{guild_id}", row=row, disabled=disabled)
             button.callback = callback
             self.add_item(button)
 
+        # Row 1: playback only.
+        remove_row(1)
         if not running:
-            add("▶ Play Music 🧃", discord.ButtonStyle.success, self._start, "start")
+            add("▶ Play Music 🧃", discord.ButtonStyle.success, self._start, "start", 1)
         else:
-            add("⏹ Stop Music 🧃", discord.ButtonStyle.danger, self._stop, "stop")
-            add(
-                "▶ Resume Music 🧃" if paused else "⏸ Pause Music🧃",
-                discord.ButtonStyle.primary,
-                self._pause,
-                "pause",
-                disabled=not (playing or paused),
-            )
+            add("⏹ Stop Music 🧃", discord.ButtonStyle.danger, self._stop, "stop", 1)
+            add("▶ Resume Music 🧃" if paused else "⏸ Pause Music🧃", discord.ButtonStyle.primary, self._pause, "pause", 1, disabled=not (playing or paused))
 
-        add("🎚 EQ", discord.ButtonStyle.secondary, self._eq, "eq")
-
-        # Navigation labels requested by the new UI wording.
-        row_three = [item for item in self.children if getattr(item, "row", None) == 3]
-        for item in row_three:
-            self.remove_item(item)
-        add_nav = lambda label, style, callback, key, disabled=False: self.add_item(
-            discord.ui.Button(
-                label=label,
-                style=style,
-                custom_id=f"juicevault:{key}:{guild_id}",
-                row=3,
-                disabled=disabled,
-            )
-        )
-        nav_buttons = [
-            ("⏮ Previous Song", discord.ButtonStyle.secondary, self._previous, "previous", not bool(panel.history.get(guild_id))),
-            ("Next Song ⏭", discord.ButtonStyle.primary, self._next, "next", not playing),
-        ]
-        for label, style, callback, key, disabled in nav_buttons:
-            button = discord.ui.Button(label=label, style=style, custom_id=f"juicevault:{key}:{guild_id}", row=3, disabled=disabled)
-            button.callback = callback
-            self.add_item(button)
+        # Row 2: Repeat, Shuffle, Previous, Next and EQ — all moved one row up.
+        remove_row(2)
+        remove_row(3)
+        add("🔁 Repeat ON" if repeating else "🔁 Repeat", discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 2, disabled=not running)
+        add("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 2, disabled=not has_queue)
+        add("⏮ Previous Song", discord.ButtonStyle.secondary, self._previous, "previous", 2, disabled=not has_history)
+        add("Next Song ⏭", discord.ButtonStyle.primary, self._next, "next", 2, disabled=not playing)
+        add("🎚 EQ", discord.ButtonStyle.secondary, self._eq, "eq", 2)
 
     JuiceVaultPanelView.__init__ = smart_eq_init
