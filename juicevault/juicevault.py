@@ -51,6 +51,12 @@ class JuiceVault(commands.Cog):
         self.last_error = {}
         self.search_results = {}
         self.failure_counts = {}
+        # Runtime playback controls. These are intentionally kept in memory so
+        # a reload resets transient seek/effect state safely.
+        self.seek_events = {}
+        self.seek_targets = {}
+        self.play_positions = {}
+        self.effects = {}
 
     async def cog_load(self):
         await self._ensure_session()
@@ -73,7 +79,7 @@ class JuiceVault(commands.Cog):
     async def _ensure_session(self):
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession(
-                headers={"User-Agent": "Red-JuiceVault/1.1"},
+                headers={"User-Agent": "Red-JuiceVault/1.2"},
                 timeout=aiohttp.ClientTimeout(total=30),
             )
         return self.session
@@ -95,6 +101,7 @@ class JuiceVault(commands.Cog):
                     continue
                 self.stop_events[guild_id] = asyncio.Event()
                 self.skip_events[guild_id] = asyncio.Event()
+                self.seek_events[guild_id] = asyncio.Event()
                 self.skip_counts[guild_id] = 0
                 self.manual_queues[guild_id] = []
                 self.tasks[guild_id] = asyncio.create_task(self._player(guild, channel))
@@ -287,6 +294,34 @@ class JuiceVault(commands.Cog):
             except OSError:
                 pass
 
+    @staticmethod
+    def _parse_duration(value):
+        try:
+            text = str(value or "").strip()
+            if ":" in text:
+                parts = [int(float(part)) for part in text.split(":")]
+                total = 0
+                for part in parts:
+                    total = total * 60 + part
+                return float(total)
+            return float(text)
+        except (TypeError, ValueError):
+            return None
+
+    def _effect_filter(self, effect):
+        effect = str(effect or "none").casefold()
+        filters = {
+            "none": "aresample=async=1:first_pts=0",
+            "bass": "bass=g=8:f=100,aresample=async=1:first_pts=0",
+            "8d": "apulsator=hz=0.08:amount=1:offset_l=0:offset_r=0.5,haas=left_delay=2:right_delay=2,aresample=async=1:first_pts=0",
+            "nightcore": "asetrate=44100*1.12,aresample=44100,atempo=1.0,aresample=async=1:first_pts=0",
+            "slowed": "asetrate=44100*0.88,aresample=44100,atempo=1.0,aresample=async=1:first_pts=0",
+            "echo": "aecho=0.8:0.88:700:0.25,aresample=async=1:first_pts=0",
+            "wide": "stereotools=mlev=0.015:mpan=1,aresample=async=1:first_pts=0",
+            "virtual bass": "virtualbass=boost=6:cutoff=120,aresample=async=1:first_pts=0",
+        }
+        return filters.get(effect, filters["none"])
+
     async def _disconnect(self, guild):
         voice = guild.voice_client
         if voice:
@@ -303,6 +338,8 @@ class JuiceVault(commands.Cog):
             self.stop_events[guild_id].set()
         if guild_id in self.skip_events:
             self.skip_events[guild_id].set()
+        if guild_id in self.seek_events:
+            self.seek_events[guild_id].set()
         task = self.tasks.pop(guild_id, None)
         if task and task is not asyncio.current_task():
             task.cancel()
@@ -317,6 +354,10 @@ class JuiceVault(commands.Cog):
         self.last_error.pop(guild_id, None)
         self.failure_counts.pop(guild_id, None)
         self.skip_counts.pop(guild_id, None)
+        self.seek_events.pop(guild_id, None)
+        self.seek_targets.pop(guild_id, None)
+        self.play_positions.pop(guild_id, None)
+        self.effects.pop(guild_id, None)
         guild = self.bot.get_guild(guild_id)
         if guild:
             await self._disconnect(guild)
@@ -328,7 +369,9 @@ class JuiceVault(commands.Cog):
             return
         stop = self.stop_events[gid]
         skip = self.skip_events[gid]
+        seek = self.seek_events.setdefault(gid, asyncio.Event())
         self.manual_queues.setdefault(gid, [])
+        self.effects.setdefault(gid, "none")
         try:
             while not stop.is_set():
                 if self.tasks.get(gid) is not task:
@@ -367,7 +410,16 @@ class JuiceVault(commands.Cog):
                     self.skip_counts[gid] = 0
                     for _ in range(min(count, len(self.queues.get(gid, [])))):
                         self.queues[gid].pop(0)
-                    print(f"[JuiceVault] skipped {count} queued track(s)")
+                    continue
+                if seek.is_set():
+                    # A seek request stops the current FFmpeg process. Put the
+                    # same track back at the front and restart it at the target.
+                    seek.clear()
+                    target = max(0.0, float(self.seek_targets.pop(gid, 0.0)))
+                    current = self.current.get(gid)
+                    if current:
+                        self.manual_queues.setdefault(gid, []).insert(0, dict(current, _jv_seek_copy=True))
+                    self.play_positions[gid] = target
                     continue
                 if self.manual_queues.get(gid):
                     track = self.manual_queues[gid].pop(0)
@@ -376,6 +428,10 @@ class JuiceVault(commands.Cog):
                     track = self.queues[gid].pop(0)
                     source_type = "normal"
                 self.current[gid] = track
+                start_offset = max(0.0, float(self.play_positions.pop(gid, 0.0)))
+                duration = self._parse_duration(track.get("length"))
+                if duration is not None:
+                    start_offset = min(start_offset, max(0.0, duration - 0.25))
                 started_at = time.monotonic()
                 finished = asyncio.Event()
                 playback_error = {"value": None}
@@ -389,8 +445,14 @@ class JuiceVault(commands.Cog):
                             playback_error["value"] = error
                             print(f"[JuiceVault] playback worker error: {type(error).__name__}: {error}")
                         self.bot.loop.call_soon_threadsafe(finished.set)
-                    source = discord.FFmpegPCMAudio(local_path, executable=self._ffmpeg_executable(), before_options="-nostdin", options="-vn -af aresample=async=1:first_pts=0", stderr=log_file)
+                    before = "-nostdin"
+                    if start_offset > 0.05:
+                        before = f"-nostdin -ss {start_offset:.3f}"
+                    effect = self.effects.get(gid, "none")
+                    options = f"-vn -af {self._effect_filter(effect)}"
+                    source = discord.FFmpegPCMAudio(local_path, executable=self._ffmpeg_executable(), before_options=before, options=options, stderr=log_file)
                     voice.play(source, after=after)
+                    self.play_positions[gid] = start_offset
                 except Exception as exc:
                     self.last_error[gid] = f"Playback: {type(exc).__name__}: {exc}"
                     if log_file:
@@ -407,15 +469,21 @@ class JuiceVault(commands.Cog):
                 stop_task = asyncio.create_task(stop.wait())
                 finish_task = asyncio.create_task(finished.wait())
                 skip_task = asyncio.create_task(skip.wait())
-                done, pending = await asyncio.wait({stop_task, finish_task, skip_task}, return_when=asyncio.FIRST_COMPLETED)
+                seek_task = asyncio.create_task(seek.wait())
+                done, pending = await asyncio.wait({stop_task, finish_task, skip_task, seek_task}, return_when=asyncio.FIRST_COMPLETED)
                 for p in pending:
                     p.cancel()
                 explicit_skip = skip_task in done and skip.is_set()
-                if explicit_skip:
+                explicit_seek = seek_task in done and seek.is_set()
+                if explicit_skip or explicit_seek:
+                    elapsed = time.monotonic() - started_at
+                    self.play_positions[gid] = start_offset + max(0.0, elapsed)
                     if voice.is_playing() or voice.is_paused():
                         voice.stop()
                     await self._wait_for_voice_idle(voice)
                 else:
+                    elapsed = time.monotonic() - started_at
+                    self.play_positions[gid] = start_offset + max(0.0, elapsed)
                     await self._wait_for_voice_idle(voice)
                 if log_file:
                     try:
@@ -426,13 +494,26 @@ class JuiceVault(commands.Cog):
                 self._remove_file(local_path)
                 if stop.is_set() or self.tasks.get(gid) is not task:
                     return
+                if explicit_seek:
+                    seek.clear()
+                    current = self.current.get(gid)
+                    duration = self._parse_duration(current.get("length") if current else None)
+                    current_pos = self.play_positions.get(gid, 0.0)
+                    target = float(self.seek_targets.pop(gid, current_pos))
+                    if duration is not None:
+                        target = min(target, max(0.0, duration - 0.25))
+                    target = max(0.0, target)
+                    self.play_positions[gid] = target
+                    if current:
+                        self.manual_queues.setdefault(gid, []).insert(0, dict(current, _jv_seek_copy=True))
+                    continue
                 if explicit_skip:
                     skip.clear()
+                    self.play_positions.pop(gid, None)
                     count = max(1, min(int(self.skip_counts.pop(gid, 1)), 100))
                     for _ in range(min(count, len(self.queues.get(gid, [])))):
                         self.queues[gid].pop(0)
                     self.failure_counts[gid] = 0
-                    print(f"[JuiceVault] explicit skip request: {count} track(s)")
                     continue
                 elapsed = time.monotonic() - started_at
                 if playback_error["value"] or elapsed < 4.0:
@@ -444,6 +525,7 @@ class JuiceVault(commands.Cog):
                     if self.failure_counts[gid] >= self.MAX_CONSECUTIVE_FAILURES:
                         self.failure_counts[gid] = 0
                     continue
+                self.play_positions.pop(gid, None)
                 self.failure_counts[gid] = 0
                 self.last_error.pop(gid, None)
         except asyncio.CancelledError:
@@ -463,6 +545,32 @@ class JuiceVault(commands.Cog):
         event.set()
         voice.stop()
         return True
+
+    async def _request_seek(self, guild_id, delta):
+        guild = self.bot.get_guild(guild_id)
+        voice = guild.voice_client if guild else None
+        event = self.seek_events.get(guild_id)
+        current = self.current.get(guild_id)
+        if guild_id not in self.tasks or not event or not voice or not current:
+            return None
+        if not (voice.is_playing() or voice.is_paused()):
+            return None
+        if event.is_set():
+            return None
+        base = float(self.play_positions.get(guild_id, 0.0))
+        started = getattr(voice, "_jv_started_at", None)
+        # The player stores a monotonic timestamp on the VoiceClient for the
+        # currently running FFmpeg process. Fall back to the cached position.
+        if started is not None and voice.is_playing() and not voice.is_paused():
+            base += max(0.0, time.monotonic() - started)
+        duration = self._parse_duration(current.get("length"))
+        target = max(0.0, base + float(delta))
+        if duration is not None:
+            target = min(target, max(0.0, duration - 0.25))
+        self.seek_targets[guild_id] = target
+        event.set()
+        voice.stop()
+        return target
 
     @commands.group(name="jv", invoke_without_command=True)
     @commands.guild_only()
@@ -501,8 +609,12 @@ class JuiceVault(commands.Cog):
         self.manual_queues[gid] = []
         self.stop_events[gid] = asyncio.Event()
         self.skip_events[gid] = asyncio.Event()
+        self.seek_events[gid] = asyncio.Event()
         self.skip_counts[gid] = 0
         self.failure_counts[gid] = 0
+        self.seek_targets.pop(gid, None)
+        self.play_positions.pop(gid, None)
+        self.effects[gid] = "none"
         await self.config.guild(ctx.guild).enabled.set(True)
         await self.config.guild(ctx.guild).channel_id.set(ctx.author.voice.channel.id)
         self.tasks[gid] = asyncio.create_task(self._player(ctx.guild, ctx.author.voice.channel))
@@ -648,6 +760,7 @@ class JuiceVault(commands.Cog):
             f"**Now Playing:** {self._track_text(current) if current else 'nothing'}",
             f"**Queue:** `{queue_size}`",
             f"**Requested:** `{manual_size}`",
+            f"**Effect:** `{self.effects.get(gid, 'none')}`",
         ]
         if error:
             lines.append(f"**Last Error:** `{error}`")
