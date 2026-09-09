@@ -56,27 +56,21 @@ class JuiceVaultPanelView(discord.ui.View):
         start = discord.ui.Button(label="Start", emoji="▶️", style=discord.ButtonStyle.success, custom_id=f"juicevault:start:{guild_id}")
         start.callback = self._start
         self.add_item(start)
-
         stop = discord.ui.Button(label="Stop", emoji="⏹️", style=discord.ButtonStyle.danger, custom_id=f"juicevault:stop:{guild_id}")
         stop.callback = self._stop
         self.add_item(stop)
-
         next_button = discord.ui.Button(label="Skip", emoji="⏭️", style=discord.ButtonStyle.primary, custom_id=f"juicevault:next:{guild_id}")
         next_button.callback = self._next
         self.add_item(next_button)
-
         skip10 = discord.ui.Button(label="Skip 10", emoji="⏩", style=discord.ButtonStyle.primary, custom_id=f"juicevault:skip10:{guild_id}")
         skip10.callback = self._skip10
         self.add_item(skip10)
-
         shuffle = discord.ui.Button(label="Shuffle", emoji="🔀", style=discord.ButtonStyle.secondary, custom_id=f"juicevault:shuffle:{guild_id}")
         shuffle.callback = self._shuffle
         self.add_item(shuffle)
-
         category = discord.ui.Button(label="Category", emoji="🎚️", style=discord.ButtonStyle.secondary, custom_id=f"juicevault:category:{guild_id}")
         category.callback = self._category
         self.add_item(category)
-
         refresh = discord.ui.Button(label="Refresh", emoji="🔄", style=discord.ButtonStyle.secondary, custom_id=f"juicevault:refresh:{guild_id}")
         refresh.callback = self._refresh
         self.add_item(refresh)
@@ -90,11 +84,13 @@ class JuiceVaultPanelView(discord.ui.View):
         if not interaction.user.voice or not interaction.user.voice.channel:
             await interaction.followup.send("Intră într-un voice channel înainte de Start.", ephemeral=True)
             return
-        if self.guild_id in cog.tasks:
+        gid = self.guild_id
+        if gid in cog.tasks:
             voice = interaction.guild.voice_client
             if voice and voice.is_connected():
                 await interaction.followup.send("JuiceVault rulează deja.", ephemeral=True)
                 return
+            await cog._stop(gid)
         try:
             all_tracks = await cog.fetch_tracks()
             category = await cog.config.guild(interaction.guild).category()
@@ -103,7 +99,6 @@ class JuiceVaultPanelView(discord.ui.View):
                 await interaction.followup.send(f"Categoria `{category}` nu conține piese.", ephemeral=True)
                 return
             voice = await cog._connect(interaction.guild, interaction.user.voice.channel)
-            gid = self.guild_id
             cog.queues[gid] = tracks
             cog.manual_queues[gid] = []
             cog.stop_events[gid] = asyncio.Event()
