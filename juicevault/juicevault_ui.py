@@ -111,6 +111,7 @@ class JuiceVaultPanelView(discord.ui.View):
             self.panel.repeat_queued[gid] = False
             self.panel.last_seen_current[gid] = None
             self.panel.last_track_snapshot[gid] = None
+            self.panel.last_track_object[gid] = None
             await cog.config.guild(interaction.guild).enabled.set(True)
             await cog.config.guild(interaction.guild).channel_id.set(interaction.user.voice.channel.id)
             cog.tasks[gid] = asyncio.create_task(cog._player(interaction.guild, interaction.user.voice.channel))
@@ -162,6 +163,14 @@ class JuiceVaultPanelView(discord.ui.View):
         enabled = not self.panel.repeat_enabled.get(self.guild_id, False)
         self.panel.repeat_enabled[self.guild_id] = enabled
         self.panel.repeat_queued[self.guild_id] = False
+        if enabled:
+            current = cog.current.get(self.guild_id)
+            if current:
+                cog.manual_queues.setdefault(self.guild_id, []).insert(0, dict(current, _jv_repeat_copy=True))
+                self.panel.repeat_queued[self.guild_id] = True
+        else:
+            pending = cog.manual_queues.get(self.guild_id, [])
+            cog.manual_queues[self.guild_id] = [track for track in pending if not track.get("_jv_repeat_copy")]
         await interaction.followup.send("🔁 Repeat pornit — piesa curentă va fi repetată." if enabled else "🔁 Repeat oprit.", ephemeral=True)
         await self.panel.update_panel(self.guild_id)
 
@@ -178,6 +187,7 @@ class JuiceVaultPanelView(discord.ui.View):
         self.panel.repeat_queued[self.guild_id] = False
         self.panel.last_seen_current[self.guild_id] = None
         self.panel.last_track_snapshot[self.guild_id] = None
+        self.panel.last_track_object[self.guild_id] = None
         await self.panel.update_panel(self.guild_id)
         await interaction.followup.send("⏹️ Oprit.", ephemeral=True)
 
@@ -253,6 +263,7 @@ class JuiceVaultUI(commands.Cog):
         self.history = {}
         self.last_seen_current = {}
         self.last_track_snapshot = {}
+        self.last_track_object = {}
         self.repeat_enabled = {}
         self.repeat_queued = {}
 
@@ -399,26 +410,29 @@ class JuiceVaultUI(commands.Cog):
                     for guild_id in list(main.tasks):
                         track = main.current.get(guild_id)
                         track_id = str(track.get("id")) if track else None
+                        track_object = id(track) if track else None
                         previous_id = self.last_seen_current.get(guild_id)
-                        if track_id and previous_id and track_id != previous_id:
-                            previous_track = self.last_track_snapshot.get(guild_id)
-                            if previous_track:
-                                history = self.history.setdefault(guild_id, [])
-                                if not history or str(history[-1].get("id")) != previous_id:
-                                    history.append(previous_track)
-                                    del history[:-50]
-                            self.repeat_queued[guild_id] = False
-                        if track_id and track_id != previous_id:
+                        previous_object = self.last_track_object.get(guild_id)
+                        if track_id and (track_id != previous_id or track_object != previous_object):
+                            if previous_id:
+                                previous_track = self.last_track_snapshot.get(guild_id)
+                                if previous_track:
+                                    history = self.history.setdefault(guild_id, [])
+                                    if not history or str(history[-1].get("id")) != previous_id or track_id == previous_id:
+                                        history.append(previous_track)
+                                        del history[:-50]
                             self.last_seen_current[guild_id] = track_id
                             self.last_track_snapshot[guild_id] = dict(track)
+                            self.last_track_object[guild_id] = track_object
                             if self.repeat_enabled.get(guild_id):
-                                self.repeat_queued[guild_id] = False
+                                self.repeat_queued[guild_id] = True
+                                main.manual_queues.setdefault(guild_id, []).insert(0, dict(track, _jv_repeat_copy=True))
                         guild = self.bot.get_guild(guild_id)
                         voice = guild.voice_client if guild else None
                         if self.repeat_enabled.get(guild_id) and track and voice and voice.is_connected() and not voice.is_playing() and not voice.is_paused() and not self.repeat_queued.get(guild_id):
-                            main.manual_queues.setdefault(guild_id, []).insert(0, dict(track))
+                            main.manual_queues.setdefault(guild_id, []).insert(0, dict(track, _jv_repeat_copy=True))
                             self.repeat_queued[guild_id] = True
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
