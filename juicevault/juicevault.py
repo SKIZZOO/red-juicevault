@@ -51,8 +51,6 @@ class JuiceVault(commands.Cog):
         self.last_error = {}
         self.search_results = {}
         self.failure_counts = {}
-        # Runtime playback controls. These are intentionally kept in memory so
-        # a reload resets transient seek/effect state safely.
         self.seek_events = {}
         self.seek_targets = {}
         self.play_positions = {}
@@ -104,6 +102,7 @@ class JuiceVault(commands.Cog):
                 self.seek_events[guild_id] = asyncio.Event()
                 self.skip_counts[guild_id] = 0
                 self.manual_queues[guild_id] = []
+                self.effects[guild_id] = "none"
                 self.tasks[guild_id] = asyncio.create_task(self._player(guild, channel))
         except asyncio.CancelledError:
             raise
@@ -318,7 +317,7 @@ class JuiceVault(commands.Cog):
             "slowed": "asetrate=44100*0.88,aresample=44100,atempo=1.0,aresample=async=1:first_pts=0",
             "echo": "aecho=0.8:0.88:700:0.25,aresample=async=1:first_pts=0",
             "wide": "stereotools=mlev=0.015:mpan=1,aresample=async=1:first_pts=0",
-            "virtual bass": "virtualbass=boost=6:cutoff=120,aresample=async=1:first_pts=0",
+            "virtual bass": "virtualbass=cutoff=120:strength=2,aresample=async=1:first_pts=0",
         }
         return filters.get(effect, filters["none"])
 
@@ -408,12 +407,11 @@ class JuiceVault(commands.Cog):
                     count = max(1, min(int(self.skip_counts.get(gid, 1)), 100))
                     skip.clear()
                     self.skip_counts[gid] = 0
+                    self.play_positions.pop(gid, None)
                     for _ in range(min(count, len(self.queues.get(gid, [])))):
                         self.queues[gid].pop(0)
                     continue
                 if seek.is_set():
-                    # A seek request stops the current FFmpeg process. Put the
-                    # same track back at the front and restart it at the target.
                     seek.clear()
                     target = max(0.0, float(self.seek_targets.pop(gid, 0.0)))
                     current = self.current.get(gid)
@@ -452,6 +450,7 @@ class JuiceVault(commands.Cog):
                     options = f"-vn -af {self._effect_filter(effect)}"
                     source = discord.FFmpegPCMAudio(local_path, executable=self._ffmpeg_executable(), before_options=before, options=options, stderr=log_file)
                     voice.play(source, after=after)
+                    voice._jv_started_at = time.monotonic()
                     self.play_positions[gid] = start_offset
                 except Exception as exc:
                     self.last_error[gid] = f"Playback: {type(exc).__name__}: {exc}"
@@ -475,15 +474,13 @@ class JuiceVault(commands.Cog):
                     p.cancel()
                 explicit_skip = skip_task in done and skip.is_set()
                 explicit_seek = seek_task in done and seek.is_set()
+                elapsed = time.monotonic() - started_at
+                self.play_positions[gid] = start_offset + max(0.0, elapsed)
                 if explicit_skip or explicit_seek:
-                    elapsed = time.monotonic() - started_at
-                    self.play_positions[gid] = start_offset + max(0.0, elapsed)
                     if voice.is_playing() or voice.is_paused():
                         voice.stop()
                     await self._wait_for_voice_idle(voice)
                 else:
-                    elapsed = time.monotonic() - started_at
-                    self.play_positions[gid] = start_offset + max(0.0, elapsed)
                     await self._wait_for_voice_idle(voice)
                 if log_file:
                     try:
@@ -515,7 +512,6 @@ class JuiceVault(commands.Cog):
                         self.queues[gid].pop(0)
                     self.failure_counts[gid] = 0
                     continue
-                elapsed = time.monotonic() - started_at
                 if playback_error["value"] or elapsed < 4.0:
                     self.failure_counts[gid] = self.failure_counts.get(gid, 0) + 1
                     target = self.manual_queues if source_type == "manual" else self.queues
@@ -528,6 +524,10 @@ class JuiceVault(commands.Cog):
                 self.play_positions.pop(gid, None)
                 self.failure_counts[gid] = 0
                 self.last_error.pop(gid, None)
+                try:
+                    del voice._jv_started_at
+                except AttributeError:
+                    pass
         except asyncio.CancelledError:
             raise
         finally:
@@ -559,8 +559,6 @@ class JuiceVault(commands.Cog):
             return None
         base = float(self.play_positions.get(guild_id, 0.0))
         started = getattr(voice, "_jv_started_at", None)
-        # The player stores a monotonic timestamp on the VoiceClient for the
-        # currently running FFmpeg process. Fall back to the cached position.
         if started is not None and voice.is_playing() and not voice.is_paused():
             base += max(0.0, time.monotonic() - started)
         duration = self._parse_duration(current.get("length"))
