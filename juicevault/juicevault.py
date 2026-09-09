@@ -181,8 +181,8 @@ class JuiceVault(commands.Cog):
 
                 try:
                     source = discord.FFmpegPCMAudio(
-                        self._ffmpeg_executable(),
                         url,
+                        executable=self._ffmpeg_executable(),
                         before_options='-user_agent "Red-JuiceVault/1.0" -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
                         options="-vn",
                     )
@@ -249,7 +249,6 @@ class JuiceVault(commands.Cog):
             await ctx.send("JuiceVault API nu a returnat piese audio.")
             return
 
-        # Verify Discord voice connection BEFORE telling the user that playback started.
         try:
             voice = await self._connect(ctx.guild, ctx.author.voice.channel)
         except Exception as exc:
