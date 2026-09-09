@@ -1,0 +1,8 @@
+{
+  "author": ["SKIZZOO"],
+  "short": "Red-DiscordBot cog for continuous JuiceVault playback.",
+  "description": "Fetches the JuiceVault Music archive and continuously plays it in a Discord voice channel, reloading the archive at the end.",
+  "install_msg": "Install FFmpeg on the Red host, then load the cog and use [p]jv start while you are in a voice channel.",
+  "end_user_data_statement": "This cog stores no personal user data.",
+  "tags": ["music", "audio", "juicevault", "24/7"]
+}
