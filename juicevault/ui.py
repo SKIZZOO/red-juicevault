@@ -114,10 +114,8 @@ class JuiceVaultUI(commands.Cog):
     async def _restore_views(self):
         await self.bot.wait_until_ready()
         for guild_id in (await self.config.all_guilds()).keys():
-            guild = self.bot.get_guild(guild_id)
-            if guild is None:
-                continue
-            self._register_view(guild_id)
+            if self.bot.get_guild(guild_id) is not None:
+                self._register_view(guild_id)
 
     def _register_view(self, guild_id):
         if guild_id in self._registered_views:
@@ -147,7 +145,7 @@ class JuiceVaultUI(commands.Cog):
     def _make_embed(self, guild_id):
         main = self.bot.get_cog("JuiceVault")
         embed = discord.Embed(color=self.PANEL_COLOR)
-        embed.set_author(name="JUICEVAULT • LIVE", icon_url="https://api.juicevault.xyz/favicon.ico")
+        embed.set_author(name="JUICEVAULT • LIVE")
 
         if main is None or guild_id not in main.tasks:
             embed.title = "Player offline"
@@ -155,9 +153,10 @@ class JuiceVaultUI(commands.Cog):
             embed.set_footer(text="JuiceVault • 24/7 Archive Player")
             return embed
 
+        guild = self.bot.get_guild(guild_id)
         track = main.current.get(guild_id)
         queue_size = len(main.queues.get(guild_id, []))
-        voice = self.bot.get_guild(guild_id).voice_client if self.bot.get_guild(guild_id) else None
+        voice = guild.voice_client if guild else None
 
         if track:
             embed.title = "Now Playing"
@@ -191,13 +190,13 @@ class JuiceVaultUI(commands.Cog):
         return embed
 
     async def _get_panel_message(self, guild_id, create=False, channel=None):
-        settings = await self.config.guild_from_id(guild_id).all()
-        channel_id = settings.get("panel_channel_id")
-        message_id = settings.get("panel_message_id")
         guild = self.bot.get_guild(guild_id)
         if guild is None:
             return None
 
+        settings = await self.config.guild(guild).all()
+        channel_id = settings.get("panel_channel_id")
+        message_id = settings.get("panel_message_id")
         target = channel
         if target is None and channel_id:
             target = guild.get_channel(channel_id)
@@ -218,8 +217,8 @@ class JuiceVaultUI(commands.Cog):
             embed=self._make_embed(guild_id),
             view=JuiceVaultPanelView(self, guild_id),
         )
-        await self.config.guild_from_id(guild_id).panel_channel_id.set(target.id)
-        await self.config.guild_from_id(guild_id).panel_message_id.set(message.id)
+        await self.config.guild(guild).panel_channel_id.set(target.id)
+        await self.config.guild(guild).panel_message_id.set(message.id)
         return message
 
     async def update_panel(self, guild_id):
