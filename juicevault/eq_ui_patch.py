@@ -87,7 +87,14 @@ def patch_eq_controls():
             button.callback = callback
             self.add_item(button)
 
-        # Row 1: playback only.
+        # Row 0: Category, Search, Refresh, EQ.
+        remove_row(0)
+        add("🎚 Category", discord.ButtonStyle.secondary, self._category, "category", 0)
+        add("🔎 Search", discord.ButtonStyle.secondary, self._search, "search", 0)
+        add("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh, "refresh", 0, disabled=not running)
+        add("🎚 EQ", discord.ButtonStyle.secondary, self._eq, "eq", 0)
+
+        # Row 1: playback controls.
         remove_row(1)
         if not running:
             add("▶ Play Music 🧃", discord.ButtonStyle.success, self._start, "start", 1)
@@ -95,13 +102,19 @@ def patch_eq_controls():
             add("⏹ Stop Music 🧃", discord.ButtonStyle.danger, self._stop, "stop", 1)
             add("▶ Resume Music 🧃" if paused else "⏸ Pause Music🧃", discord.ButtonStyle.primary, self._pause, "pause", 1, disabled=not (playing or paused))
 
-        # Row 2: Repeat, Shuffle, Previous, Next and EQ — all moved one row up.
+        # Row 2: Previous / Next, ABOVE Repeat / Shuffle.
         remove_row(2)
         remove_row(3)
-        add("🔁 Repeat ON" if repeating else "🔁 Repeat", discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 2, disabled=not running)
-        add("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 2, disabled=not has_queue)
         add("⏮ Previous Song", discord.ButtonStyle.secondary, self._previous, "previous", 2, disabled=not has_history)
         add("Next Song ⏭", discord.ButtonStyle.primary, self._next, "next", 2, disabled=not playing)
-        add("🎚 EQ", discord.ButtonStyle.secondary, self._eq, "eq", 2)
+
+        # Row 3: Repeat / Shuffle.
+        add("🔁 Repeat ON" if repeating else "🔁 Repeat", discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 3, disabled=not running)
+        add("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 3, disabled=not has_queue)
+
+        # Row 4: seek controls.
+        has_track = bool(cog and cog.current.get(guild_id))
+        add("⏮ Past 10s", discord.ButtonStyle.secondary, self._seek_back, "seek_back", 4, disabled=not (has_track and (playing or paused)))
+        add("Next 10s ⏭", discord.ButtonStyle.secondary, self._seek_forward, "seek_forward", 4, disabled=not (has_track and (playing or paused)))
 
     JuiceVaultPanelView.__init__ = smart_eq_init
