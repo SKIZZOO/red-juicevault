@@ -1,5 +1,6 @@
 import discord
 
+from . import juicevault_ui as ui
 from .juicevault_ui import category_label, JuiceVaultPanelView
 
 
@@ -57,45 +58,44 @@ async def polished_make_embed(self, guild_id):
     return embed
 
 
-def _install_polished_button_layout():
-    def polished_init(self, panel, guild_id):
-        discord.ui.View.__init__(self, timeout=None)
-        self.panel = panel
-        self.guild_id = guild_id
+def _styled_panel_init(self, panel, guild_id):
+    discord.ui.View.__init__(self, timeout=None)
+    self.panel = panel
+    self.guild_id = guild_id
 
-        guild = panel.bot.get_guild(guild_id)
-        voice = guild.voice_client if guild else None
-        paused = bool(voice and voice.is_paused())
-        repeating = panel.repeat_enabled.get(guild_id, False)
+    guild = panel.bot.get_guild(guild_id)
+    voice = guild.voice_client if guild else None
+    paused = bool(voice and voice.is_paused())
+    repeating = panel.repeat_enabled.get(guild_id, False)
 
-        buttons = [
-            # Row 0: core playback
-            ("▶ Start", discord.ButtonStyle.success, self._start, "start", 0),
-            (("▶ Resume" if paused else "Ⅱ Pause"), discord.ButtonStyle.primary, self._pause, "pause", 0),
-            ("⏮ Previous", discord.ButtonStyle.secondary, self._previous, "previous", 0),
-            ("Next ⏭", discord.ButtonStyle.primary, self._next, "next", 0),
-            # Row 1: queue controls
-            ("Next 10 ⏩", discord.ButtonStyle.primary, self._skip10, "skip10", 1),
-            (("🔁 Repeat ON" if repeating else "🔁 Repeat"), discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 1),
-            ("⏹ Stop", discord.ButtonStyle.danger, self._stop, "stop", 1),
-            ("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 1),
-            # Row 2: library/settings
-            ("🎚 Category", discord.ButtonStyle.secondary, self._category, "category", 2),
-            ("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh, "refresh", 2),
-        ]
+    # Explicitly use 4 + 4 + 2 buttons. Discord will not auto-pack them.
+    buttons = [
+        ("▶ Start", discord.ButtonStyle.success, self._start, "start", 0),
+        (("▶ Resume" if paused else "⏸ Pause"), discord.ButtonStyle.primary, self._pause, "pause", 0),
+        ("⏮ Previous", discord.ButtonStyle.secondary, self._previous, "previous", 0),
+        ("Next ⏭", discord.ButtonStyle.primary, self._next, "next", 0),
+        ("⏩ Next 10", discord.ButtonStyle.primary, self._skip10, "skip10", 1),
+        (("🔁 Repeat ON" if repeating else "🔁 Repeat"), discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 1),
+        ("⏹ Stop", discord.ButtonStyle.danger, self._stop, "stop", 1),
+        ("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 1),
+        ("🎚 Category", discord.ButtonStyle.secondary, self._category, "category", 2),
+        ("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh, "refresh", 2),
+    ]
 
-        for label, style, callback, key, row in buttons:
-            button = discord.ui.Button(
-                label=label,
-                style=style,
-                custom_id=f"juicevault:{key}:{guild_id}",
-                row=row,
-            )
-            button.callback = callback
-            self.add_item(button)
+    for label, style, callback, key, row in buttons:
+        button = discord.ui.Button(
+            label=label,
+            style=style,
+            custom_id=f"juicevault:{key}:{guild_id}",
+            row=row,
+        )
+        button.callback = callback
+        self.add_item(button)
 
 
 def patch_ui(JuiceVaultUI):
-    """Install the polished embed and explicit three-row control layout."""
+    """Install the polished embed and force the panel into three explicit rows."""
     JuiceVaultUI._make_embed = polished_make_embed
-    _install_polished_button_layout()
+    JuiceVaultPanelView.__init__ = _styled_panel_init
+    # Replace the module-level class reference used by ensure_panel/update_panel.
+    ui.JuiceVaultPanelView = JuiceVaultPanelView
