@@ -379,6 +379,13 @@ class JuiceVault(commands.Cog):
                     if log_path:
                         await self._read_ffmpeg_log(log_path)
                     self._remove_file(local_path)
+                    # Put the failed track back at the front instead of silently
+                    # advancing to the next song. This prevents broken/slow streams
+                    # from looking like random skips.
+                    if source_type == "manual":
+                        self.manual_queues.setdefault(gid, []).insert(0, track)
+                    else:
+                        self.queues.setdefault(gid, []).insert(0, track)
                     await asyncio.sleep(self.FAILURE_BACKOFF_SECONDS)
                     self.failure_counts[gid] = self.failure_counts.get(gid, 0) + 1
                     continue
@@ -393,7 +400,7 @@ class JuiceVault(commands.Cog):
                 for pending_task in pending:
                     pending_task.cancel()
 
-                was_skipped = skip.is_set()
+                was_skipped = skip.is_set() and skip_task in done
                 if was_skipped and (voice.is_playing() or voice.is_paused()):
                     voice.stop()
 
@@ -416,6 +423,7 @@ class JuiceVault(commands.Cog):
                 if was_skipped:
                     skip.clear()
                     self.failure_counts[gid] = 0
+                    print(f"[JuiceVault] manual skip: {self._track_text(track)}")
                     continue
 
                 if playback_error["value"] or elapsed < self.SHORT_PLAYBACK_SECONDS:
@@ -427,6 +435,12 @@ class JuiceVault(commands.Cog):
                         f"[JuiceVault] track failed after {elapsed:.1f}s: "
                         f"{self._track_text(track)} ({source_type})"
                     )
+                    # IMPORTANT: do not lose the track and do not advance the queue
+                    # after an unexpected short playback. Retry the exact same song.
+                    if source_type == "manual":
+                        self.manual_queues.setdefault(gid, []).insert(0, track)
+                    else:
+                        self.queues.setdefault(gid, []).insert(0, track)
                     if self.failure_counts[gid] >= self.MAX_CONSECUTIVE_FAILURES:
                         print("[JuiceVault] too many consecutive playback failures; waiting 30s.")
                         await asyncio.sleep(30)
@@ -518,132 +532,109 @@ class JuiceVault(commands.Cog):
             await ctx.send("Nu rulează nicio piesă.")
             return
         if event.is_set():
-            await ctx.send("⏭️ Un skip este deja în curs. Așteaptă următoarea piesă.")
+            await ctx.send("Un skip este deja în curs.")
             return
-
         event.set()
         voice.stop()
-        await ctx.send("⏭️ Am sărit o singură piesă. Urmează următoarea.")
+        await ctx.send("⏭️ Skip.")
 
     @jv.command(name="search")
+    @commands.guild_only()
     async def search(self, ctx, *, query: str):
-        """Search JuiceVault by title, alternate name, artist, or file name."""
+        """Search JuiceVault tracks."""
+        if not self.session:
+            await ctx.send("JuiceVault nu este încărcat complet.")
+            return
         try:
             tracks = await self.fetch_tracks()
         except Exception as exc:
             await ctx.send(f"Căutarea a eșuat: `{exc}`")
             return
-
-        query_normalized = query.casefold().strip()
-        matches = [track for track in tracks if query_normalized in self._search_text(track)]
-
-        def score(track):
-            title = str(track.get("title") or "").casefold()
-            name = str(track.get("name") or "").casefold()
-            artist = str(track.get("artist") or "").casefold()
-            file_name = str(track.get("file_name") or "").casefold()
-            if query_normalized == title:
-                return 0
-            if query_normalized == name:
-                return 1
-            if query_normalized == artist:
-                return 2
-            if query_normalized == file_name:
-                return 3
-            if query_normalized in title:
-                return 4
-            if query_normalized in name:
-                return 5
-            if query_normalized in artist:
-                return 6
-            return 7
-
-        matches.sort(key=score)
-        matches = matches[:10]
-        self.search_results[ctx.guild.id] = matches
-
+        query = query.casefold().strip()
+        matches = [track for track in tracks if query in self._search_text(track)][:10]
         if not matches:
-            await ctx.send(f"Nu am găsit nicio piesă pentru `{query}`.")
+            await ctx.send("Nu am găsit nimic.")
             return
-
-        lines = [f"🔎 Rezultate pentru `{query}`:"]
-        for index, track in enumerate(matches, 1):
-            lines.append(f"**{index}.** {self._track_text(track)}")
-        lines.append("Folosește `4jv play <număr>` pentru a pune piesa următoare.")
-        await ctx.send("\n".join(lines)[:1900])
+        self.search_results[ctx.guild.id] = matches
+        lines = [
+            f"**{index}.** {self._track_text(track)}"
+            for index, track in enumerate(matches, 1)
+        ]
+        await ctx.send("🔎 Rezultate JuiceVault:\n" + "\n".join(lines))
 
     @jv.command(name="play")
+    @commands.guild_only()
     async def play(self, ctx, *, query: str):
-        """Queue a selected/search-result track immediately after the current one."""
+        """Queue a searched result or search directly and play it next."""
         gid = ctx.guild.id
-        if gid not in self.tasks:
-            await ctx.send("Pornește întâi playerul cu `jv start`.")
-            return
+        matches = self.search_results.get(gid, [])
+        track = None
+        try:
+            index = int(query.strip())
+        except ValueError:
+            index = None
 
-        selected = None
-        if query.strip().isdigit():
-            index = int(query.strip()) - 1
-            results = self.search_results.get(gid, [])
-            if 0 <= index < len(results):
-                selected = results[index]
-            else:
-                await ctx.send(
-                    "Număr invalid. Fă mai întâi `4jv search <nume>` și alege un rezultat."
-                )
-                return
+        if index is not None and 1 <= index <= len(matches):
+            track = matches[index - 1]
         else:
+            if not self.session:
+                await ctx.send("JuiceVault nu este încărcat complet.")
+                return
             try:
                 tracks = await self.fetch_tracks()
             except Exception as exc:
                 await ctx.send(f"Căutarea a eșuat: `{exc}`")
                 return
-            query_normalized = query.casefold().strip()
-            matches = [track for track in tracks if query_normalized in self._search_text(track)]
-            if len(matches) == 1:
-                selected = matches[0]
-            elif matches:
-                self.search_results[gid] = matches[:10]
-                await ctx.send(
-                    f"Am găsit mai multe rezultate. Folosește `4jv search {query}` și apoi `4jv play <număr>`."
-                )
-                return
-            else:
-                await ctx.send(f"Nu am găsit nicio piesă pentru `{query}`.")
-                return
+            q = query.casefold().strip()
+            candidates = [item for item in tracks if q in self._search_text(item)]
+            if candidates:
+                track = candidates[0]
 
-        self.manual_queues.setdefault(gid, []).append(selected)
-        position = len(self.manual_queues[gid])
-        await ctx.send(
-            f"🎵 Am pus **{self._track_text(selected)}** ca următoarea piesă"
-            + ("." if position == 1 else f" (poziția {position} în lista de cereri).")
-        )
+        if not track:
+            await ctx.send("Nu am găsit piesa. Folosește `4jv search <nume>`.")
+            return
+        if gid not in self.tasks:
+            await ctx.send("Playerul nu rulează. Folosește `4jv start` întâi.")
+            return
+
+        self.manual_queues.setdefault(gid, []).append(track)
+        await ctx.send(f"🎵 Adăugat la Requested: **{self._track_text(track)}**")
 
     @jv.command(name="refresh")
+    @commands.guild_only()
     async def refresh(self, ctx):
-        """Reload the JuiceVault archive."""
+        """Refresh the normal JuiceVault queue."""
         try:
             tracks = await self.fetch_tracks()
         except Exception as exc:
+            self.last_error[ctx.guild.id] = f"API: {exc}"
             await ctx.send(f"Refresh eșuat: `{exc}`")
             return
-        gid = ctx.guild.id
-        self.queues[gid] = tracks
-        await ctx.send(f"🔄 Am reîncărcat arhiva: {len(tracks)} piese.")
+        self.queues[ctx.guild.id] = tracks
+        self.failure_counts[ctx.guild.id] = 0
+        self.last_error.pop(ctx.guild.id, None)
+        await ctx.send(f"🔄 Queue reîmprospătat: {len(tracks)} piese.")
 
     @jv.command(name="status")
+    @commands.guild_only()
     async def status(self, ctx):
-        """Show current JuiceVault player state."""
+        """Show player status."""
         gid = ctx.guild.id
         voice = ctx.guild.voice_client
-        queue_count = len(self.queues.get(gid, []))
-        requested_count = len(self.manual_queues.get(gid, []))
-        current = self._track_text(self.current.get(gid)) if self.current.get(gid) else "-"
-        error = self.last_error.get(gid, "-")
-        await ctx.send(
-            f"**JuiceVault status**\n"
-            f"Voice: `{bool(voice and voice.is_connected())}` | "
-            f"Playing: `{bool(voice and voice.is_playing())}`\n"
-            f"Current: `{current}`\n"
-            f"Requested next: `{requested_count}` | Queue: `{queue_count}`\n"
-            f"Error: `{error[:1000]}`"
-        )
+        current = self.current.get(gid)
+        normal = len(self.queues.get(gid, []))
+        manual = len(self.manual_queues.get(gid, []))
+        error = self.last_error.get(gid)
+        playing = bool(voice and voice.is_playing())
+        paused = bool(voice and voice.is_paused())
+        state = "playing" if playing else "paused" if paused else "idle"
+        lines = [
+            f"**State:** `{state}`",
+            f"**Current:** `{self._track_text(current) if current else 'none'}`",
+            f"**Requested:** `{manual}`",
+            f"**Queue:** `{normal}`",
+            f"**Voice:** `{voice.channel.name if voice and voice.channel else 'none'}`",
+        ]
+        if error:
+            lines.append(f"**Last error:** `{error[:1500]}`")
+        await ctx.send("🎧 JuiceVault status\n" + "\n".join(lines))
