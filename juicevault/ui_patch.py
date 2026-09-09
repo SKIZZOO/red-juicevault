@@ -3,6 +3,7 @@ import discord
 from . import juicevault_ui as ui
 from .juicevault import JuiceVault
 from .juicevault_ui import category_label, JuiceVaultPanelView
+from .external_search_patch import JuiceVaultOtherSearchModal
 
 
 async def polished_make_embed(self, guild_id):
@@ -85,6 +86,24 @@ class JuiceVaultSearchView(discord.ui.View):
         self.add_item(JuiceVaultSearchSelect(panel, guild_id, tracks))
 
 
+class JuiceVaultSearchModeView(discord.ui.View):
+    def __init__(self, panel, guild_id):
+        super().__init__(timeout=60)
+        self.panel, self.guild_id = panel, guild_id
+        vault = discord.ui.Button(label="🎵 JuiceVault Search", style=discord.ButtonStyle.primary, custom_id=f"juicevault:search_vault:{guild_id}")
+        external = discord.ui.Button(label="🌐 External Search", style=discord.ButtonStyle.secondary, custom_id=f"juicevault:search_external:{guild_id}")
+        vault.callback = self._vault
+        external.callback = self._external
+        self.add_item(vault)
+        self.add_item(external)
+
+    async def _vault(self, interaction):
+        await interaction.response.send_modal(JuiceVaultSearchModal(self.panel, self.guild_id))
+
+    async def _external(self, interaction):
+        await interaction.response.send_modal(JuiceVaultOtherSearchModal(self.panel, self.guild_id))
+
+
 class JuiceVaultSearchModal(discord.ui.Modal, title="Search JuiceVault"):
     query = discord.ui.TextInput(label="Search the archive", placeholder="Track title, artist, filename…", min_length=1, max_length=100, required=True)
 
@@ -129,10 +148,15 @@ async def pretty_search_command(self, ctx, *, query):
     await ctx.send(embed=discord.Embed(title="🔎 JuiceVault Search", description=f"**{query}** — `{len(matches)}` results\n\nSelect a track below to add it directly to **Requested**.", color=ui_cog.PANEL_COLOR), view=JuiceVaultSearchView(ui_cog, ctx.guild.id, matches))
 
 
-def _install_smart_controls():
-    async def search(self, interaction):
-        await interaction.response.send_modal(JuiceVaultSearchModal(self.panel, self.guild_id))
+async def search_button(self, interaction):
+    await interaction.response.send_message(
+        embed=discord.Embed(title="🔎 Search", description="Choose where you want to search for music.", color=self.panel.PANEL_COLOR),
+        view=JuiceVaultSearchModeView(self.panel, self.guild_id),
+        ephemeral=True,
+    )
 
+
+def _install_smart_controls():
     async def seek_back(self, interaction):
         await interaction.response.defer()
         cog = self._cog()
@@ -147,7 +171,7 @@ def _install_smart_controls():
         await interaction.followup.send("There is no active track to seek." if target is None else f"⏭️ Moved forward 10 seconds — `{int(target)}s`.", ephemeral=True)
         await self.panel.update_panel(self.guild_id)
 
-    JuiceVaultPanelView._search = search
+    JuiceVaultPanelView._search = search_button
     JuiceVaultPanelView._seek_back = seek_back
     JuiceVaultPanelView._seek_forward = seek_forward
 
@@ -170,7 +194,7 @@ def _install_smart_controls():
             b.callback = callback
             self.add_item(b)
 
-        # Reference layout: tools / playback / repeat / navigation / seek.
+        # Exact compact layout: tools, playback, navigation, repeat, seek.
         add("🎚 Category", discord.ButtonStyle.secondary, self._category, "category", 0)
         add("🔎 Search", discord.ButtonStyle.secondary, self._search, "search", 0)
         add("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh, "refresh", 0, disabled=not running)
@@ -181,11 +205,11 @@ def _install_smart_controls():
             add("⏹ Stop", discord.ButtonStyle.danger, self._stop, "stop", 1)
             add("▶ Resume" if paused else "⏸ Pause", discord.ButtonStyle.primary, self._pause, "pause", 1, disabled=not has_track)
 
-        add("🔁 Repeat ON" if repeating else "🔁 Repeat", discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 2, disabled=not running)
-        add("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 2, disabled=not has_queue)
+        add("⏮ Previous", discord.ButtonStyle.secondary, self._previous, "previous", 2, disabled=not has_history)
+        add("Next ⏭", discord.ButtonStyle.primary, self._next, "next", 2, disabled=not playing)
 
-        add("⏮ Previous", discord.ButtonStyle.secondary, self._previous, "previous", 3, disabled=not has_history)
-        add("Next ⏭", discord.ButtonStyle.primary, self._next, "next", 3, disabled=not playing)
+        add("🔁 Repeat ON" if repeating else "🔁 Repeat", discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 3, disabled=not running)
+        add("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 3, disabled=not has_queue)
 
         add("⏮ Past 10s", discord.ButtonStyle.secondary, self._seek_back, "seek_back", 4, disabled=not (has_track and (playing or paused)))
         add("Next 10s ⏭", discord.ButtonStyle.secondary, self._seek_forward, "seek_forward", 4, disabled=not (has_track and (playing or paused)))
@@ -200,3 +224,4 @@ def patch_ui(JuiceVaultUI):
     if search_command is not None:
         search_command.callback = pretty_search_command
     ui.JuiceVaultSearchView = JuiceVaultSearchView
+    ui.JuiceVaultSearchModeView = JuiceVaultSearchModeView
