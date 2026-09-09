@@ -258,27 +258,31 @@ class JuiceVaultUI(commands.Cog):
         if cover.startswith("http://") or cover.startswith("https://"): return cover
         return f"https://api.juicevault.xyz/{cover.lstrip('/')}" if cover else None
 
+    @staticmethod
+    def _track_url(track):
+        if not track or track.get("_external"):
+            return "https://juicevault.xyz/"
+        song_id = str(track.get("id") or "").strip()
+        return f"https://juicevault.xyz/?track={song_id}" if song_id else "https://juicevault.xyz/"
+
     async def _make_embed(self, guild_id):
         main = self.bot.get_cog("JuiceVault"); embed = discord.Embed(color=self.PANEL_COLOR); embed.set_author(name="JUICEVAULT • LIVE", icon_url="https://api.juicevault.xyz/favicon.ico")
         if main is None or guild_id not in main.tasks:
-            embed.title = "Player Offline"; embed.description = "Press **Start** or use `4jv start` to begin playback."; embed.set_footer(text="JuiceVault Archive • 24/7 Player"); return embed
+            embed.title = "Player Offline"; embed.description = "Press **Start** or use `4jv start` to begin playback."; embed.add_field(name="", value="**[JuiceVault Archive](https://juicevault.xyz/)** • **[made by SKIZZOO](https://guns.lol/skizzoo)**", inline=False); return embed
         guild = self.bot.get_guild(guild_id); track = main.current.get(guild_id); queue_size = len(main.queues.get(guild_id, [])); requested_size = len(main.manual_queues.get(guild_id, [])); category = await main.config.guild(guild).category(); voice = guild.voice_client if guild else None
         if track:
-            artist = str(track.get("artist") or "JuiceVault Archive").strip(); title = str(track.get("title") or track.get("name") or track.get("file_name") or "Untitled track").strip(); track_category = category_label(track.get("category") or "archive"); state = "⏸️ PAUSED" if voice and voice.is_paused() else "🔊 PLAYING"
-            embed.title = "Now Playing"; embed.description = f"### {title}\n**{artist}**\n`{state}`  •  JuiceVault Archive"; embed.add_field(name="CATEGORY", value=track_category[:1024], inline=True); embed.add_field(name="LENGTH", value=str(track.get("length") or "—"), inline=True); embed.add_field(name="LIBRARY", value=category_label(category), inline=True); embed.add_field(name="REQUESTED", value=f"`{requested_size}`", inline=True); embed.add_field(name="QUEUE", value=f"`{queue_size}`", inline=True); embed.add_field(name="REPEAT", value="`ON`" if self.repeat_enabled.get(guild_id, False) else "`OFF`", inline=True)
+            artist = str(track.get("artist") or "JuiceVault Archive").strip(); title = str(track.get("title") or track.get("name") or track.get("file_name") or "Untitled track").strip(); track_category = category_label(track.get("category") or "archive"); state = "⏸️ PAUSED" if voice and voice.is_paused() else "🔊 PLAYING"; track_url = self._track_url(track)
+            embed.title = "Now Playing"; embed.description = f"### [{title}]({track_url})\n**{artist}**\n`{state}`  •  JuiceVault Archive"; embed.add_field(name="CATEGORY", value=track_category[:1024], inline=True); embed.add_field(name="LENGTH", value=str(track.get("length") or "—"), inline=True); embed.add_field(name="LIBRARY", value=category_label(category), inline=True); embed.add_field(name="REQUESTED", value=f"`{requested_size}`", inline=True); embed.add_field(name="QUEUE", value=f"`{queue_size}`", inline=True); embed.add_field(name="REPEAT", value="`ON`" if self.repeat_enabled.get(guild_id, False) else "`OFF`", inline=True)
             cover_url = self._cover_url(track)
             if cover_url: embed.set_thumbnail(url=cover_url)
             play_count = track.get("play_count")
-            if track.get("_external"):
-                embed.set_footer(text="JuiceVault Archive • made by SKIZZOO", url="https://juicevault.xyz/")
-            else:
-                footer = "JuiceVault Archive • made by SKIZZOO"
-                if play_count is not None:
-                    try: footer = f"JuiceVault Archive • {int(play_count):,} plays • made by SKIZZOO"
-                    except (TypeError, ValueError): pass
-                embed.set_footer(text=footer, url="https://juicevault.xyz/")
+            footer = "**[JuiceVault Archive](https://juicevault.xyz/)** • **[made by SKIZZOO](https://guns.lol/skizzoo)**"
+            if play_count is not None:
+                try: footer = f"**[JuiceVault Archive](https://juicevault.xyz/)** • {int(play_count):,} plays • **[made by SKIZZOO](https://guns.lol/skizzoo)**"
+                except (TypeError, ValueError): pass
+            embed.add_field(name="", value=footer, inline=False)
         else:
-            embed.title = "Loading Next Track…"; embed.description = "Preparing the next track from the archive."; embed.add_field(name="LIBRARY", value=category_label(category), inline=True); embed.add_field(name="QUEUE", value=f"`{queue_size}`", inline=True); embed.set_footer(text="JuiceVault Archive • made by SKIZZOO", url="https://juicevault.xyz/")
+            embed.title = "Loading Next Track…"; embed.description = "Preparing the next track from the archive."; embed.add_field(name="LIBRARY", value=category_label(category), inline=True); embed.add_field(name="QUEUE", value=f"`{queue_size}`", inline=True); embed.add_field(name="", value="**[JuiceVault Archive](https://juicevault.xyz/)** • **[made by SKIZZOO](https://guns.lol/skizzoo)**", inline=False)
         if voice and voice.is_connected(): embed.add_field(name="VOICE", value=f"🔊 {voice.channel.name}", inline=False)
         return embed
 
