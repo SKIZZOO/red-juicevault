@@ -1,3 +1,4 @@
+import asyncio
 import json
 import random
 from urllib.parse import quote
@@ -65,8 +66,25 @@ def normalize_tracks(payload):
 async def fetch_collection(session, category):
     category = normalize_category(category)
     endpoint = COLLECTION_ENDPOINTS.get(category, COLLECTION_ENDPOINTS["all"])
-    async with session.get(f"{API_BASE}{endpoint}") as response:
-        text = await response.text(errors="ignore")
+    url = f"{API_BASE}{endpoint}"
+
+    # A reload can race with an already-running player task. If the old cog
+    # closed its aiohttp session, retry once with the fresh session supplied by
+    # the caller instead of flooding the player with "Session is closed" errors.
+    last_error = None
+    for attempt in range(2):
+        try:
+            async with session.get(url) as response:
+                text = await response.text(errors="ignore")
+            break
+        except RuntimeError as exc:
+            last_error = exc
+            if "session is closed" not in str(exc).casefold() or attempt:
+                raise
+            await asyncio.sleep(0.1)
+    else:
+        raise last_error or RuntimeError("JuiceVault API session is closed")
+
     if response.status != 200:
         try:
             payload = json.loads(text)
@@ -127,15 +145,14 @@ def patch_juicevault_class(JuiceVault):
         self._jv_task_guilds = {}
 
     async def fetch_tracks(self, category=None):
-        await self._ensure_session()
+        # Always obtain the current live session immediately before making the
+        # request. This is important during cog reloads on RedBot/Windows.
+        session = await self._ensure_session()
 
-        # Calls made from the UI/search path have no player-task context. Include
-        # the documented CUT collection in the default list so UI filtering can
-        # still resolve and play CUT tracks.
         if category is None:
-            tracks = await fetch_collection(self.session, "all")
+            tracks = await fetch_collection(session, "all")
             try:
-                cut_tracks = await fetch_collection(self.session, "cut")
+                cut_tracks = await fetch_collection(session, "cut")
                 seen = {str(t.get("id")) for t in tracks}
                 tracks.extend(t for t in cut_tracks if str(t.get("id")) not in seen)
             except Exception as exc:
@@ -143,17 +160,16 @@ def patch_juicevault_class(JuiceVault):
             category = "all"
         else:
             category = normalize_category(category)
-            tracks = await fetch_collection(self.session, category)
+            tracks = await fetch_collection(session, category)
 
-        # A player task is authoritative when no explicit category was supplied.
-        if category == "all":
-            task = __import__("asyncio").current_task()
-            guild = self._jv_task_guilds.get(task)
-            if guild is not None:
-                player_category = normalize_category(await self.config.guild(guild).category())
-                if player_category != "all":
-                    tracks = await fetch_collection(self.session, player_category)
-                    category = player_category
+        task = __import__("asyncio").current_task()
+        guild = self._jv_task_guilds.get(task)
+        if guild is not None and category == "all":
+            player_category = normalize_category(await self.config.guild(guild).category())
+            if player_category != "all":
+                session = await self._ensure_session()
+                tracks = await fetch_collection(session, player_category)
+                category = player_category
 
         random.shuffle(tracks)
         if len(tracks) > 1 and self._jv_recent_ids:
@@ -167,14 +183,14 @@ def patch_juicevault_class(JuiceVault):
         return tracks
 
     async def fetch_category_tracks(self, category):
-        await self._ensure_session()
-        tracks = await fetch_collection(self.session, category)
+        session = await self._ensure_session()
+        tracks = await fetch_collection(session, category)
         random.shuffle(tracks)
         return tracks
 
     async def get_categories(self):
-        await self._ensure_session()
-        return await get_category_counts(self.session)
+        session = await self._ensure_session()
+        return await get_category_counts(session)
 
     async def categories(self):
         return await self.get_categories()
