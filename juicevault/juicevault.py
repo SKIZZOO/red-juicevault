@@ -7,6 +7,11 @@ import aiohttp
 import discord
 from redbot.core import Config, commands
 
+try:
+    import imageio_ffmpeg
+except ImportError:
+    imageio_ffmpeg = None
+
 
 class JuiceVault(commands.Cog):
     """24/7 JuiceVault archive player."""
@@ -110,6 +115,14 @@ class JuiceVault(commands.Cog):
                 urls.append(self._make_url(line.strip()))
         return list(dict.fromkeys(urls))
 
+    def _ffmpeg_executable(self):
+        if imageio_ffmpeg is not None:
+            try:
+                return imageio_ffmpeg.get_ffmpeg_exe()
+            except Exception as exc:
+                print(f"[JuiceVault] imageio-ffmpeg unavailable: {exc}")
+        return "ffmpeg"
+
     async def _connect(self, guild, channel):
         voice = guild.voice_client
         if voice and voice.is_connected():
@@ -173,6 +186,7 @@ class JuiceVault(commands.Cog):
                     self.bot.loop.call_soon_threadsafe(finished.set)
                 try:
                     source = discord.FFmpegPCMAudio(
+                        self._ffmpeg_executable(),
                         url,
                         before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
                         options="-vn",
