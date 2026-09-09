@@ -421,7 +421,7 @@ class JuiceVault(commands.Cog):
                     continue
                 if self.manual_queues.get(gid):
                     track = self.manual_queues[gid].pop(0)
-                    source_type = "manual"
+                    source_type = "external" if track.get("_external") else "manual"
                 else:
                     track = self.queues[gid].pop(0)
                     source_type = "normal"
@@ -460,9 +460,11 @@ class JuiceVault(commands.Cog):
                         except OSError:
                             pass
                     self._remove_file(local_path)
-                    target = self.manual_queues if source_type == "manual" else self.queues
-                    target.setdefault(gid, []).insert(0, track)
-                    print(f"[JuiceVault] could not play {self._track_text(track)}: {type(exc).__name__}: {exc}")
+                    if source_type == "external":
+                        print(f"[JuiceVault] dropping unavailable external track {self._track_text(track)}: {type(exc).__name__}: {exc}")
+                    else:
+                        target = self.manual_queues if source_type == "manual" else self.queues
+                        target.setdefault(gid, []).insert(0, track)
                     await asyncio.sleep(self.FAILURE_BACKOFF_SECONDS)
                     continue
                 stop_task = asyncio.create_task(stop.wait())
@@ -514,9 +516,13 @@ class JuiceVault(commands.Cog):
                     continue
                 if playback_error["value"] or elapsed < 4.0:
                     self.failure_counts[gid] = self.failure_counts.get(gid, 0) + 1
-                    target = self.manual_queues if source_type == "manual" else self.queues
-                    target.setdefault(gid, []).insert(0, track)
-                    self.last_error[gid] = f"FFmpeg: track stopped after {elapsed:.1f}s."
+                    if source_type == "external":
+                        print(f"[JuiceVault] external track ended early; returning to JuiceVault queue: {self._track_text(track)}")
+                        self.last_error[gid] = f"External track stopped after {elapsed:.1f}s; returning to JuiceVault."
+                    else:
+                        target = self.manual_queues if source_type == "manual" else self.queues
+                        target.setdefault(gid, []).insert(0, track)
+                        self.last_error[gid] = f"FFmpeg: track stopped after {elapsed:.1f}s."
                     await asyncio.sleep(30 if self.failure_counts[gid] >= self.MAX_CONSECUTIVE_FAILURES else self.FAILURE_BACKOFF_SECONDS)
                     if self.failure_counts[gid] >= self.MAX_CONSECUTIVE_FAILURES:
                         self.failure_counts[gid] = 0
