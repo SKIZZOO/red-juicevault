@@ -67,24 +67,8 @@ async def fetch_collection(session, category):
     category = normalize_category(category)
     endpoint = COLLECTION_ENDPOINTS.get(category, COLLECTION_ENDPOINTS["all"])
     url = f"{API_BASE}{endpoint}"
-
-    # A reload can race with an already-running player task. If the old cog
-    # closed its aiohttp session, retry once with the fresh session supplied by
-    # the caller instead of flooding the player with "Session is closed" errors.
-    last_error = None
-    for attempt in range(2):
-        try:
-            async with session.get(url) as response:
-                text = await response.text(errors="ignore")
-            break
-        except RuntimeError as exc:
-            last_error = exc
-            if "session is closed" not in str(exc).casefold() or attempt:
-                raise
-            await asyncio.sleep(0.1)
-    else:
-        raise last_error or RuntimeError("JuiceVault API session is closed")
-
+    async with session.get(url) as response:
+        text = await response.text(errors="ignore")
     if response.status != 200:
         try:
             payload = json.loads(text)
@@ -131,7 +115,7 @@ async def get_category_counts(session):
 
 
 def patch_juicevault_class(JuiceVault):
-    """Use the documented collection endpoints and randomized, low-repeat refills."""
+    """Use documented collection endpoints with safe session recovery."""
     if getattr(JuiceVault, "_jv_api_sources_patched", False):
         return
 
@@ -144,15 +128,26 @@ def patch_juicevault_class(JuiceVault):
         self._jv_recent_ids = []
         self._jv_task_guilds = {}
 
-    async def fetch_tracks(self, category=None):
-        # Always obtain the current live session immediately before making the
-        # request. This is important during cog reloads on RedBot/Windows.
-        session = await self._ensure_session()
-
-        if category is None:
-            tracks = await fetch_collection(session, "all")
+    async def collection(self, category):
+        """Fetch a collection and recreate a stale aiohttp session once."""
+        for attempt in range(2):
+            session = await self._ensure_session()
             try:
-                cut_tracks = await fetch_collection(session, "cut")
+                return await fetch_collection(session, category)
+            except RuntimeError as exc:
+                if "session is closed" not in str(exc).casefold() or attempt:
+                    raise
+                # The previous cog instance may have closed its session during
+                # a reload. Drop the stale object and create a fresh one.
+                self.session = None
+                await asyncio.sleep(0.05)
+        raise RuntimeError("JuiceVault API session is closed")
+
+    async def fetch_tracks(self, category=None):
+        if category is None:
+            tracks = await collection(self, "all")
+            try:
+                cut_tracks = await collection(self, "cut")
                 seen = {str(t.get("id")) for t in tracks}
                 tracks.extend(t for t in cut_tracks if str(t.get("id")) not in seen)
             except Exception as exc:
@@ -160,15 +155,14 @@ def patch_juicevault_class(JuiceVault):
             category = "all"
         else:
             category = normalize_category(category)
-            tracks = await fetch_collection(session, category)
+            tracks = await collection(self, category)
 
-        task = __import__("asyncio").current_task()
+        task = asyncio.current_task()
         guild = self._jv_task_guilds.get(task)
         if guild is not None and category == "all":
             player_category = normalize_category(await self.config.guild(guild).category())
             if player_category != "all":
-                session = await self._ensure_session()
-                tracks = await fetch_collection(session, player_category)
+                tracks = await collection(self, player_category)
                 category = player_category
 
         random.shuffle(tracks)
@@ -183,20 +177,27 @@ def patch_juicevault_class(JuiceVault):
         return tracks
 
     async def fetch_category_tracks(self, category):
-        session = await self._ensure_session()
-        tracks = await fetch_collection(session, category)
+        tracks = await collection(self, category)
         random.shuffle(tracks)
         return tracks
 
     async def get_categories(self):
-        session = await self._ensure_session()
-        return await get_category_counts(session)
+        for attempt in range(2):
+            session = await self._ensure_session()
+            try:
+                return await get_category_counts(session)
+            except RuntimeError as exc:
+                if "session is closed" not in str(exc).casefold() or attempt:
+                    raise
+                self.session = None
+                await asyncio.sleep(0.05)
+        raise RuntimeError("JuiceVault API session is closed")
 
     async def categories(self):
         return await self.get_categories()
 
     async def player_wrapper(self, guild, channel):
-        task = __import__("asyncio").current_task()
+        task = asyncio.current_task()
         self._jv_task_guilds[task] = guild
         try:
             return await original_player(self, guild, channel)
