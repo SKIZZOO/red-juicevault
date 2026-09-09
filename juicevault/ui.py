@@ -97,19 +97,21 @@ class JuiceVaultUI(commands.Cog):
         self.config = Config.get_conf(self, identifier=self.CONFIG_ID, force_registration=True)
         self.config.register_guild(panel_channel_id=None, panel_message_id=None)
         self._task = None
+        self._restore_task = None
         self._registered_views = set()
 
     async def cog_load(self):
         self._task = asyncio.create_task(self._panel_loop())
-        await self._restore_views()
+        self._restore_task = asyncio.create_task(self._restore_views())
 
     async def cog_unload(self):
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+        for task in (self._task, self._restore_task):
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
     async def _restore_views(self):
         await self.bot.wait_until_ready()
