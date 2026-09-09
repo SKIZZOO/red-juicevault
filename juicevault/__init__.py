@@ -1,5 +1,5 @@
 from .juicevault import JuiceVault
-from .ui import JuiceVaultUI
+from .panel import JuiceVaultUI
 
 
 async def setup(bot):
