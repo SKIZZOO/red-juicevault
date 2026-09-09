@@ -143,8 +143,6 @@ class JuiceVaultOtherSearchModal(discord.ui.Modal, title="Search Music Online"):
                 "_source": source,
                 "_webpage_url": info.get("webpage_url") or info.get("original_url") or info.get("url"),
             }
-            # Requested/manual queue is consumed before the normal archive queue.
-            # Insert at position 0 so this becomes the very next song.
             cog.manual_queues.setdefault(self.guild_id, []).insert(0, track)
             await interaction.followup.send(
                 embed=discord.Embed(
@@ -195,11 +193,13 @@ def patch_external_search():
 
     def final_init(self, panel, guild_id):
         original_init(self, panel, guild_id)
+        # Discord UI supports rows 0-4 only. The seek row is row 4,
+        # so place Other Search alongside Past 10s / Next 10s.
         button = discord.ui.Button(
             label="🌐 Other Search 🔎",
             style=discord.ButtonStyle.secondary,
             custom_id=f"juicevault:other_search:{guild_id}",
-            row=5,
+            row=4,
         )
         button.callback = self._other_search
         self.add_item(button)
