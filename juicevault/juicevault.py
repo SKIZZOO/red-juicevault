@@ -130,11 +130,50 @@ class JuiceVault(commands.Cog):
         value = str(value or "all").strip().casefold()
         return value or "all"
 
+    @classmethod
+    def _category_key(cls, value):
+        """Normalize category spelling so API/UI variants such as CUT, cut_, cut- or ' cut ' match."""
+        value = cls._category_name(value)
+        return "".join(ch for ch in value if ch.isalnum())
+
+    @classmethod
+    def _resolve_category(cls, tracks, requested):
+        """Return the real API category name matching a user/UI selection."""
+        requested = cls._category_name(requested)
+        if requested == "all":
+            return "all"
+
+        categories = []
+        seen = set()
+        for track in tracks:
+            raw = track.get("category")
+            category = cls._category_name(raw)
+            if category not in seen:
+                seen.add(category)
+                categories.append(category)
+
+        if requested in seen:
+            return requested
+
+        requested_key = cls._category_key(requested)
+        for category in categories:
+            if cls._category_key(category) == requested_key:
+                return category
+
+        # Some JuiceVault/API revisions expose a category with a suffix/prefix
+        # while the UI presents the shorter name (for example cut vs cut_edit).
+        # Prefer an unambiguous fuzzy match instead of immediately reporting 0 tracks.
+        fuzzy = [category for category in categories if requested_key and requested_key in cls._category_key(category)]
+        if len(fuzzy) == 1:
+            return fuzzy[0]
+        return requested
+
     def _filter_tracks(self, tracks, category):
-        category = self._category_name(category)
+        category = self._resolve_category(tracks, category)
         if category == "all":
             return list(tracks)
-        return [track for track in tracks if self._category_name(track.get("category")) == category]
+        wanted = self._category_key(category)
+        return [track for track in tracks if self._category_key(track.get("category")) == wanted]
 
     async def fetch_tracks(self):
         await self._ensure_session()
@@ -505,15 +544,18 @@ class JuiceVault(commands.Cog):
         except Exception as exc:
             await ctx.send(f"Nu pot accesa API-ul: `{exc}`")
             return
-        filtered = self._filter_tracks(tracks, category)
+        resolved = self._resolve_category(tracks, category)
+        filtered = self._filter_tracks(tracks, resolved)
         if category != "all" and not filtered:
-            await ctx.send(f"Categoria `{category}` nu există sau nu are piese. Folosește `4jv categories`.")
+            available = sorted({self._category_name(t.get("category")) for t in tracks})
+            preview = ", ".join(available[:30]) or "niciuna"
+            await ctx.send(f"Categoria `{category}` nu există sau nu are piese. Categorii disponibile: `{preview}`")
             return
-        await self.config.guild(ctx.guild).category.set(category)
+        await self.config.guild(ctx.guild).category.set(resolved)
         if ctx.guild.id in self.tasks:
             self.queues[ctx.guild.id] = filtered
             self.failure_counts[ctx.guild.id] = 0
-        await ctx.send(f"🎚️ Categoria setată pe **{category}** — `{len(filtered)}` piese.")
+        await ctx.send(f"🎚️ Categoria setată pe **{resolved}** — `{len(filtered)}` piese.")
 
     @jv.command(name="search")
     async def search(self, ctx, *, query: str):
@@ -560,30 +602,41 @@ class JuiceVault(commands.Cog):
     @jv.command(name="refresh")
     async def refresh(self, ctx):
         try:
-            all_tracks = await self.fetch_tracks()
-            category = await self.config.guild(ctx.guild).category()
-            tracks = self._filter_tracks(all_tracks, category)
+            tracks = await self.fetch_tracks()
         except Exception as exc:
             await ctx.send(f"Refresh eșuat: `{exc}`")
             return
-        self.queues[ctx.guild.id] = tracks
+        category = await self.config.guild(ctx.guild).category()
+        filtered = self._filter_tracks(tracks, category)
+        if not filtered and category != "all":
+            category = self._resolve_category(tracks, category)
+            filtered = self._filter_tracks(tracks, category)
+            if filtered:
+                await self.config.guild(ctx.guild).category.set(category)
+        if not filtered:
+            await ctx.send(f"Categoria `{category}` nu conține piese.")
+            return
+        self.queues[ctx.guild.id] = filtered
         self.failure_counts[ctx.guild.id] = 0
-        await ctx.send(f"🔄 Queue reîmprospătat: `{len(tracks)}` piese, categoria `{category}`.")
+        await ctx.send(f"🔄 Refresh — `{len(filtered)}` piese în `{category}`.")
 
     @jv.command(name="status")
     async def status(self, ctx):
         gid = ctx.guild.id
+        category = await self.config.guild(ctx.guild).category()
         voice = ctx.guild.voice_client
         current = self.current.get(gid)
-        category = await self.config.guild(ctx.guild).category()
+        queue_size = len(self.queues.get(gid, []))
+        manual_size = len(self.manual_queues.get(gid, []))
+        error = self.last_error.get(gid)
         lines = [
-            f"**State:** `{'playing' if voice and voice.is_playing() else 'idle'}`",
-            f"**Current:** `{self._track_text(current) if current else 'none'}`",
-            f"**Category:** `{category}`",
-            f"**Requested:** `{len(self.manual_queues.get(gid, []))}`",
-            f"**Queue:** `{len(self.queues.get(gid, []))}`",
-            f"**Voice:** `{voice.channel.name if voice and voice.channel else 'none'}`",
+            f"**Player:** {'ON' if gid in self.tasks else 'OFF'}",
+            f"**Voice:** {voice.channel.name if voice and voice.is_connected() else 'nu'}",
+            f"**Categorie:** `{category}`",
+            f"**Now:** {self._track_text(current) if current else 'nimic'}",
+            f"**Queue:** `{queue_size}`",
+            f"**Requested:** `{manual_size}`",
         ]
-        if self.last_error.get(gid):
-            lines.append(f"**Last error:** `{self.last_error[gid][:1000]}`")
-        await ctx.send("🎧 JuiceVault status\n" + "\n".join(lines))
+        if error:
+            lines.append(f"**Ultima eroare:** `{error}`")
+        await ctx.send("\n".join(lines))
