@@ -26,34 +26,52 @@ async def polished_make_embed(self, guild_id):
         title = str(track.get("title") or track.get("name") or track.get("file_name") or "Untitled track").strip()
         state = "⏸️ PAUSED" if voice and voice.is_paused() else "🔊 PLAYING"
         embed.title = "Now Playing"
+
         if track.get("_external"):
             source = str(track.get("_source") or "External").strip()
+            source_url = str(track.get("_webpage_url") or track.get("url") or "").strip()
             embed.description = f"**{title}**\n*{artist}*\n\n`{state}`  •  **{source}**"
+            if source_url.startswith(("http://", "https://")):
+                embed.url = source_url
             embed.add_field(name="🌐 SOURCE", value=f"**{source}**", inline=True)
         else:
-            embed.description = f"**{title}**\n*{artist}*\n\n`{state}`  •  **JuiceVault Archive**"
+            song_id = str(track.get("id") or "").strip()
+            song_url = f"https://juicevault.xyz/music/{song_id}" if song_id else "https://juicevault.xyz/"
+            embed.description = f"[{title}]({song_url})\n*{artist}*\n\n`{state}`  •  **JuiceVault Archive**"
+            embed.url = song_url
+
         embed.add_field(name="🎚️ CATEGORY", value=f"**{category_label(track.get('category') or 'archive')}**", inline=True)
         embed.add_field(name="⏱️ LENGTH", value=f"`{track.get('length') or '—'}`", inline=True)
         embed.add_field(name="📚 LIBRARY", value=f"**{category_label(category)}**", inline=True)
         embed.add_field(name="📥 REQUESTED", value=f"`{requested_size}`", inline=True)
         embed.add_field(name="🎶 QUEUE", value=f"`{queue_size}`", inline=True)
         embed.add_field(name="🔁 REPEAT", value="`ON`" if self.repeat_enabled.get(guild_id, False) else "`OFF`", inline=True)
-        # External sources (YouTube/SoundCloud/Bandcamp) do not have a
-        # JuiceVault cover. Never attempt the JuiceVault cover endpoint for them.
+
         if not track.get("_external"):
             cover_url = self._cover_url(track)
             if cover_url:
                 embed.set_thumbnail(url=cover_url)
+
         plays = track.get("play_count")
         if track.get("_external"):
-            embed.set_footer(text=f"External source • {str(track.get('_source') or 'Web')} • 24/7")
+            footer_line = f"[JuiceVault Archive](https://juicevault.xyz/) • 24/7 • [made by SKIZZOO](https://guns.lol/skizzoo)"
         else:
-            embed.set_footer(text=f"JuiceVault Archive • {int(plays):,} plays • 24/7" if plays is not None else "JuiceVault Archive • 24/7")
+            if plays is not None:
+                try:
+                    plays_text = f"{int(plays):,} plays"
+                except (TypeError, ValueError):
+                    plays_text = "plays"
+            else:
+                plays_text = "plays"
+            footer_line = f"[JuiceVault Archive](https://juicevault.xyz/) • {plays_text} • 24/7 • [made by SKIZZOO](https://guns.lol/skizzoo)"
+        embed.add_field(name="‎", value=footer_line, inline=False)
+        embed.set_footer(text="JuiceVault Archive • 24/7 Player")
     else:
         embed.title = "Loading Next Track…"
         embed.description = "Preparing the next track from the archive."
         embed.add_field(name="📚 LIBRARY", value=f"**{category_label(category)}**", inline=True)
         embed.add_field(name="🎶 QUEUE", value=f"`{queue_size}`", inline=True)
+        embed.add_field(name="‎", value="[JuiceVault Archive](https://juicevault.xyz/) • 24/7 • [made by SKIZZOO](https://guns.lol/skizzoo)", inline=False)
         embed.set_footer(text="JuiceVault Archive • 24/7 Player")
     if voice and voice.is_connected():
         embed.add_field(name="🔊 VOICE", value=f"`{voice.channel.name}`", inline=False)
