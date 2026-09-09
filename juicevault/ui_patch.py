@@ -107,8 +107,6 @@ class JuiceVaultSearchSelect(discord.ui.Select):
         if cover_url:
             embed.set_thumbnail(url=cover_url)
         embed.set_footer(text="Search result selected • queued for playback")
-        # Replace the select menu with a permanent confirmation so the
-        # selected track remains visible instead of disappearing.
         await interaction.response.edit_message(content="", embed=embed, view=None)
         await self.panel.update_panel(self.guild_id)
 
@@ -187,54 +185,102 @@ async def pretty_search_command(self, ctx, *, query):
     await ctx.send(embed=embed, view=JuiceVaultSearchView(ui_cog, ctx.guild.id, matches))
 
 
-def _install_polished_button_layout():
+def _install_smart_controls():
     async def search(self, interaction):
         await interaction.response.send_modal(JuiceVaultSearchModal(self.panel, self.guild_id))
 
+    async def seek_back(self, interaction):
+        await interaction.response.defer()
+        cog = self._cog()
+        if cog is None:
+            await interaction.followup.send("JuiceVault is not loaded.", ephemeral=True)
+            return
+        target = await cog._request_seek(self.guild_id, -10)
+        if target is None:
+            await interaction.followup.send("There is no active track to seek.", ephemeral=True)
+        else:
+            await interaction.followup.send(f"⏮️ Moved back 10 seconds — `{int(target)}s`.", ephemeral=True)
+        await self.panel.update_panel(self.guild_id)
+
+    async def seek_forward(self, interaction):
+        await interaction.response.defer()
+        cog = self._cog()
+        if cog is None:
+            await interaction.followup.send("JuiceVault is not loaded.", ephemeral=True)
+            return
+        target = await cog._request_seek(self.guild_id, 10)
+        if target is None:
+            await interaction.followup.send("There is no active track to seek.", ephemeral=True)
+        else:
+            await interaction.followup.send(f"⏭️ Moved forward 10 seconds — `{int(target)}s`.", ephemeral=True)
+        await self.panel.update_panel(self.guild_id)
+
     JuiceVaultPanelView._search = search
+    JuiceVaultPanelView._seek_back = seek_back
+    JuiceVaultPanelView._seek_forward = seek_forward
 
     def styled_init(self, panel, guild_id):
         discord.ui.View.__init__(self, timeout=None)
         self.panel = panel
         self.guild_id = guild_id
+
         guild = panel.bot.get_guild(guild_id)
         voice = guild.voice_client if guild else None
+        cog = panel.bot.get_cog("JuiceVault")
+        running = bool(cog and guild_id in cog.tasks)
+        playing = bool(voice and voice.is_playing())
         paused = bool(voice and voice.is_paused())
+        has_track = bool(cog and cog.current.get(guild_id))
+        has_history = bool(panel.history.get(guild_id))
+        has_queue = bool(cog and cog.queues.get(guild_id))
         repeating = panel.repeat_enabled.get(guild_id, False)
 
-        # Three clean rows: playback, queue, library/tools.
-        buttons = [
-            ("▶ Start", discord.ButtonStyle.success, self._start, "start", 0),
-            (("▶ Resume" if paused else "⏸ Pause"), discord.ButtonStyle.primary, self._pause, "pause", 0),
-            ("⏮ Previous", discord.ButtonStyle.secondary, self._previous, "previous", 0),
-            ("Next ⏭", discord.ButtonStyle.primary, self._next, "next", 0),
-            ("Next 10 ⏩", discord.ButtonStyle.primary, self._skip10, "skip10", 1),
-            (("🔁 Repeat ON" if repeating else "🔁 Repeat"), discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 1),
-            ("⏹ Stop", discord.ButtonStyle.danger, self._stop, "stop", 1),
-            ("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 1),
-            ("🎚 Category", discord.ButtonStyle.secondary, self._category, "category", 2),
-            ("🔎 Search", discord.ButtonStyle.secondary, self._search, "search", 2),
-            ("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh, "refresh", 2),
-        ]
-        for label, style, callback, key, row in buttons:
+        def add(label, style, callback, key, row, *, disabled=False):
             button = discord.ui.Button(
                 label=label,
                 style=style,
                 custom_id=f"juicevault:{key}:{guild_id}",
                 row=row,
+                disabled=disabled,
             )
             button.callback = callback
             self.add_item(button)
+
+        # Row 0 — only the controls that make sense for the current state.
+        if not running:
+            add("▶ Start", discord.ButtonStyle.success, self._start, "start", 0)
+        else:
+            add("▶ Resume" if paused else "⏸ Pause", discord.ButtonStyle.primary, self._pause, "pause", 0, disabled=not has_track)
+            add("⏮ Previous", discord.ButtonStyle.secondary, self._previous, "previous", 0, disabled=not has_history)
+            add("Next ⏭", discord.ButtonStyle.primary, self._next, "next", 0, disabled=not playing)
+
+        # Row 1 — seeking and queue controls.
+        add("⏮ Past 10s", discord.ButtonStyle.secondary, self._seek_back, "seek_back", 1, disabled=not (has_track and (playing or paused)))
+        add("Next 10s ⏭", discord.ButtonStyle.secondary, self._seek_forward, "seek_forward", 1, disabled=not (has_track and (playing or paused)))
+        add("Next 10 ⏩", discord.ButtonStyle.primary, self._skip10, "skip10", 1, disabled=not playing)
+        add("🔁 Repeat ON" if repeating else "🔁 Repeat", discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 1, disabled=not running)
+        if running:
+            add("⏹ Stop", discord.ButtonStyle.danger, self._stop, "stop", 1)
+        else:
+            # Keep the row balanced without exposing an irrelevant Stop action.
+            add("Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 1, disabled=True)
+
+        # Row 2 — library and discovery tools.
+        add("🎚 Category", discord.ButtonStyle.secondary, self._category, "category", 2)
+        add("🔎 Search", discord.ButtonStyle.secondary, self._search, "search", 2)
+        add("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh, "refresh", 2, disabled=not running)
+
+        # Row 3 — shuffle stays available while the player is running.
+        if running:
+            add("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 3, disabled=not has_queue)
 
     JuiceVaultPanelView.__init__ = styled_init
 
 
 def patch_ui(JuiceVaultUI):
     JuiceVaultUI._make_embed = polished_make_embed
-    _install_polished_button_layout()
+    _install_smart_controls()
 
-    # Replace the normal text search output with the same interactive search
-    # picker used by the Search button.
     search_command = JuiceVault.jv.all_commands.get("search")
     if search_command is not None:
         search_command.callback = pretty_search_command
