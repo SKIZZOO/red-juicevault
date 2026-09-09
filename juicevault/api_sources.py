@@ -11,14 +11,15 @@ COLLECTION_ENDPOINTS = {
     "remaster": "/music/remasters/list",
     "stems": "/music/stems/list",
     "released": "/music/released/list",
-    "cut file": "/music/cuts/list",
+    "cut": "/music/cuts/list",
 }
 
 ALIASES = {
     "instrumentals": "instrumental",
     "remasters": "remaster",
-    "cuts": "cut file",
-    "cut": "cut file",
+    "cuts": "cut",
+    "cut file": "cut",
+    "cut files": "cut",
     "session": "session edits",
     "sessions": "session edits",
     "session edit": "session edits",
@@ -97,13 +98,17 @@ async def get_category_counts(session):
     counts = {}
     for track in tracks:
         category = normalize_category(track.get("category"))
+        if category == "all":
+            continue
         counts[category] = counts.get(category, 0) + 1
+
     try:
-        cut_tracks = await fetch_collection(session, "cut file")
+        cut_tracks = await fetch_collection(session, "cut")
         if cut_tracks:
             counts["cut"] = len(cut_tracks)
     except Exception as exc:
         print(f"[JuiceVault] category endpoint cut failed: {exc}")
+
     return counts
 
 
@@ -130,7 +135,7 @@ def patch_juicevault_class(JuiceVault):
         if category is None:
             tracks = await fetch_collection(self.session, "all")
             try:
-                cut_tracks = await fetch_collection(self.session, "cut file")
+                cut_tracks = await fetch_collection(self.session, "cut")
                 seen = {str(t.get("id")) for t in tracks}
                 tracks.extend(t for t in cut_tracks if str(t.get("id")) not in seen)
             except Exception as exc:
