@@ -62,6 +62,7 @@ class JuiceVaultPanelView(discord.ui.View):
             (("Resume" if paused else "Pause"), ("▶️" if paused else "⏸️"), discord.ButtonStyle.primary, self._pause, "pause"),
             ("Previous", "⏮️", discord.ButtonStyle.secondary, self._previous, "previous"),
             ("Skip", "⏭️", discord.ButtonStyle.primary, self._next, "next"),
+            ("Skip 10", "⏩", discord.ButtonStyle.primary, self._skip10, "skip10"),
             (("Repeat ON" if repeating else "Repeat"), "🔁", discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat"),
             ("Stop", "⏹️", discord.ButtonStyle.danger, self._stop, "stop"),
             ("Shuffle", "🔀", discord.ButtonStyle.secondary, self._shuffle, "shuffle"),
@@ -199,6 +200,18 @@ class JuiceVaultPanelView(discord.ui.View):
             return
         if await cog._request_skip(self.guild_id, 1):
             await interaction.followup.send("⏭️ Skip 1.", ephemeral=True)
+        else:
+            await interaction.followup.send("Nu rulează nicio piesă sau un skip este deja în curs.", ephemeral=True)
+        await self.panel.update_panel(self.guild_id)
+
+    async def _skip10(self, interaction):
+        await interaction.response.defer()
+        cog = self._cog()
+        if cog is None:
+            await interaction.followup.send("JuiceVault cog nu este încărcat.", ephemeral=True)
+            return
+        if await cog._request_skip(self.guild_id, 10):
+            await interaction.followup.send("⏩ Skip 10.", ephemeral=True)
         else:
             await interaction.followup.send("Nu rulează nicio piesă sau un skip este deja în curs.", ephemeral=True)
         await self.panel.update_panel(self.guild_id)
@@ -418,9 +431,8 @@ class JuiceVaultUI(commands.Cog):
                                 previous_track = self.last_track_snapshot.get(guild_id)
                                 if previous_track:
                                     history = self.history.setdefault(guild_id, [])
-                                    if not history or str(history[-1].get("id")) != previous_id or track_id == previous_id:
-                                        history.append(previous_track)
-                                        del history[:-50]
+                                    history.append(previous_track)
+                                    del history[:-50]
                             self.last_seen_current[guild_id] = track_id
                             self.last_track_snapshot[guild_id] = dict(track)
                             self.last_track_object[guild_id] = track_object
