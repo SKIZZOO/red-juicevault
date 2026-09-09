@@ -1,4 +1,5 @@
 import discord
+from urllib.parse import quote_plus
 
 from .juicevault_ui import JuiceVaultPanelView
 
@@ -107,10 +108,29 @@ def patch_eq_controls():
             button.callback = callback
             self.add_item(button)
 
-        # Row 0: Category, Search, Refresh, EQ.
+        # Row 0: Category, Search, Refresh, Lyrics, EQ.
         add("🎚 Category", discord.ButtonStyle.secondary, self._category, "category", 0)
         add("🔎 Search", discord.ButtonStyle.secondary, self._search, "search", 0)
         add("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh, "refresh", 0, disabled=not running)
+
+        # Direct Genius search for the currently playing track.
+        track = cog.current.get(guild_id) if cog else None
+        if track:
+            lyrics_title = str(track.get("title") or track.get("name") or track.get("file_name") or "").strip()
+            lyrics_artist = str(track.get("artist") or "").strip()
+            lyrics_query = " ".join(part for part in (lyrics_artist, lyrics_title) if part)
+            lyrics_url = f"https://genius.com/search?q={quote_plus(lyrics_query)}" if lyrics_query else "https://genius.com/"
+        else:
+            lyrics_url = "https://genius.com/"
+
+        lyrics_button = discord.ui.Button(
+            label="🎶 Lyrics",
+            style=discord.ButtonStyle.link,
+            url=lyrics_url,
+            row=0,
+            disabled=not has_track,
+        )
+        self.add_item(lyrics_button)
         add("🎚 EQ", discord.ButtonStyle.secondary, self._eq, "eq", 0)
 
         # Row 1: playback controls.
