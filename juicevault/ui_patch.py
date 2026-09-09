@@ -26,7 +26,6 @@ async def polished_make_embed(self, guild_id):
         title = str(track.get("title") or track.get("name") or track.get("file_name") or "Untitled track").strip()
         track_category = category_label(track.get("category") or "archive")
         state = "⏸️ PAUSED" if voice and voice.is_paused() else "🔊 PLAYING"
-
         embed.title = "Now Playing"
         embed.description = f"**{title}**\n*{artist}*\n\n`{state}`  •  **JuiceVault Archive**"
         embed.add_field(name="🎚️ CATEGORY", value=f"**{track_category[:1024]}**", inline=True)
@@ -35,11 +34,9 @@ async def polished_make_embed(self, guild_id):
         embed.add_field(name="📥 REQUESTED", value=f"`{requested_size}`", inline=True)
         embed.add_field(name="🎶 QUEUE", value=f"`{queue_size}`", inline=True)
         embed.add_field(name="🔁 REPEAT", value="`ON`" if self.repeat_enabled.get(guild_id, False) else "`OFF`", inline=True)
-
         cover_url = self._cover_url(track)
         if cover_url:
             embed.set_thumbnail(url=cover_url)
-
         play_count = track.get("play_count")
         footer = "JuiceVault Archive • 24/7"
         if play_count is not None:
@@ -61,8 +58,6 @@ async def polished_make_embed(self, guild_id):
 
 
 def _install_polished_button_layout():
-    original_init = JuiceVaultPanelView.__init__
-
     def polished_init(self, panel, guild_id):
         discord.ui.View.__init__(self, timeout=None)
         self.panel = panel
@@ -73,16 +68,18 @@ def _install_polished_button_layout():
         paused = bool(voice and voice.is_paused())
         repeating = panel.repeat_enabled.get(guild_id, False)
 
-        # Three clean rows: playback, queue/modes, and settings.
         buttons = [
+            # Row 0: core playback
             ("▶ Start", discord.ButtonStyle.success, self._start, "start", 0),
             (("▶ Resume" if paused else "Ⅱ Pause"), discord.ButtonStyle.primary, self._pause, "pause", 0),
             ("⏮ Previous", discord.ButtonStyle.secondary, self._previous, "previous", 0),
             ("Next ⏭", discord.ButtonStyle.primary, self._next, "next", 0),
+            # Row 1: queue controls
             ("Next 10 ⏩", discord.ButtonStyle.primary, self._skip10, "skip10", 1),
             (("🔁 Repeat ON" if repeating else "🔁 Repeat"), discord.ButtonStyle.success if repeating else discord.ButtonStyle.secondary, self._repeat, "repeat", 1),
             ("⏹ Stop", discord.ButtonStyle.danger, self._stop, "stop", 1),
             ("🔀 Shuffle", discord.ButtonStyle.secondary, self._shuffle, "shuffle", 1),
+            # Row 2: library/settings
             ("🎚 Category", discord.ButtonStyle.secondary, self._category, "category", 2),
             ("🔄 Refresh", discord.ButtonStyle.secondary, self._refresh, "refresh", 2),
         ]
@@ -97,7 +94,8 @@ def _install_polished_button_layout():
             button.callback = callback
             self.add_item(button)
 
-    JuiceVaultPanelView.__init__ = polished_init
 
-
-_install_polished_button_layout()
+def patch_ui(JuiceVaultUI):
+    """Install the polished embed and explicit three-row control layout."""
+    JuiceVaultUI._make_embed = polished_make_embed
+    _install_polished_button_layout()
