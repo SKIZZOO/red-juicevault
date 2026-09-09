@@ -5,7 +5,6 @@ from urllib.parse import quote
 API_BASE = "https://api.juicevault.xyz"
 AUDIO_EXTENSIONS = (".mp3", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".flac", ".webm")
 
-# These are the public music collections documented by JuiceVault.
 COLLECTION_ENDPOINTS = {
     "all": "/music/list",
     "instrumental": "/music/instrumentals/list",
@@ -80,9 +79,6 @@ async def fetch_collection(session, category):
         raise RuntimeError("JuiceVault API returned invalid JSON") from exc
 
     tracks = normalize_tracks(payload)
-    # The documentation exposes unreleased/main/session edits through song metadata,
-    # not separate public collection endpoints. The search example also shows an
-    # Unreleased album with category=main.
     if category == "unreleased":
         tracks = [
             t for t in tracks
@@ -102,6 +98,12 @@ async def get_category_counts(session):
     for track in tracks:
         category = normalize_category(track.get("category"))
         counts[category] = counts.get(category, 0) + 1
+    try:
+        cut_tracks = await fetch_collection(session, "cut file")
+        if cut_tracks:
+            counts["cut"] = len(cut_tracks)
+    except Exception as exc:
+        print(f"[JuiceVault] category endpoint cut failed: {exc}")
     return counts
 
 
@@ -119,19 +121,36 @@ def patch_juicevault_class(JuiceVault):
         self._jv_recent_ids = []
         self._jv_task_guilds = {}
 
-    async def fetch_tracks(self):
+    async def fetch_tracks(self, category=None):
         await self._ensure_session()
-        category = "all"
-        task = __import__("asyncio").current_task()
-        guild = self._jv_task_guilds.get(task)
-        if guild is not None:
-            category = await self.config.guild(guild).category()
-        category = normalize_category(category)
-        tracks = await fetch_collection(self.session, category)
-        random.shuffle(tracks)
 
-        # Prefer tracks that have not played recently. We still keep the recent
-        # tracks at the back so tiny collections never become empty.
+        # Calls made from the UI/search path have no player-task context. Include
+        # the documented CUT collection in the default list so UI filtering can
+        # still resolve and play CUT tracks.
+        if category is None:
+            tracks = await fetch_collection(self.session, "all")
+            try:
+                cut_tracks = await fetch_collection(self.session, "cut file")
+                seen = {str(t.get("id")) for t in tracks}
+                tracks.extend(t for t in cut_tracks if str(t.get("id")) not in seen)
+            except Exception as exc:
+                print(f"[JuiceVault] cut collection fetch failed: {exc}")
+            category = "all"
+        else:
+            category = normalize_category(category)
+            tracks = await fetch_collection(self.session, category)
+
+        # A player task is authoritative when no explicit category was supplied.
+        if category == "all":
+            task = __import__("asyncio").current_task()
+            guild = self._jv_task_guilds.get(task)
+            if guild is not None:
+                player_category = normalize_category(await self.config.guild(guild).category())
+                if player_category != "all":
+                    tracks = await fetch_collection(self.session, player_category)
+                    category = player_category
+
+        random.shuffle(tracks)
         if len(tracks) > 1 and self._jv_recent_ids:
             recent = set(self._jv_recent_ids[-75:])
             fresh = [t for t in tracks if t.get("id") not in recent]
