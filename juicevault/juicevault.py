@@ -29,6 +29,7 @@ class JuiceVault(commands.Cog):
         self.skip_events = {}
         self.queues = {}
         self.current = {}
+        self.last_error = {}
 
     async def cog_load(self):
         self.session = aiohttp.ClientSession(
@@ -55,10 +56,11 @@ class JuiceVault(commands.Cog):
             channel = guild.get_channel(settings["channel_id"])
             if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
                 continue
-            if guild_id not in self.tasks:
-                self.stop_events[guild_id] = asyncio.Event()
-                self.skip_events[guild_id] = asyncio.Event()
-                self.tasks[guild_id] = asyncio.create_task(self._player(guild, channel))
+            if guild_id in self.tasks:
+                continue
+            self.stop_events[guild_id] = asyncio.Event()
+            self.skip_events[guild_id] = asyncio.Event()
+            self.tasks[guild_id] = asyncio.create_task(self._player(guild, channel))
 
     def _ffmpeg_executable(self):
         if imageio_ffmpeg is not None:
@@ -69,7 +71,7 @@ class JuiceVault(commands.Cog):
         return "ffmpeg"
 
     def _stream_url(self, song_id):
-        return f"{self.API_BASE}/music/stream/{quote(str(song_id), safe='')}?src=direct"
+        return f"{self.API_BASE}/music/stream/{quote(str(song_id), safe='')}"
 
     async def fetch_tracks(self):
         """Load the complete public JuiceVault song index."""
@@ -150,10 +152,12 @@ class JuiceVault(commands.Cog):
                     try:
                         tracks = await self.fetch_tracks()
                     except Exception as exc:
+                        self.last_error[gid] = f"API: {exc}"
                         print(f"[JuiceVault] API error: {exc}")
                         await asyncio.sleep(30)
                         continue
                     if not tracks:
+                        self.last_error[gid] = "API nu a returnat piese audio"
                         await asyncio.sleep(30)
                         continue
                     self.queues[gid] = tracks
@@ -161,6 +165,7 @@ class JuiceVault(commands.Cog):
                 try:
                     voice = await self._connect(guild, channel)
                 except Exception as exc:
+                    self.last_error[gid] = f"Voice: {type(exc).__name__}: {exc}"
                     print(f"[JuiceVault] voice error: {exc}")
                     await asyncio.sleep(10)
                     continue
@@ -172,6 +177,9 @@ class JuiceVault(commands.Cog):
                 def after(error):
                     if error:
                         print(f"[JuiceVault] playback error: {error}")
+                        self.bot.loop.call_soon_threadsafe(
+                            self._set_error_from_callback, gid, f"Playback: {error}"
+                        )
                     self.bot.loop.call_soon_threadsafe(finished.set)
 
                 try:
@@ -184,7 +192,9 @@ class JuiceVault(commands.Cog):
                     if voice.is_playing():
                         voice.stop()
                     voice.play(source, after=after)
+                    self.last_error.pop(gid, None)
                 except Exception as exc:
+                    self.last_error[gid] = f"FFmpeg/playback: {type(exc).__name__}: {exc}"
                     print(f"[JuiceVault] could not play {url}: {exc}")
                     await asyncio.sleep(2)
                     continue
@@ -207,9 +217,15 @@ class JuiceVault(commands.Cog):
                         voice.stop()
         except asyncio.CancelledError:
             pass
+        except Exception as exc:
+            self.last_error[gid] = f"Player: {type(exc).__name__}: {exc}"
+            print(f"[JuiceVault] player crashed: {exc}")
         finally:
             await self._disconnect(guild)
             self.current.pop(gid, None)
+
+    def _set_error_from_callback(self, guild_id, message):
+        self.last_error[guild_id] = message
 
     @commands.group(name="jv", invoke_without_command=True)
     @commands.guild_only()
@@ -227,6 +243,8 @@ class JuiceVault(commands.Cog):
         if gid in self.tasks:
             await ctx.send("JuiceVault rulează deja.")
             return
+
+        channel = ctx.author.voice.channel
         try:
             tracks = await self.fetch_tracks()
         except Exception as exc:
@@ -235,13 +253,22 @@ class JuiceVault(commands.Cog):
         if not tracks:
             await ctx.send("JuiceVault API nu a returnat piese audio.")
             return
+
+        try:
+            await self._connect(ctx.guild, channel)
+        except Exception as exc:
+            self.last_error[gid] = f"Voice: {type(exc).__name__}: {exc}"
+            await ctx.send(f"❌ Nu pot intra în voice: `{type(exc).__name__}: {exc}`")
+            return
+
         self.queues[gid] = tracks
         self.stop_events[gid] = asyncio.Event()
         self.skip_events[gid] = asyncio.Event()
+        self.last_error.pop(gid, None)
         await self.config.guild(ctx.guild).enabled.set(True)
-        await self.config.guild(ctx.guild).channel_id.set(ctx.author.voice.channel.id)
-        self.tasks[gid] = asyncio.create_task(self._player(ctx.guild, ctx.author.voice.channel))
-        await ctx.send(f"▶️ Pornit — {len(tracks)} piese găsite prin JuiceVault API.")
+        await self.config.guild(ctx.guild).channel_id.set(channel.id)
+        self.tasks[gid] = asyncio.create_task(self._player(ctx.guild, channel))
+        await ctx.send(f"▶️ Pornit — {len(tracks)} piese găsite prin JuiceVault API. Am intrat în `{channel.name}`.")
 
     @jv.command(name="stop")
     async def stop(self, ctx):
@@ -285,10 +312,16 @@ class JuiceVault(commands.Cog):
         """Show player status."""
         gid = ctx.guild.id
         if gid not in self.tasks:
-            await ctx.send("🔴 Oprit.")
+            error = self.last_error.get(gid)
+            if error:
+                await ctx.send(f"🔴 Oprit. Ultima eroare: `{error}`")
+            else:
+                await ctx.send("🔴 Oprit.")
             return
         voice = ctx.guild.voice_client
+        error = self.last_error.get(gid, "niciuna")
         await ctx.send(
             f"🟢 Rulează | Voice: `{bool(voice and voice.is_connected())}` | "
-            f"Queue: `{len(self.queues.get(gid, []))}` | Current: `{self.current.get(gid, 'nimic')}`"
+            f"Queue: `{len(self.queues.get(gid, []))}` | "
+            f"Current: `{self.current.get(gid, 'nimic')}` | Error: `{error}`"
         )
