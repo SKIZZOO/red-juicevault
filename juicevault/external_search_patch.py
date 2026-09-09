@@ -32,7 +32,7 @@ def _source_name(info, fallback="Web"):
     return str(info.get("extractor") or fallback)
 
 
-def _extract_search(query):
+def _extract_search(query, skip_sources=()):
     if yt_dlp is None:
         raise RuntimeError("yt-dlp is not installed")
     opts = {
@@ -43,8 +43,11 @@ def _extract_search(query):
         "extract_flat": True,
         "default_search": "auto",
     }
+    skipped = {str(item).casefold() for item in skip_sources}
     targets = [("Web", query)] if query.startswith(("http://", "https://")) else list(SOURCE_SEARCHES)
     for source, target in targets:
+        if source.casefold() in skipped:
+            continue
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(target.format(query=query), download=False)
@@ -60,34 +63,73 @@ def _extract_search(query):
     raise RuntimeError("No result found on YouTube, SoundCloud, Bandcamp, or the supplied URL.")
 
 
+def _download_with_ytdlp(url, tempdir):
+    outtmpl = os.path.join(tempdir, "%(id)s.%(ext)s")
+    base = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "outtmpl": outtmpl,
+        "restrictfilenames": True,
+        "overwrites": True,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+    }
+
+    attempts = [
+        base,
+        {**base, "extractor_args": {"youtube": {"player_client": ["android"]}}},
+        {**base, "extractor_args": {"youtube": {"player_client": ["web_safari"]}}},
+    ]
+    last_error = None
+    for opts in attempts:
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                downloaded = ydl.extract_info(url, download=True)
+                prepared = ydl.prepare_filename(downloaded)
+            if os.path.isfile(prepared):
+                return prepared
+            files = [os.path.join(tempdir, name) for name in os.listdir(tempdir)]
+            files = [path for path in files if os.path.isfile(path) and not path.endswith(".part")]
+            if files:
+                return files[0]
+            last_error = RuntimeError("yt-dlp finished without producing an audio file")
+        except Exception as exc:
+            last_error = exc
+    raise last_error or RuntimeError("External download failed")
+
+
 def _download_external(info):
     if yt_dlp is None:
         raise RuntimeError("yt-dlp is not installed")
     url = info.get("webpage_url") or info.get("original_url") or info.get("url")
     if not url:
         raise RuntimeError("The selected source did not provide a playable URL")
+
     tempdir = tempfile.mkdtemp(prefix="juicevault-external-")
-    outtmpl = os.path.join(tempdir, "%(id)s.%(ext)s")
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        "format": "bestaudio/best",
-        "outtmpl": outtmpl,
-        "restrictfilenames": True,
-        "overwrites": True,
-    }
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            downloaded = ydl.extract_info(url, download=True)
-            prepared = ydl.prepare_filename(downloaded)
-        if os.path.isfile(prepared):
-            return prepared
-        files = [os.path.join(tempdir, name) for name in os.listdir(tempdir)]
-        files = [path for path in files if os.path.isfile(path) and not path.endswith(".part")]
-        if not files:
-            raise RuntimeError("yt-dlp finished without producing an audio file")
-        return files[0]
+        try:
+            return _download_with_ytdlp(url, tempdir)
+        except Exception as first_error:
+            # YouTube links can occasionally return a transient 403. If that
+            # happens, try another public source for the same query before
+            # giving up. This also prevents the player from getting stuck on a
+            # single unavailable result.
+            query = str(info.get("_query") or info.get("title") or "").strip()
+            source = str(info.get("_source") or "").casefold()
+            if query and source == "youtube":
+                fallback = _extract_search(query, skip_sources=("YouTube",))
+                fallback_url = fallback.get("webpage_url") or fallback.get("original_url") or fallback.get("url")
+                if fallback_url:
+                    path = _download_with_ytdlp(fallback_url, tempdir)
+                    info["_source"] = _source_name(fallback, "Web")
+                    info["_webpage_url"] = fallback_url
+                    info["url"] = fallback_url
+                    return path
+            raise first_error
     except Exception:
         shutil.rmtree(tempdir, ignore_errors=True)
         raise
@@ -125,7 +167,10 @@ class JuiceVaultSearchModeView(discord.ui.View):
         self.add_item(external)
 
     async def _vault(self, interaction):
-        await interaction.response.send_modal(self.panel.__class__.__module__ and JuiceVaultSearchModal(self.panel, self.guild_id))
+        # Lazy import avoids a ui_patch <-> external_search_patch circular
+        # import during cog startup.
+        from .ui_patch import JuiceVaultSearchModal
+        await interaction.response.send_modal(JuiceVaultSearchModal(self.panel, self.guild_id))
 
     async def _external(self, interaction):
         if yt_dlp is None:
@@ -135,11 +180,6 @@ class JuiceVaultSearchModeView(discord.ui.View):
             )
             return
         await interaction.response.send_modal(JuiceVaultOtherSearchModal(self.panel, self.guild_id))
-
-
-# Imported lazily after the mode view is defined to avoid changing the main
-# panel import graph during cog setup.
-from .ui_patch import JuiceVaultSearchModal
 
 
 class JuiceVaultOtherSearchModal(discord.ui.Modal, title="Search Music Online"):
@@ -171,16 +211,18 @@ class JuiceVaultOtherSearchModal(discord.ui.Modal, title="Search Music Online"):
             title = str(info.get("title") or info.get("fulltitle") or query).strip()
             artist = str(info.get("artist") or info.get("uploader") or info.get("channel") or "Unknown artist").strip()
             source = str(info.get("_source") or _source_name(info)).strip()
+            url = info.get("webpage_url") or info.get("original_url") or info.get("url")
             track = {
                 "id": f"external:{info.get('id') or abs(hash(query))}",
                 "title": title,
                 "artist": artist,
                 "length": info.get("duration_string") or info.get("duration") or "—",
                 "file_name": f"external-{info.get('id') or 'track'}.webm",
-                "url": info.get("webpage_url") or info.get("original_url") or info.get("url"),
+                "url": url,
                 "_external": True,
                 "_source": source,
-                "_webpage_url": info.get("webpage_url") or info.get("original_url") or info.get("url"),
+                "_webpage_url": url,
+                "_query": query,
             }
             cog.manual_queues.setdefault(self.guild_id, []).insert(0, track)
             await interaction.followup.send(
@@ -205,8 +247,7 @@ class JuiceVaultOtherSearchModal(discord.ui.Modal, title="Search Music Online"):
 
 
 def patch_external_search():
-    # Search on the main panel now opens a source chooser. The separate
-    # Other Search button is intentionally removed from the panel.
+    # Search on the main panel opens the source chooser. No extra panel button.
     JuiceVaultPanelView._search = _open_search
 
     original_download = JuiceVault._download_track
@@ -230,6 +271,3 @@ def patch_external_search():
 
     JuiceVault._download_track = download_track
     JuiceVault._remove_file = remove_file
-
-    # Do not add an extra panel button here. Discord only allows rows 0-4,
-    # and Search is now the entry point for both JuiceVault and External.
