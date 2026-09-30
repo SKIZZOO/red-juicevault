@@ -55,6 +55,7 @@ class JuiceVault(commands.Cog):
         self.seek_targets = {}
         self.play_positions = {}
         self.effects = {}
+        self.web_remote = None
 
     async def cog_load(self):
         await self._ensure_session()
@@ -579,7 +580,7 @@ class JuiceVault(commands.Cog):
     @commands.group(name="jv", invoke_without_command=True)
     @commands.guild_only()
     async def jv(self, ctx):
-        await ctx.send("`4jv start` `4jv stop` `4jv skip` `4jv skip10` `4jv shuffle` `4jv categories` `4jv category <name>` `4jv search <name>` `4jv play <name>` `4jv refresh` `4jv status`")
+        await ctx.send("`4jv start` `4jv stop` `4jv skip` `4jv skip10` `4jv shuffle` `4jv categories` `4jv category <name>` `4jv search <name>` `4jv play <name>` `4jv refresh` `4jv status` `4jv remote`")
 
     @jv.command(name="start")
     async def start(self, ctx):
@@ -769,3 +770,77 @@ class JuiceVault(commands.Cog):
         if error:
             lines.append(f"**Last Error:** `{error}`")
         await ctx.send("\n".join(lines))
+
+    @jv.group(name="remote", aliases=["web", "phone"], invoke_without_command=True)
+    async def remote(self, ctx):
+        """View your mobile phone web remote link and scannable QR code."""
+        if getattr(self, "web_remote", None):
+            await self.web_remote.send_remote_embed(ctx)
+        else:
+            await ctx.send("JuiceVault Web Remote is not loaded.")
+
+    @remote.command(name="port")
+    async def remote_port(self, ctx, port: int):
+        """Change the web remote server port (default: 8088)."""
+        if not (1 <= port <= 65535):
+            await ctx.send("Port must be between 1 and 65535.")
+            return
+        if getattr(self, "web_remote", None):
+            await self.web_remote.config.port.set(port)
+            await self.web_remote.start_server()
+            await ctx.send(f"✅ Web Remote port set to `{port}` and server restarted.")
+        else:
+            await ctx.send("JuiceVault Web Remote is not loaded.")
+
+    @remote.command(name="token")
+    async def remote_token(self, ctx, *, new_token: str = None):
+        """View or regenerate the secret auth token for mobile pairing."""
+        if getattr(self, "web_remote", None):
+            if new_token:
+                clean = new_token.strip()
+                await self.web_remote.config.token.set(clean)
+                await ctx.send(f"✅ Auth token updated to `{clean}`.")
+            else:
+                token = await self.web_remote.config.token()
+                await ctx.send(f"🔑 Current secret auth token: ||`{token}`||")
+        else:
+            await ctx.send("JuiceVault Web Remote is not loaded.")
+
+    @remote.command(name="url")
+    async def remote_url(self, ctx, *, custom_url: str = None):
+        """Set a custom public domain or tunnel URL (e.g. https://juice.example.com)."""
+        if getattr(self, "web_remote", None):
+            if custom_url and custom_url.lower() != "clear":
+                clean = custom_url.strip().rstrip("/")
+                await self.web_remote.config.custom_url.set(clean)
+                await ctx.send(f"✅ Custom URL set to: `{clean}`")
+            else:
+                await self.web_remote.config.custom_url.set(None)
+                await ctx.send("✅ Custom URL cleared. Using local network IP.")
+        else:
+            await ctx.send("JuiceVault Web Remote is not loaded.")
+
+    @remote.command(name="restart")
+    async def remote_restart(self, ctx):
+        """Restart the web remote server."""
+        if getattr(self, "web_remote", None):
+            await self.web_remote.start_server()
+            await ctx.send("🔄 Web remote server restarted.")
+        else:
+            await ctx.send("JuiceVault Web Remote is not loaded.")
+
+    @remote.command(name="toggle")
+    async def remote_toggle(self, ctx):
+        """Enable or disable the web remote server."""
+        if getattr(self, "web_remote", None):
+            current = await self.web_remote.config.enabled()
+            new_state = not current
+            await self.web_remote.config.enabled.set(new_state)
+            if new_state:
+                await self.web_remote.start_server()
+                await ctx.send("▶️ Web remote server enabled and started.")
+            else:
+                await self.web_remote.stop_server()
+                await ctx.send("⏹️ Web remote server disabled.")
+        else:
+            await ctx.send("JuiceVault Web Remote is not loaded.")

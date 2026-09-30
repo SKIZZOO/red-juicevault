@@ -766,10 +766,45 @@ class JuiceVaultWebRemote:
         })
 
 
-def patch_web_remote(JuiceVault, JuiceVaultUI):
-    """Integrate Web Remote lifecycle, Discord commands, and panel button."""
+    async def send_remote_embed(self, ctx):
+        url = await self.get_remote_url(with_token=True)
+        token = await self.config.token()
+        port = await self.config.port()
+        qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&format=png&data={quote(url)}"
 
-    # 1. Hook WebRemote into JuiceVault lifecycle
+        vc = ctx.guild.voice_client if ctx.guild else None
+        vc_name = vc.channel.name if vc and vc.channel else "Not connected"
+
+        embed = discord.Embed(
+            title="📱 JuiceVault Mobile Web Remote",
+            description=(
+                f"Control playback, queues, EQ, search, and lock screen media directly from your phone!\n\n"
+                f"🔗 **Direct Phone Link:**\n[**Open JuiceVault Remote**]({url})\n\n"
+                f"📷 **Scan the QR Code** with your phone's camera to connect immediately:"
+            ),
+            color=discord.Color.from_rgb(155, 89, 182),
+        )
+        embed.set_image(url=qr_api_url)
+        embed.add_field(name="🔑 Auth Token", value=f"`{token}`", inline=True)
+        embed.add_field(name="🌐 Port", value=f"`{port}`", inline=True)
+        embed.add_field(name="🔊 Voice Channel", value=f"`{vc_name}`", inline=True)
+        embed.add_field(
+            name="💡 Quick Tips",
+            value=(
+                "• **Add to Home Screen:** In Safari or Chrome on your phone, tap 'Add to Home Screen' for a native app feel!\n"
+                "• **Lock Screen Controls:** Tap 'Enable' in the web remote to control playback from your phone's lock screen & control center.\n"
+                "• **iOS Shortcuts:** Open the Shortcuts tab in the remote for one-tap Siri actions!"
+            ),
+            inline=False,
+        )
+        embed.set_footer(text="JuiceVault 24/7 • made by SKIZZOO", icon_url="https://api.juicevault.xyz/favicon.ico")
+
+        await ctx.send(embed=embed)
+
+
+def patch_web_remote(JuiceVault, JuiceVaultUI):
+    """Integrate Web Remote lifecycle, Discord panel button, and state broadcasting."""
+
     original_init = JuiceVault.__init__
     original_cog_load = JuiceVault.cog_load
     original_cog_unload = JuiceVault.cog_unload
@@ -790,113 +825,6 @@ def patch_web_remote(JuiceVault, JuiceVaultUI):
     JuiceVault.__init__ = jv_init
     JuiceVault.cog_load = jv_load = jv_cog_load
     JuiceVault.cog_unload = jv_cog_unload
-
-    # 2. Add Discord commands under [p]jv remote
-    @commands.group(name="remote", aliases=["web", "phone"], invoke_without_command=True)
-    @commands.guild_only()
-    async def remote_cmd(self, ctx):
-        """View your mobile phone web remote link and scannable QR code."""
-        cog = ctx.bot.get_cog("JuiceVault")
-        if not cog or not hasattr(cog, "web_remote"):
-            await ctx.send("JuiceVault Web Remote is not loaded.")
-            return
-
-        remote = cog.web_remote
-        url = await remote.get_remote_url(with_token=True)
-        token = await remote.config.token()
-        port = await remote.config.port()
-        host = await remote.config.host()
-        qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&format=png&data={quote(url)}"
-
-        embed = discord.Embed(
-            title="📱 JuiceVault Mobile Web Remote",
-            description=(
-                f"Control playback, queues, EQ, search, and lock screen media directly from your phone!\n\n"
-                f"🔗 **Direct Phone Link:**\n[**Open JuiceVault Remote**]({url})\n\n"
-                f"📷 **Scan the QR Code** with your phone's camera to connect immediately:"
-            ),
-            color=discord.Color.from_rgb(155, 89, 182),
-        )
-        embed.set_image(url=qr_api_url)
-        embed.add_field(name="🔑 Auth Token", value=f"`{token}`", inline=True)
-        embed.add_field(name="🌐 Port", value=f"`{port}`", inline=True)
-        embed.add_field(name="🔊 Voice Channel", value=f"`{ctx.guild.voice_client.channel.name if ctx.guild.voice_client else 'Not connected'}`", inline=True)
-        embed.add_field(
-            name="💡 Quick Tips",
-            value=(
-                "• **Add to Home Screen:** In Safari or Chrome on your phone, tap 'Add to Home Screen' for a native app feel!\n"
-                "• **Lock Screen Controls:** Tap 'Enable' in the web remote to control playback from your phone's lock screen & control center.\n"
-                "• **iOS Shortcuts:** Open the Shortcuts tab in the remote for one-tap Siri actions!"
-            ),
-            inline=False,
-        )
-        embed.set_footer(text="JuiceVault 24/7 • made by SKIZZOO", icon_url="https://api.juicevault.xyz/favicon.ico")
-
-        # Send ephemeral or standard message
-        await ctx.send(embed=embed)
-
-    @remote_cmd.command(name="port")
-    async def remote_port(self, ctx, port: int):
-        """Change the web remote server port (default: 8088)."""
-        if not (1 <= port <= 65535):
-            await ctx.send("Port must be between 1 and 65535.")
-            return
-        cog = ctx.bot.get_cog("JuiceVault")
-        remote = cog.web_remote
-        await remote.config.port.set(port)
-        await remote.start_server()
-        await ctx.send(f"✅ Web Remote port set to `{port}` and server restarted.")
-
-    @remote_cmd.command(name="token")
-    async def remote_token(self, ctx, *, new_token: str = None):
-        """View or regenerate the secret auth token for mobile pairing."""
-        cog = ctx.bot.get_cog("JuiceVault")
-        remote = cog.web_remote
-        if new_token:
-            clean = new_token.strip()
-            await remote.config.token.set(clean)
-            await ctx.send(f"✅ Auth token updated to `{clean}`.")
-        else:
-            token = await remote.config.token()
-            await ctx.send(f"🔑 Current secret auth token: ||`{token}`||")
-
-    @remote_cmd.command(name="url")
-    async def remote_url(self, ctx, *, custom_url: str = None):
-        """Set a custom public domain or tunnel URL (e.g. https://juice.example.com)."""
-        cog = ctx.bot.get_cog("JuiceVault")
-        remote = cog.web_remote
-        if custom_url and custom_url.lower() != "clear":
-            clean = custom_url.strip().rstrip("/")
-            await remote.config.custom_url.set(clean)
-            await ctx.send(f"✅ Custom URL set to: `{clean}`")
-        else:
-            await remote.config.custom_url.set(None)
-            await ctx.send("✅ Custom URL cleared. Using local network IP.")
-
-    @remote_cmd.command(name="restart")
-    async def remote_restart(self, ctx):
-        """Restart the web remote server."""
-        cog = ctx.bot.get_cog("JuiceVault")
-        await cog.web_remote.start_server()
-        await ctx.send("🔄 Web remote server restarted.")
-
-    @remote_cmd.command(name="toggle")
-    async def remote_toggle(self, ctx):
-        """Enable or disable the web remote server."""
-        cog = ctx.bot.get_cog("JuiceVault")
-        remote = cog.web_remote
-        current = await remote.config.enabled()
-        new_state = not current
-        await remote.config.enabled.set(new_state)
-        if new_state:
-            await remote.start_server()
-            await ctx.send("▶️ Web remote server enabled and started.")
-        else:
-            await remote.stop_server()
-            await ctx.send("⏹️ Web remote server disabled.")
-
-    # Attach command group to JuiceVault.jv
-    JuiceVault.jv.add_command(remote_cmd)
 
     # 3. Add ephemeral '📱 Remote' button callback to JuiceVaultPanelView
     async def _remote_button_callback(self, interaction: discord.Interaction):
