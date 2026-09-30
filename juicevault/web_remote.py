@@ -678,7 +678,7 @@ class JuiceVaultWebRemote:
             effect = payload.get("effect", "none")
             main.effects[gid] = effect
             if main.current.get(gid):
-                await main._request_seek(gid, -999999)
+                await main._request_seek(gid, 0.0)
         elif action_name == "set_category":
             cat = main._category_name(payload.get("category", "all"))
             await main.config.guild(guild).category.set(cat)
@@ -689,9 +689,9 @@ class JuiceVaultWebRemote:
                 main.queues[gid] = tracks
                 main.failure_counts[gid] = 0
 
-        if ui:
-            await ui.update_panel(gid)
         await self.broadcast_state(gid)
+        if ui:
+            asyncio.create_task(ui.update_panel(gid))
 
     # REST API Handlers
     async def _api_status(self, request):

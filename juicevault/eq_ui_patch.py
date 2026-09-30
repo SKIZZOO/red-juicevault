@@ -5,14 +5,14 @@ from .juicevault_ui import JuiceVaultPanelView
 
 
 EQ_OPTIONS = [
-    ("none", "🎵 Flat", "No EQ / original sound"),
-    ("bass", "🔊 Bass Boost", "Boost low frequencies"),
-    ("8d", "🌀 8D Audio", "Wide rotating stereo effect"),
-    ("nightcore", "⚡ Nightcore", "Higher pitch and energy"),
-    ("slowed", "🐌 Slowed", "Lower pitch and slower feel"),
-    ("echo", "🌌 Echo", "Soft echo / reverb feel"),
-    ("wide", "🎧 Wide", "Expanded stereo sound"),
-    ("virtual bass", "💥 Virtual Bass", "Extra low-end presence"),
+    ("none", "🎵 Flat", "Original unprocessed studio sound"),
+    ("bass", "🔊 Bass Boost", "Deep punchy bass boost (+11dB)"),
+    ("8d", "🌀 8D Audio", "360° rotating spatial surround sound"),
+    ("nightcore", "⚡ Nightcore", "High pitch and accelerated tempo (+22%)"),
+    ("slowed", "🐌 Slowed & Reverb", "Deep pitched chopped & slowed lo-fi"),
+    ("echo", "🌌 Echo & Reverb", "Spacious delay and echo ambiance"),
+    ("wide", "🎧 Stereo Wide", "Immersive 3D stereo stage expansion"),
+    ("virtual bass", "💥 Sub-Bass Boost", "Massive low-end rumble (+16dB)"),
 ]
 
 
@@ -41,13 +41,13 @@ class JuiceVaultEQSelect(discord.ui.Select):
         cog.effects[self.guild_id] = effect
         restarted = False
         if cog.current.get(self.guild_id):
-            restarted = await cog._request_seek(self.guild_id, -999999) is not None
+            restarted = await cog._request_seek(self.guild_id, 0.0) is not None
         label = next((label for value, label, _ in EQ_OPTIONS if value == effect), effect)
         await interaction.response.edit_message(
             embed=discord.Embed(
                 title="🎚️ EQ / Audio Effect",
                 description=f"**{label}**\n\n" + (
-                    "Applied and restarted the current song."
+                    "Applied seamlessly to current playback."
                     if restarted
                     else "Selected — it will apply to the next playback."
                 ),

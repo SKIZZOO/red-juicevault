@@ -1251,6 +1251,51 @@ HTML_INDEX = """<!DOCTYPE html>
 
     async function action(name, payload = {}) {
       if (navigator.vibrate) navigator.vibrate(10);
+
+      // Instant optimistic UI updates for sub-millisecond perceived responsiveness
+      if (name === 'toggle') {
+        if (currentState) {
+          currentState.is_playing = !currentState.is_playing;
+          const playIcon = document.getElementById('playIconSvg');
+          const coverImg = document.getElementById('coverImg');
+          const soundwave = document.getElementById('soundwaveBox');
+          if (currentState.is_playing) {
+            if (playIcon) playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+            if (coverImg) coverImg.classList.add('playing');
+            if (soundwave) soundwave.classList.add('playing');
+          } else {
+            if (playIcon) playIcon.innerHTML = '<polygon points="6 3 20 12 6 21 6 3"/>';
+            if (coverImg) coverImg.classList.remove('playing');
+            if (soundwave) soundwave.classList.remove('playing');
+          }
+          syncLiveAudio();
+        }
+      } else if (name === 'seek') {
+        const delta = payload.delta || 0;
+        currentElapsed = Math.max(0, Math.min(durationSeconds, currentElapsed + delta));
+        updateScrubberUI();
+        if (liveStreamActive) {
+          const a = document.getElementById('liveAudio');
+          if (a) a.currentTime = currentElapsed;
+        }
+      } else if (name === 'seek_to') {
+        currentElapsed = Math.max(0, Math.min(durationSeconds, payload.position || 0));
+        updateScrubberUI();
+        if (liveStreamActive) {
+          const a = document.getElementById('liveAudio');
+          if (a) a.currentTime = currentElapsed;
+        }
+      } else if (name === 'skip') {
+        showToast('Skipping track…');
+      } else if (name === 'previous') {
+        showToast('Playing previous track…');
+      } else if (name === 'shuffle') {
+        showToast('Queue shuffled');
+      } else if (name === 'repeat') {
+        const repeatBtn = document.getElementById('btnRepeat');
+        if (repeatBtn) repeatBtn.classList.toggle('active');
+      }
+
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ action: name, ...payload }));
         return;
@@ -1696,16 +1741,29 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     // EQ Sheet
+    const DEFAULT_EQ_LIST = [
+      { id: "none", label: "🎵 Flat", desc: "Original unprocessed studio sound" },
+      { id: "bass", label: "🔊 Bass Boost", desc: "Deep punchy bass boost (+11dB)" },
+      { id: "8d", label: "🌀 8D Audio", desc: "360° rotating spatial surround sound" },
+      { id: "nightcore", label: "⚡ Nightcore", desc: "High pitch and accelerated tempo (+22%)" },
+      { id: "slowed", label: "🐌 Slowed & Reverb", desc: "Deep pitched chopped & slowed lo-fi" },
+      { id: "echo", label: "🌌 Echo & Reverb", desc: "Spacious delay and echo ambiance" },
+      { id: "wide", label: "🎧 Stereo Wide", desc: "Immersive 3D stereo stage expansion" },
+      { id: "virtual bass", label: "💥 Sub-Bass Boost", desc: "Massive low-end rumble (+16dB)" },
+    ];
+
     function openEqModal() {
-      if (!currentState || !currentState.effects) return;
       const container = document.getElementById('eqOptions');
-      container.innerHTML = currentState.effects.map(eq => `
-        <div class="track-card ${currentState.effect === eq.id ? 'active' : ''}" style="cursor:pointer; ${currentState.effect === eq.id ? 'border-color:var(--accent); background:var(--accent-muted);' : ''}" onclick="setEq('${eq.id}')">
+      if (!container) return;
+      const effects = (currentState && currentState.effects && currentState.effects.length) ? currentState.effects : DEFAULT_EQ_LIST;
+      const activeEffect = (currentState && currentState.effect) ? currentState.effect : 'none';
+      container.innerHTML = effects.map(eq => `
+        <div class="track-card ${activeEffect === eq.id ? 'active' : ''}" style="cursor:pointer; ${activeEffect === eq.id ? 'border-color:var(--accent); background:var(--accent-muted);' : ''}" onclick="setEq('${eq.id}')">
           <div>
             <div style="font-weight:600; font-size:0.88rem; color:#fff;">${eq.label}</div>
             <div style="font-size:0.72rem; color:var(--text-sub); margin-top:2px;">${eq.desc}</div>
           </div>
-          ${currentState.effect === eq.id ? '<svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+          ${activeEffect === eq.id ? '<svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
         </div>
       `).join('');
       document.getElementById('eqSheet').classList.add('active');
@@ -1716,13 +1774,14 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     async function setEq(effect) {
+      if (currentState) {
+        currentState.effect = effect;
+        const b = document.getElementById('eqBadge');
+        if (b) b.innerText = effect.toUpperCase();
+      }
       closeEqModal();
-      await fetch(`/api/playback/eq?token=${encodeURIComponent(token)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ effect })
-      });
-      showToast(`EQ: ${effect}`);
+      showToast(`EQ Profile: ${effect}`);
+      action('set_eq', { effect });
     }
 
     function openLyrics() {

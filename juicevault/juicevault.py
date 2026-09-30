@@ -57,6 +57,8 @@ class JuiceVault(commands.Cog):
         self.play_positions = {}
         self.effects = {}
         self.web_remote = None
+        self._prefetched = {}
+        self._prefetch_tasks = {}
 
     async def cog_load(self):
         await self._ensure_session()
@@ -70,6 +72,7 @@ class JuiceVault(commands.Cog):
             except asyncio.CancelledError:
                 pass
             self.restore_task = None
+        self._cleanup_prefetch()
         for guild_id in list(self.tasks):
             await self._stop(guild_id)
         if self.session and not self.session.closed:
@@ -258,12 +261,60 @@ class JuiceVault(commands.Cog):
         while voice.is_playing() or voice.is_paused():
             if time.monotonic() >= deadline:
                 return False
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.02)
         return True
 
+    def _cleanup_prefetch(self):
+        for path in list(self._prefetched.values()):
+            self._remove_file(path)
+        self._prefetched.clear()
+        for task in list(self._prefetch_tasks.values()):
+            task.cancel()
+        self._prefetch_tasks.clear()
+
+    def _trigger_next_prefetch(self, gid):
+        next_track = None
+        if self.manual_queues.get(gid):
+            next_track = self.manual_queues[gid][0]
+        elif self.queues.get(gid):
+            next_track = self.queues[gid][0]
+        if next_track and not next_track.get("_external") and next_track.get("url"):
+            url = next_track["url"]
+            if url not in self._prefetched and url not in self._prefetch_tasks:
+                self._prefetch_tasks[url] = asyncio.create_task(self._do_prefetch(next_track))
+
+    async def _do_prefetch(self, track):
+        url = track.get("url")
+        try:
+            path = await self._download_track(dict(track, _skip_cache=True))
+            if url and path and os.path.isfile(path):
+                self._prefetched[url] = path
+            return path
+        except Exception:
+            return None
+        finally:
+            if url:
+                self._prefetch_tasks.pop(url, None)
+
     async def _download_track(self, track):
+        url = track.get("url")
+        skip_cache = track.get("_skip_cache", False)
+        if not skip_cache and url:
+            if url in self._prefetched:
+                path = self._prefetched.pop(url)
+                if os.path.isfile(path) and os.path.getsize(path) > 1024:
+                    return path
+            if url in self._prefetch_tasks:
+                task = self._prefetch_tasks.pop(url)
+                try:
+                    path = await task
+                    if path and os.path.isfile(path) and os.path.getsize(path) > 1024:
+                        return path
+                except Exception:
+                    pass
+
         await self._ensure_session()
-        timeout = aiohttp.ClientTimeout(total=None, sock_connect=30, sock_read=30)
+        timeout = aiohttp.ClientTimeout(total=None, sock_connect=15, sock_read=30)
         suffix = os.path.splitext(str(track.get("file_name") or ".mp3"))[1] or ".mp3"
         if suffix.lower() not in self.AUDIO_EXTENSIONS:
             suffix = ".mp3"
@@ -310,18 +361,37 @@ class JuiceVault(commands.Cog):
             return None
 
     def _effect_filter(self, effect):
-        effect = str(effect or "none").casefold()
+        eff = str(effect or "none").casefold().replace("-", " ").replace("_", " ").strip()
+        if eff in ("flat", "off", "normal", "none", "original"):
+            key = "none"
+        elif "night" in eff:
+            key = "nightcore"
+        elif "slow" in eff:
+            key = "slowed"
+        elif "8d" in eff:
+            key = "8d"
+        elif "sub" in eff or "virtual" in eff:
+            key = "virtual bass"
+        elif "wide" in eff or "stereo" in eff:
+            key = "wide"
+        elif "echo" in eff or "reverb" in eff:
+            key = "echo"
+        elif "bass" in eff:
+            key = "bass"
+        else:
+            key = "none"
+
         filters = {
-            "none": "aresample=async=1:first_pts=0",
-            "bass": "bass=g=8:f=100,aresample=async=1:first_pts=0",
-            "8d": "apulsator=hz=0.08:amount=1:offset_l=0:offset_r=0.5,haas=left_delay=2:right_delay=2,aresample=async=1:first_pts=0",
-            "nightcore": "asetrate=44100*1.12,aresample=44100,atempo=1.0,aresample=async=1:first_pts=0",
-            "slowed": "asetrate=44100*0.88,aresample=44100,atempo=1.0,aresample=async=1:first_pts=0",
-            "echo": "aecho=0.8:0.88:700:0.25,aresample=async=1:first_pts=0",
-            "wide": "stereotools=mlev=0.015:mpan=1,aresample=async=1:first_pts=0",
-            "virtual bass": "virtualbass=cutoff=120:strength=2,aresample=async=1:first_pts=0",
+            "none": "aresample=48000:async=1",
+            "bass": "bass=g=11:f=110:w=0.6,aresample=48000:async=1",
+            "8d": "apulsator=mode=sine:hz=0.12:amount=0.95,extrastereo=m=1.8,aresample=48000:async=1",
+            "nightcore": "asetrate=48000*1.22,aresample=48000,atempo=1.0,aresample=48000:async=1",
+            "slowed": "asetrate=48000*0.86,aresample=48000,atempo=1.0,aresample=48000:async=1",
+            "echo": "aecho=0.8:0.85:60:0.35,aresample=48000:async=1",
+            "wide": "extrastereo=m=2.2,aresample=48000:async=1",
+            "virtual bass": "bass=g=16:f=55:w=0.5,equalizer=f=35:width_type=h:width=40:g=10,aresample=48000:async=1",
         }
-        return filters.get(effect, filters["none"])
+        return filters.get(key, filters["none"])
 
     async def _disconnect(self, guild):
         voice = guild.voice_client
@@ -447,15 +517,16 @@ class JuiceVault(commands.Cog):
                             playback_error["value"] = error
                             print(f"[JuiceVault] playback worker error: {type(error).__name__}: {error}")
                         self.bot.loop.call_soon_threadsafe(finished.set)
-                    before = "-nostdin"
+                    before = "-nostdin -probesize 32k -analyzeduration 0"
                     if start_offset > 0.05:
-                        before = f"-nostdin -ss {start_offset:.3f}"
+                        before = f"-nostdin -ss {start_offset:.3f} -probesize 32k -analyzeduration 0"
                     effect = self.effects.get(gid, "none")
                     options = f"-vn -af {self._effect_filter(effect)}"
                     source = discord.FFmpegPCMAudio(local_path, executable=self._ffmpeg_executable(), before_options=before, options=options, stderr=log_file)
                     voice.play(source, after=after)
                     voice._jv_started_at = time.monotonic()
                     self.play_positions[gid] = start_offset
+                    self._trigger_next_prefetch(gid)
                 except Exception as exc:
                     self.last_error[gid] = f"Playback: {type(exc).__name__}: {exc}"
                     if log_file:
