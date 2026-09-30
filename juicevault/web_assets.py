@@ -2,24 +2,25 @@
 """Web assets (HTML, CSS, JavaScript, PWA Manifest, Service Worker) for the JuiceVault Mobile Remote."""
 
 HTML_INDEX = """<!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="background-color: #0a0910; color-scheme: dark;">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>JuiceVault Remote</title>
+  <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="JuiceVault">
-  <meta name="theme-color" content="#0d0b14">
+  <meta name="theme-color" content="#0a0910">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="https://api.juicevault.xyz/favicon.ico">
   <style>
     :root {
       --bg: #0a0910;
-      --card-bg: rgba(22, 18, 35, 0.75);
-      --card-border: rgba(168, 85, 247, 0.18);
+      --card-bg: rgba(22, 18, 35, 0.85);
+      --card-border: rgba(168, 85, 247, 0.22);
       --accent: #a855f7;
-      --accent-glow: rgba(168, 85, 247, 0.4);
+      --accent-glow: rgba(168, 85, 247, 0.45);
       --accent-hover: #c084fc;
       --text: #f3e8ff;
       --text-muted: #a89bb8;
@@ -27,6 +28,11 @@ HTML_INDEX = """<!DOCTYPE html>
       --success: #22c55e;
       --safe-top: env(safe-area-inset-top, 0px);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    html {
+      background-color: #0a0910 !important;
+      color-scheme: dark !important;
+      min-height: 100%;
     }
     * {
       box-sizing: border-box;
@@ -37,29 +43,27 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
+      background-color: #0a0910 !important;
+      color: #f3e8ff !important;
       min-height: 100vh;
-      min-height: -webkit-fill-available;
+      min-height: 100dvh;
       overflow-x: hidden;
       display: flex;
       flex-direction: column;
       padding-top: var(--safe-top);
-      padding-bottom: calc(65px + var(--safe-bottom));
+      padding-bottom: calc(68px + var(--safe-bottom));
       position: relative;
     }
-    /* Dynamic ambient glow behind cover */
+    /* Smooth native gradient background - no GPU blur crash */
     .ambient-bg {
       position: fixed;
-      top: -20%;
-      left: -20%;
-      width: 140%;
-      height: 140%;
-      background: radial-gradient(circle at 50% 30%, rgba(147, 51, 234, 0.22) 0%, rgba(10, 9, 16, 0.95) 70%);
-      filter: blur(60px);
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at 50% 12%, rgba(147, 51, 234, 0.3) 0%, rgba(10, 9, 16, 0.98) 75%);
       z-index: -1;
       pointer-events: none;
-      transition: background 0.8s ease;
     }
     /* Top Bar */
     header {
@@ -73,7 +77,7 @@ HTML_INDEX = """<!DOCTYPE html>
       position: sticky;
       top: 0;
       z-index: 50;
-      background: rgba(10, 9, 16, 0.85);
+      background: rgba(10, 9, 16, 0.9);
     }
     .brand {
       display: flex;
@@ -136,13 +140,13 @@ HTML_INDEX = """<!DOCTYPE html>
       display: none;
       flex-direction: column;
       gap: 18px;
-      animation: fadeIn 0.25s ease-out;
+      animation: fadeIn 0.2s ease-out;
     }
     .tab-content.active {
       display: flex;
     }
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
+      from { opacity: 0; transform: translateY(4px); }
       to { opacity: 1; transform: translateY(0); }
     }
     /* Player Card */
@@ -154,9 +158,9 @@ HTML_INDEX = """<!DOCTYPE html>
       margin: 10px auto 16px;
       border-radius: 24px;
       overflow: hidden;
-      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), 0 0 24px var(--accent-glow);
-      border: 1px solid rgba(168, 85, 247, 0.25);
-      background: #14121d;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7), 0 0 24px var(--accent-glow);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      background: linear-gradient(135deg, #1c142b, #120e1a);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -170,10 +174,6 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .artwork-img.playing {
       transform: scale(1.02);
-    }
-    .artwork-placeholder {
-      font-size: 5rem;
-      opacity: 0.6;
     }
     .track-meta {
       text-align: center;
@@ -207,7 +207,7 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .progress-bar-wrap {
       height: 8px;
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.12);
       border-radius: 6px;
       overflow: hidden;
       position: relative;
@@ -276,7 +276,7 @@ HTML_INDEX = """<!DOCTYPE html>
     .btn-small.active {
       color: var(--accent-hover);
       border-color: var(--accent);
-      background: rgba(168, 85, 247, 0.2);
+      background: rgba(168, 85, 247, 0.25);
     }
     .controls-secondary {
       display: flex;
@@ -321,7 +321,7 @@ HTML_INDEX = """<!DOCTYPE html>
       width: 100%;
       height: calc(60px + var(--safe-bottom));
       padding-bottom: var(--safe-bottom);
-      background: rgba(10, 9, 16, 0.92);
+      background: rgba(10, 9, 16, 0.95);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-top: 1px solid var(--card-border);
@@ -381,9 +381,9 @@ HTML_INDEX = """<!DOCTYPE html>
       align-items: center;
       justify-content: space-between;
       padding: 10px 12px;
-      background: rgba(255, 255, 255, 0.03);
+      background: rgba(255, 255, 255, 0.04);
       border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       gap: 10px;
     }
     .track-info {
@@ -404,7 +404,7 @@ HTML_INDEX = """<!DOCTYPE html>
       margin-top: 2px;
     }
     .btn-action-small {
-      background: rgba(168, 85, 247, 0.15);
+      background: rgba(168, 85, 247, 0.18);
       border: 1px solid var(--accent);
       color: var(--text);
       font-size: 0.75rem;
@@ -485,7 +485,7 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .cat-card.active {
       border-color: var(--accent);
-      background: rgba(168, 85, 247, 0.18);
+      background: rgba(168, 85, 247, 0.22);
       box-shadow: 0 0 14px var(--accent-glow);
     }
     .cat-card-title {
@@ -504,7 +504,7 @@ HTML_INDEX = """<!DOCTYPE html>
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.65);
+      background: rgba(0, 0, 0, 0.7);
       backdrop-filter: blur(6px);
       z-index: 200;
       display: none;
@@ -555,9 +555,9 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .sheet-option-item {
       padding: 12px 14px;
-      background: rgba(255, 255, 255, 0.04);
+      background: rgba(255, 255, 255, 0.05);
       border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       cursor: pointer;
       display: flex;
       justify-content: space-between;
@@ -565,7 +565,7 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .sheet-option-item.active {
       border-color: var(--accent);
-      background: rgba(168, 85, 247, 0.2);
+      background: rgba(168, 85, 247, 0.22);
     }
     /* Toast */
     .toast {
@@ -575,7 +575,7 @@ HTML_INDEX = """<!DOCTYPE html>
       transform: translateX(-50%) translateY(-100px);
       background: rgba(30, 24, 48, 0.95);
       border: 1px solid var(--accent);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
       padding: 10px 18px;
       border-radius: 20px;
       font-size: 0.85rem;
@@ -593,7 +593,7 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     /* Lockscreen helper banner */
     .lockscreen-banner {
-      background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(126, 34, 206, 0.15));
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.18), rgba(126, 34, 206, 0.18));
       border: 1px dashed var(--accent);
       border-radius: 14px;
       padding: 12px 16px;
@@ -619,6 +619,20 @@ HTML_INDEX = """<!DOCTYPE html>
       cursor: pointer;
       white-space: nowrap;
     }
+    /* Auth Modal / Token Prompt */
+    .auth-banner {
+      background: rgba(22, 18, 35, 0.95);
+      border: 1px solid var(--accent);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 16px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .auth-banner.active {
+      display: flex;
+    }
   </style>
 </head>
 <body>
@@ -639,6 +653,18 @@ HTML_INDEX = """<!DOCTYPE html>
   <div class="toast" id="toast">✅ Action applied</div>
 
   <main>
+    <!-- Auth Token Box (if token missing or invalid) -->
+    <div class="auth-banner" id="authBox">
+      <div style="font-weight: 700; font-size: 0.95rem; color: #fff;">🔑 Remote Authentication</div>
+      <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+        Enter your secret auth passcode from Discord (run <code>4jv remote</code>):
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <input type="text" id="manualTokenInput" class="search-input" placeholder="Enter auth token…" style="background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 10px; padding: 8px 12px; color: #fff;">
+        <button class="btn-pill" onclick="saveManualToken()">Connect</button>
+      </div>
+    </div>
+
     <!-- TAB 1: NOW PLAYING -->
     <div class="tab-content active" id="tab-player">
       <div class="artwork-container" id="artContainer">
@@ -798,6 +824,17 @@ HTML_INDEX = """<!DOCTYPE html>
     let durationSeconds = 0;
     let searchMode = 'vault';
     let lockScreenActive = false;
+
+    function saveManualToken() {
+      const val = document.getElementById('manualTokenInput').value.trim();
+      if (!val) return;
+      token = val;
+      localStorage.setItem('jv_token', token);
+      document.getElementById('authBox').classList.remove('active');
+      fetchStatus();
+      connectWS();
+      showToast('Token saved! Connecting…');
+    }
 
     // Toast helper
     function showToast(msg) {
@@ -979,41 +1016,52 @@ HTML_INDEX = """<!DOCTYPE html>
 
     // WebSocket connection
     function connectWS() {
+      if (!token) return;
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${proto}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
-      ws = new WebSocket(wsUrl);
+      try {
+        ws = new WebSocket(wsUrl);
 
-      ws.onopen = () => {
-        document.getElementById('connDot').classList.remove('offline');
-        document.getElementById('connLabel').innerText = 'Live';
-      };
+        ws.onopen = () => {
+          document.getElementById('connDot').classList.remove('offline');
+          document.getElementById('connLabel').innerText = 'Live';
+        };
 
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'state_update') {
-            applyState(msg.data);
-          } else if (msg.type === 'toast') {
-            showToast(msg.message);
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'state_update') {
+              applyState(msg.data);
+            } else if (msg.type === 'toast') {
+              showToast(msg.message);
+            }
+          } catch (e) {
+            console.error('WS parse error:', e);
           }
-        } catch (e) {
-          console.error('WS parse error:', e);
-        }
-      };
+        };
 
-      ws.onclose = () => {
-        document.getElementById('connDot').classList.add('offline');
-        document.getElementById('connLabel').innerText = 'Reconnecting…';
-        setTimeout(connectWS, 2500);
-      };
+        ws.onclose = () => {
+          document.getElementById('connDot').classList.add('offline');
+          document.getElementById('connLabel').innerText = 'Reconnecting…';
+          setTimeout(connectWS, 3000);
+        };
 
-      ws.onerror = () => ws.close();
+        ws.onerror = () => ws.close();
+      } catch (err) {
+        console.error('WS init error:', err);
+      }
     }
 
     // Fallback polling for status
     async function fetchStatus() {
       try {
         const res = await fetch(`/api/status?token=${encodeURIComponent(token)}`);
+        if (res.status === 401) {
+          document.getElementById('authBox').classList.add('active');
+          document.getElementById('trackTitle').innerText = 'Authentication Required';
+          document.getElementById('trackArtist').innerText = 'Enter your token below';
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           if (data.state) applyState(data.state);
@@ -1204,8 +1252,12 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     // Startup
-    connectWS();
-    fetchStatus();
+    if (!token) {
+      document.getElementById('authBox').classList.add('active');
+    } else {
+      connectWS();
+      fetchStatus();
+    }
   </script>
 </body>
 </html>
@@ -1238,7 +1290,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Let network handle dynamic API & WS requests
   event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
 });
 """

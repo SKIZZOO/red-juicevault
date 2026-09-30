@@ -336,7 +336,7 @@ class JuiceVaultWebRemote:
 
     # Web App Route Handlers
     async def _handle_index(self, request):
-        return web.Response(text=HTML_INDEX, content_type="text/html")
+        return web.Response(text=HTML_INDEX, content_type="text/html", charset="utf-8")
 
     async def _handle_manifest(self, request):
         return web.Response(text=MANIFEST_JSON, content_type="application/manifest+json")
