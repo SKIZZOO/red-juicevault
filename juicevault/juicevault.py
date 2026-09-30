@@ -59,6 +59,9 @@ class JuiceVault(commands.Cog):
         self.web_remote = None
         self._prefetched = {}
         self._prefetch_tasks = {}
+        self._categories_cache = None
+        self._categories_cache_time = 0.0
+        self._tracks_cache = {}
 
     async def cog_load(self):
         await self._ensure_session()
@@ -222,11 +225,26 @@ class JuiceVault(commands.Cog):
 
     async def fetch_tracks(self, category=None):
         category = self._category_name(category)
+        now = time.monotonic()
+        if category in self._tracks_cache:
+            cache_time, cached_tracks = self._tracks_cache[category]
+            if now - cache_time < 300:  # 5 minute in-memory cache
+                return list(cached_tracks)
+
         if category in self.CATEGORY_URLS:
-            return await self._fetch_tracks_from_url(self.CATEGORY_URLS[category])
-        return await self._fetch_tracks_from_url(self.MUSIC_LIST_URL)
+            tracks = await self._fetch_tracks_from_url(self.CATEGORY_URLS[category])
+        else:
+            tracks = await self._fetch_tracks_from_url(self.MUSIC_LIST_URL)
+
+        if tracks:
+            self._tracks_cache[category] = (now, list(tracks))
+        return tracks
 
     async def get_categories(self):
+        now = time.monotonic()
+        if self._categories_cache and (now - self._categories_cache_time < 600):
+            return dict(self._categories_cache)
+
         counts = {}
         for track in await self.fetch_tracks():
             category = self._category_name(track.get("category"))
@@ -238,10 +256,12 @@ class JuiceVault(commands.Cog):
                     if dedicated:
                         counts[name] = len(dedicated)
                 except Exception as exc:
-                    print(f"[JuiceVault] category endpoint {name} failed: {exc}")
+                    pass
         if "cuts" in counts:
             counts["cut"] = counts.pop("cuts")
-        return counts
+        self._categories_cache = dict(counts)
+        self._categories_cache_time = now
+        return dict(counts)
 
     async def categories(self):
         return await self.get_categories()
@@ -477,12 +497,9 @@ class JuiceVault(commands.Cog):
                     await asyncio.sleep(0.2)
                     continue
                 if skip.is_set():
-                    count = max(1, min(int(self.skip_counts.get(gid, 1)), 100))
                     skip.clear()
                     self.skip_counts[gid] = 0
                     self.play_positions.pop(gid, None)
-                    for _ in range(min(count, len(self.queues.get(gid, [])))):
-                        self.queues[gid].pop(0)
                     continue
                 if seek.is_set():
                     seek.clear()
@@ -550,8 +567,8 @@ class JuiceVault(commands.Cog):
                 done, pending = await asyncio.wait({stop_task, finish_task, skip_task, seek_task}, return_when=asyncio.FIRST_COMPLETED)
                 for p in pending:
                     p.cancel()
-                explicit_skip = skip_task in done and skip.is_set()
-                explicit_seek = seek_task in done and seek.is_set()
+                explicit_skip = skip.is_set() or (skip_task in done)
+                explicit_seek = seek.is_set() or (seek_task in done)
                 elapsed = time.monotonic() - started_at
                 self.play_positions[gid] = start_offset + max(0.0, elapsed)
                 if explicit_skip or explicit_seek:
@@ -587,22 +604,22 @@ class JuiceVault(commands.Cog):
                     skip.clear()
                     self.play_positions.pop(gid, None)
                     count = max(1, min(int(self.skip_counts.pop(gid, 1)), 100))
-                    for _ in range(min(count, len(self.queues.get(gid, [])))):
-                        self.queues[gid].pop(0)
+                    # The skipped track is already finished. Drop additional tracks only if count > 1:
+                    if count > 1:
+                        for _ in range(min(count - 1, len(self.queues.get(gid, [])))):
+                            if self.queues.get(gid):
+                                self.queues[gid].pop(0)
                     self.failure_counts[gid] = 0
                     continue
-                if playback_error["value"] or elapsed < 4.0:
+                if playback_error["value"] is not None:
                     self.failure_counts[gid] = self.failure_counts.get(gid, 0) + 1
-                    if source_type == "external":
-                        print(f"[JuiceVault] external track ended early; returning to JuiceVault queue: {self._track_text(track)}")
-                        self.last_error[gid] = f"External track stopped after {elapsed:.1f}s; returning to JuiceVault."
-                    else:
+                    err = playback_error["value"]
+                    print(f"[JuiceVault] playback worker error on {self._track_text(track)}: {err}")
+                    self.last_error[gid] = f"Playback: {err}"
+                    if source_type != "external":
                         target = self.manual_queues if source_type == "manual" else self.queues
                         target.setdefault(gid, []).insert(0, track)
-                        self.last_error[gid] = f"FFmpeg: track stopped after {elapsed:.1f}s."
-                    await asyncio.sleep(30 if self.failure_counts[gid] >= self.MAX_CONSECUTIVE_FAILURES else self.FAILURE_BACKOFF_SECONDS)
-                    if self.failure_counts[gid] >= self.MAX_CONSECUTIVE_FAILURES:
-                        self.failure_counts[gid] = 0
+                    await asyncio.sleep(self.FAILURE_BACKOFF_SECONDS)
                     continue
                 self.play_positions.pop(gid, None)
                 self.failure_counts[gid] = 0
@@ -622,7 +639,7 @@ class JuiceVault(commands.Cog):
         guild = self.bot.get_guild(guild_id)
         voice = guild.voice_client if guild else None
         event = self.skip_events.get(guild_id)
-        if guild_id not in self.tasks or not event or not voice or not voice.is_playing() or event.is_set():
+        if guild_id not in self.tasks or not event or not voice or not (voice.is_playing() or voice.is_paused()) or event.is_set():
             return False
         self.skip_counts[guild_id] = max(1, min(int(count), 100))
         event.set()
@@ -731,6 +748,8 @@ class JuiceVault(commands.Cog):
             await ctx.send("The queue is empty.")
             return
         random.shuffle(queue)
+        self._cleanup_prefetch()
+        self._trigger_next_prefetch(ctx.guild.id)
         await ctx.send(f"🔀 Queue shuffled — `{len(queue)}` tracks.")
 
     @jv.command(name="categories")
@@ -810,6 +829,8 @@ class JuiceVault(commands.Cog):
 
     @jv.command(name="refresh")
     async def refresh(self, ctx):
+        self._categories_cache = None
+        self._tracks_cache.clear()
         category = await self.config.guild(ctx.guild).category()
         try:
             filtered = await self.fetch_tracks(category)

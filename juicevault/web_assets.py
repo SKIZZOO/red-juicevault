@@ -1164,6 +1164,15 @@ HTML_INDEX = """<!DOCTYPE html>
     let durationSeconds = 0;
     let searchMode = 'vault';
     let lockScreenActive = false;
+    let lastQueueChecksum = '';
+    let currentQueueData = { requested: [], upcoming: [] };
+    let currentSearchResults = [];
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+      });
+    }
 
     // Protocol check
     const isHttps = window.location.protocol === 'https:';
@@ -1208,21 +1217,26 @@ HTML_INDEX = """<!DOCTYPE html>
     function switchMobileNav(tabId) {
       document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
       const idx = ['player', 'queue', 'search', 'categories', 'shortcuts'].indexOf(tabId);
-      if (idx !== -1) document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+      if (idx !== -1) {
+        const btns = document.querySelectorAll('.nav-btn');
+        if (btns[idx]) btns[idx].classList.add('active');
+      }
 
       const playerWrap = document.querySelector('.card-player-wrap');
       const contentWrap = document.querySelector('.card-content-wrap');
 
       if (window.innerWidth < 860) {
         if (tabId === 'player') {
-          playerWrap.style.display = 'block';
-          contentWrap.style.display = 'none';
+          if (playerWrap) playerWrap.style.display = 'block';
+          if (contentWrap) contentWrap.style.display = 'none';
         } else {
-          playerWrap.style.display = 'none';
-          contentWrap.style.display = 'block';
+          if (playerWrap) playerWrap.style.display = 'none';
+          if (contentWrap) contentWrap.style.display = 'block';
+          if (tabId === 'queue') lastQueueChecksum = '';
           switchTab(tabId);
         }
       } else {
+        if (tabId === 'queue') lastQueueChecksum = '';
         switchTab(tabId);
       }
       if (navigator.vibrate) navigator.vibrate(8);
@@ -1464,7 +1478,11 @@ HTML_INDEX = """<!DOCTYPE html>
       updateMediaSession();
       syncLiveAudio();
       const qTab = document.getElementById('tab-queue');
-      if (qTab && qTab.classList.contains('active')) {
+      const actionSheet = document.getElementById('trackActionSheet');
+      const isModalOpen = actionSheet && actionSheet.classList.contains('active');
+      const queueKey = `${state.requested_size || 0}_${state.queue_size || 0}_${state.track ? (state.track.id || state.track.title) : ''}`;
+      if (qTab && qTab.classList.contains('active') && !isModalOpen && queueKey !== lastQueueChecksum) {
+        lastQueueChecksum = queueKey;
         loadQueue();
       }
     }
@@ -1548,12 +1566,21 @@ HTML_INDEX = """<!DOCTYPE html>
 
     let selectedQueueItem = null;
 
-    function openTrackModal(source, index, title, artist, length) {
-      selectedQueueItem = { source, index, title, artist, length };
+    function openTrackModalByIndex(source, index) {
+      const list = source === 'requested' ? currentQueueData.requested : currentQueueData.upcoming;
+      const t = list[index];
+      if (!t) return;
+      selectedQueueItem = {
+        source,
+        index,
+        title: t.title || 'Untitled Track',
+        artist: t.artist || 'Juice WRLD',
+        length: t.length || '—'
+      };
       const titleEl = document.getElementById('modalTrackTitle');
       const descEl = document.getElementById('modalTrackDesc');
-      if (titleEl) titleEl.innerText = title || 'Untitled Track';
-      if (descEl) descEl.innerText = `${artist || 'Juice WRLD'} • ${length || '—'}`;
+      if (titleEl) titleEl.innerText = selectedQueueItem.title;
+      if (descEl) descEl.innerText = `${selectedQueueItem.artist} • ${selectedQueueItem.length}`;
       const sheet = document.getElementById('trackActionSheet');
       if (sheet) sheet.classList.add('active');
       if (navigator.vibrate) navigator.vibrate(10);
@@ -1569,6 +1596,7 @@ HTML_INDEX = """<!DOCTYPE html>
       if (!selectedQueueItem) return;
       const { source, index, title } = selectedQueueItem;
       closeTrackModal();
+      lastQueueChecksum = '';
 
       try {
         if (actionType === 'remove') {
@@ -1609,42 +1637,36 @@ HTML_INDEX = """<!DOCTYPE html>
       try {
         const res = await fetch(`/api/queue?token=${encodeURIComponent(token)}`);
         const data = await res.json();
+        currentQueueData = {
+          requested: data.requested || [],
+          upcoming: data.upcoming || []
+        };
         const reqList = document.getElementById('reqList');
-        if (data.requested && data.requested.length > 0) {
-          reqList.innerHTML = data.requested.map((t, idx) => {
-            const title = (t.title || 'Untitled Track').replace(/'/g, "&#39;");
-            const artist = (t.artist || 'Juice WRLD').replace(/'/g, "&#39;");
-            const len = (t.length || '—').replace(/'/g, "&#39;");
-            return `
-            <div class="track-card" style="cursor:pointer;" onclick="openTrackModal('requested', ${idx}, '${title}', '${artist}', '${len}')">
+        if (currentQueueData.requested.length > 0) {
+          reqList.innerHTML = currentQueueData.requested.map((t, idx) => `
+            <div class="track-card" style="cursor:pointer;" onclick="openTrackModalByIndex('requested', ${idx})">
               <div class="track-meta-col">
-                <div class="track-name">${t.title || 'Untitled'}</div>
-                <div class="track-desc">${t.artist || 'Juice WRLD'} • ${t.length || '—'}</div>
+                <div class="track-name">${escapeHtml(t.title || 'Untitled')}</div>
+                <div class="track-desc">${escapeHtml(t.artist || 'Juice WRLD')} • ${escapeHtml(t.length || '—')}</div>
               </div>
               <span class="btn-badge" style="font-size:0.68rem; padding:3px 7px;">Manage</span>
             </div>
-          `;
-          }).join('');
+          `).join('');
         } else {
           reqList.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No requested tracks. Use Search to queue songs.</div>';
         }
 
         const upList = document.getElementById('upcomingList');
-        if (data.upcoming && data.upcoming.length > 0) {
-          upList.innerHTML = data.upcoming.slice(0, 30).map((t, idx) => {
-            const title = (t.title || 'Untitled Track').replace(/'/g, "&#39;");
-            const artist = (t.artist || 'Juice WRLD').replace(/'/g, "&#39;");
-            const len = (t.length || '—').replace(/'/g, "&#39;");
-            return `
-            <div class="track-card" style="cursor:pointer;" onclick="openTrackModal('upcoming', ${idx}, '${title}', '${artist}', '${len}')">
+        if (currentQueueData.upcoming.length > 0) {
+          upList.innerHTML = currentQueueData.upcoming.slice(0, 30).map((t, idx) => `
+            <div class="track-card" style="cursor:pointer;" onclick="openTrackModalByIndex('upcoming', ${idx})">
               <div class="track-meta-col">
-                <div class="track-name">${idx + 1}. ${t.title || 'Untitled'}</div>
-                <div class="track-desc">${t.artist || 'Juice WRLD'} • ${t.length || '—'}</div>
+                <div class="track-name">${idx + 1}. ${escapeHtml(t.title || 'Untitled')}</div>
+                <div class="track-desc">${escapeHtml(t.artist || 'Juice WRLD')} • ${escapeHtml(t.length || '—')}</div>
               </div>
               <span class="btn-badge" style="font-size:0.68rem; padding:3px 7px;">Manage</span>
             </div>
-          `;
-          }).join('');
+          `).join('');
         } else {
           upList.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Archive queue empty.</div>';
         }
@@ -1668,22 +1690,28 @@ HTML_INDEX = """<!DOCTYPE html>
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&source=${searchMode}&token=${encodeURIComponent(token)}`);
         const data = await res.json();
-        if (data.results && data.results.length > 0) {
-          resContainer.innerHTML = data.results.map((item) => `
+        currentSearchResults = data.results || [];
+        if (currentSearchResults.length > 0) {
+          resContainer.innerHTML = currentSearchResults.map((item, idx) => `
             <div class="track-card">
               <div class="track-meta-col">
-                <div class="track-name">${item.title || 'Untitled'}</div>
-                <div class="track-desc">${item.artist || 'Juice WRLD'} • ${item.length || '—'}</div>
+                <div class="track-name">${escapeHtml(item.title || 'Untitled')}</div>
+                <div class="track-desc">${escapeHtml(item.artist || 'Juice WRLD')} • ${escapeHtml(item.length || '—')}</div>
               </div>
-              <button class="btn-kinetic btn-badge" onclick='addToQueue(${JSON.stringify(item).replace(/'/g, "&#39;")})'>+ Add</button>
+              <button class="btn-kinetic btn-badge" onclick="addSearchResultByIndex(${idx})">+ Add</button>
             </div>
           `).join('');
         } else {
           resContainer.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No results found.</div>';
         }
       } catch (e) {
-        resContainer.innerHTML = `<div class="track-card" style="color: var(--danger); font-size: 0.8rem;">Search failed: ${e.message}</div>`;
+        resContainer.innerHTML = `<div class="track-card" style="color: var(--danger); font-size: 0.8rem;">Search failed: ${escapeHtml(e.message)}</div>`;
       }
+    }
+
+    function addSearchResultByIndex(idx) {
+      const item = currentSearchResults[idx];
+      if (item) addToQueue(item);
     }
 
     async function addToQueue(item) {

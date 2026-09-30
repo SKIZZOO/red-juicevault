@@ -656,6 +656,10 @@ class JuiceVaultWebRemote:
             if queue:
                 import random
                 random.shuffle(queue)
+                if hasattr(main, "_cleanup_prefetch"):
+                    main._cleanup_prefetch()
+                if hasattr(main, "_trigger_next_prefetch"):
+                    main._trigger_next_prefetch(gid)
         elif action_name == "repeat":
             if ui:
                 new_state = not ui.repeat_enabled.get(gid, False)
