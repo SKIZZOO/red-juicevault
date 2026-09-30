@@ -265,32 +265,37 @@ HTML_INDEX = """<!DOCTYPE html>
       height: 100%;
       object-fit: cover;
       display: block;
-      transition: transform 0.6s ease;
+      transition: transform 0.4s var(--spring), filter 0.3s ease;
     }
     .player-cover.playing {
-      transform: scale(1.02);
+      transform: scale(1.035);
+      filter: drop-shadow(0 0 16px var(--accent-glow));
     }
     /* Kinetic Soundwave Indicator */
     .soundwave-box {
       display: flex;
       align-items: flex-end;
       gap: 3px;
-      height: 14px;
+      height: 16px;
     }
     .wave-bar {
       width: 3px;
       height: 4px;
       background: var(--accent);
       border-radius: 2px;
-      transition: height 0.2s ease;
+      transition: height 0.15s ease, background-color 0.2s ease;
     }
-    .playing .wave-bar:nth-child(1) { animation: soundwave 1.1s infinite ease-in-out; }
-    .playing .wave-bar:nth-child(2) { animation: soundwave 0.8s infinite ease-in-out 0.2s; }
-    .playing .wave-bar:nth-child(3) { animation: soundwave 1.3s infinite ease-in-out 0.4s; }
-    .playing .wave-bar:nth-child(4) { animation: soundwave 0.9s infinite ease-in-out 0.1s; }
+    .playing .wave-bar {
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .playing .wave-bar:nth-child(1) { animation: soundwave 0.85s infinite ease-in-out; }
+    .playing .wave-bar:nth-child(2) { animation: soundwave 0.62s infinite ease-in-out 0.15s; }
+    .playing .wave-bar:nth-child(3) { animation: soundwave 1.05s infinite ease-in-out 0.35s; }
+    .playing .wave-bar:nth-child(4) { animation: soundwave 0.72s infinite ease-in-out 0.1s; }
+    .playing .wave-bar:nth-child(5) { animation: soundwave 0.9s infinite ease-in-out 0.25s; }
     @keyframes soundwave {
       0%, 100% { height: 4px; }
-      50% { height: 14px; }
+      50% { height: 16px; }
     }
     /* Track Info */
     .track-meta {
@@ -355,7 +360,7 @@ HTML_INDEX = """<!DOCTYPE html>
       touch-action: none;
       transition: height 0.15s ease;
     }
-    .scrubber-track:hover {
+    .scrubber-track:hover, .scrubber-track:active {
       height: 8px;
     }
     .scrubber-fill {
@@ -363,23 +368,27 @@ HTML_INDEX = """<!DOCTYPE html>
       background: linear-gradient(90deg, #9333ea, #c084fc);
       border-radius: 4px;
       width: 0%;
-      box-shadow: 0 0 10px var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
       position: relative;
+      will-change: width;
     }
     .scrubber-thumb {
-      width: 12px;
-      height: 12px;
-      background: #fff;
+      width: 14px;
+      height: 14px;
+      background: #ffffff;
+      border: 2px solid var(--accent);
       border-radius: 50%;
       position: absolute;
-      right: -6px;
+      right: -7px;
       top: 50%;
-      transform: translateY(-50%);
-      box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
-      opacity: 0;
-      transition: opacity 0.15s ease;
+      transform: translateY(-50%) scale(1);
+      box-shadow: 0 0 10px var(--accent-glow), 0 2px 5px rgba(0, 0, 0, 0.8);
+      opacity: 0.9;
+      transition: transform 0.15s var(--spring), opacity 0.15s ease;
     }
-    .scrubber-track:hover .scrubber-thumb {
+    .scrubber-track:hover .scrubber-thumb,
+    .scrubber-track:active .scrubber-thumb {
+      transform: translateY(-50%) scale(1.3);
       opacity: 1;
     }
     .scrubber-times {
@@ -406,16 +415,22 @@ HTML_INDEX = """<!DOCTYPE html>
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: transform 0.2s var(--spring), background 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease, color 0.15s ease;
     }
     .btn-circle:hover {
       background: var(--surface-elevated);
-      border-color: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.2);
       color: #fff;
+      transform: scale(1.06);
+    }
+    .btn-circle:active {
+      transform: scale(0.92);
     }
     .btn-circle.active {
       color: var(--accent);
       border-color: var(--accent);
       background: var(--accent-muted);
+      box-shadow: 0 0 12px var(--accent-muted);
     }
     .btn-play-pause {
       width: 60px;
@@ -425,10 +440,15 @@ HTML_INDEX = """<!DOCTYPE html>
       border: none;
       color: #fff;
       box-shadow: 0 6px 20px var(--accent-glow);
+      transition: transform 0.2s var(--spring), box-shadow 0.25s ease, background 0.2s ease;
     }
     .btn-play-pause:hover {
       background: linear-gradient(135deg, #b56bfa, #8b28e0);
-      box-shadow: 0 8px 24px var(--accent-glow);
+      box-shadow: 0 8px 28px var(--accent-glow);
+      transform: scale(1.08);
+    }
+    .btn-play-pause:active {
+      transform: scale(0.92);
     }
     .btn-action-md {
       width: 44px;
@@ -524,12 +544,17 @@ HTML_INDEX = """<!DOCTYPE html>
       background: rgba(255, 255, 255, 0.02);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      transition: background 0.15s ease, border-color 0.15s ease;
+      transition: transform 0.18s var(--spring), background 0.15s ease, border-color 0.15s ease, box-shadow 0.18s ease;
       gap: 12px;
     }
     .track-card:hover {
       background: rgba(255, 255, 255, 0.05);
-      border-color: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.16);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+    .track-card:active {
+      transform: scale(0.98);
     }
     .track-meta-col {
       flex: 1;
@@ -557,10 +582,15 @@ HTML_INDEX = """<!DOCTYPE html>
       font-weight: 600;
       padding: 5px 10px;
       border-radius: 6px;
+      transition: transform 0.15s var(--spring), background 0.15s ease, color 0.15s ease;
     }
     .btn-badge:hover {
       background: var(--accent);
       color: #fff;
+      transform: scale(1.05);
+    }
+    .btn-badge:active {
+      transform: scale(0.94);
     }
     /* Search Bar */
     .search-input-group {
@@ -601,14 +631,19 @@ HTML_INDEX = """<!DOCTYPE html>
       border-radius: var(--radius-md);
       padding: 14px;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: transform 0.2s var(--spring), background 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
       display: flex;
       flex-direction: column;
       gap: 4px;
     }
     .cat-item:hover {
       background: var(--surface-elevated);
-      border-color: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    }
+    .cat-item:active {
+      transform: scale(0.96);
     }
     .cat-item.active {
       border-color: var(--accent);
@@ -1167,6 +1202,9 @@ HTML_INDEX = """<!DOCTYPE html>
     let lastQueueChecksum = '';
     let currentQueueData = { requested: [], upcoming: [] };
     let currentSearchResults = [];
+    let isScrubbing = false;
+    let currentTrackKey = '';
+    let lastTickTime = performance.now();
 
     function escapeHtml(str) {
       return String(str || '').replace(/[&<>"']/g, function(m) {
@@ -1250,18 +1288,45 @@ HTML_INDEX = """<!DOCTYPE html>
       return `${m}:${s < 10 ? '0' : ''}${s}`;
     }
 
-    // Scrubber
+    // Scrubber interaction with full pointer tracking (touch & mouse)
     const progressBar = document.getElementById('progressBar');
-    progressBar.addEventListener('click', (e) => {
-      if (!durationSeconds || durationSeconds <= 0) return;
+
+    function getScrubTarget(e) {
+      if (!durationSeconds || durationSeconds <= 0) return 0;
       const rect = progressBar.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
-      const target = ratio * durationSeconds;
-      action('seek_to', { position: target });
-      currentElapsed = target;
+      const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      return ratio * durationSeconds;
+    }
+
+    progressBar.addEventListener('pointerdown', (e) => {
+      if (!durationSeconds || durationSeconds <= 0) return;
+      isScrubbing = true;
+      try { progressBar.setPointerCapture(e.pointerId); } catch (_) {}
+      currentElapsed = getScrubTarget(e);
       updateScrubberUI();
     });
+
+    progressBar.addEventListener('pointermove', (e) => {
+      if (isScrubbing) {
+        currentElapsed = getScrubTarget(e);
+        updateScrubberUI();
+      }
+    });
+
+    const endScrub = (e) => {
+      if (isScrubbing) {
+        isScrubbing = false;
+        try { progressBar.releasePointerCapture(e.pointerId); } catch (_) {}
+        const target = getScrubTarget(e);
+        currentElapsed = target;
+        updateScrubberUI();
+        action('seek_to', { position: target });
+      }
+    };
+
+    progressBar.addEventListener('pointerup', endScrub);
+    progressBar.addEventListener('pointercancel', () => { isScrubbing = false; });
 
     async function action(name, payload = {}) {
       if (navigator.vibrate) navigator.vibrate(10);
@@ -1315,7 +1380,8 @@ HTML_INDEX = """<!DOCTYPE html>
         return;
       }
       try {
-        const res = await fetch(`/api/playback/${name}?token=${encodeURIComponent(token)}`, {
+        const endpoint = (name === 'set_eq') ? 'eq' : name;
+        const res = await fetch(`/api/playback/${endpoint}?token=${encodeURIComponent(token)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -1447,11 +1513,25 @@ HTML_INDEX = """<!DOCTYPE html>
         document.getElementById('sourceBadge').innerText = t.is_external ? (t.source || 'External') : 'JuiceVault';
         document.getElementById('eqBadge').innerText = (state.effect || 'Flat').toUpperCase();
 
+        const trackKey = (t.id || t.title || 'track') + '_' + (t.length || t.duration_seconds || '');
         durationSeconds = t.duration_seconds || 0;
-        currentElapsed = t.position_seconds || 0;
+        const serverPos = typeof t.position_seconds === 'number' ? t.position_seconds : 0;
+
+        if (trackKey !== currentTrackKey) {
+          currentTrackKey = trackKey;
+          currentElapsed = serverPos;
+        } else if (!isScrubbing) {
+          // If playing the same track, do not reset to 0:00 during EQ changes or brief transitions
+          if (serverPos > 0 || currentElapsed < 1.0) {
+            if (Math.abs(currentElapsed - serverPos) > 1.5) {
+              currentElapsed = serverPos;
+            }
+          }
+        }
         document.getElementById('timeDuration').innerText = t.length || formatTime(durationSeconds);
         updateScrubberUI();
       } else {
+        currentTrackKey = '';
         document.getElementById('trackTitle').innerText = state.is_running ? 'Buffering archive…' : 'Player Inactive';
         document.getElementById('trackArtist').innerText = state.is_running ? 'Loading track' : 'Use Play to begin';
       }
@@ -1488,7 +1568,7 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     function updateScrubberUI() {
-      document.getElementById('timeElapsed').innerText = formatTime(currentElapsed);
+      document.getElementById('timeElapsed').innerText = formatTime(Math.floor(currentElapsed));
       if (durationSeconds > 0) {
         const pct = Math.min(100, Math.max(0, (currentElapsed / durationSeconds) * 100));
         document.getElementById('progressFill').style.width = pct + '%';
@@ -1497,15 +1577,32 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
-    // Local tick
-    clearInterval(progressTimer);
-    progressTimer = setInterval(() => {
-      if (currentState && currentState.is_playing && durationSeconds > 0) {
-        currentElapsed += 1;
-        if (currentElapsed > durationSeconds) currentElapsed = durationSeconds;
+    // High-precision 60fps liquid smooth progress ticker matching live playback
+    function progressLoop() {
+      const now = performance.now();
+      const dt = (now - lastTickTime) / 1000;
+      lastTickTime = now;
+
+      if (!isScrubbing && currentState && currentState.is_playing && durationSeconds > 0) {
+        if (liveStreamActive) {
+          const audio = document.getElementById('liveAudio');
+          if (audio && !audio.paused && audio.currentTime > 0) {
+            if (Math.abs(audio.currentTime - currentElapsed) < 3.0) {
+              currentElapsed = audio.currentTime;
+            } else {
+              currentElapsed = Math.min(durationSeconds, currentElapsed + dt);
+            }
+          } else {
+            currentElapsed = Math.min(durationSeconds, currentElapsed + dt);
+          }
+        } else {
+          currentElapsed = Math.min(durationSeconds, currentElapsed + dt);
+        }
         updateScrubberUI();
       }
-    }, 1000);
+      requestAnimationFrame(progressLoop);
+    }
+    requestAnimationFrame(progressLoop);
 
     // WebSocket auto-detect protocol
     function connectWS() {

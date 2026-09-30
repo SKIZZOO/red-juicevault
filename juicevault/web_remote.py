@@ -161,6 +161,7 @@ class JuiceVaultWebRemote:
                 add_route("/api/playback/shuffle", self._api_shuffle)
                 add_route("/api/playback/repeat", self._api_repeat)
                 add_route("/api/playback/eq", self._api_eq)
+                add_route("/api/playback/set_eq", self._api_eq)
 
             app.router.add_post("/api/category", self._api_category)
             app.router.add_get("/api/queue", self._api_queue)
@@ -457,10 +458,13 @@ class JuiceVaultWebRemote:
             return {"is_running": False, "is_playing": False, "is_paused": False}
 
         gid = guild.id
-        is_running = gid in main.tasks
+        is_running = bool(gid in main.tasks and not main.tasks[gid].done())
         voice = guild.voice_client
         is_playing = bool(voice and voice.is_playing())
         is_paused = bool(voice and voice.is_paused())
+        is_seeking = bool(gid in getattr(main, "seek_targets", {}))
+        if is_seeking and is_running and not is_paused:
+            is_playing = True
         track = main.current.get(gid)
         category = await main.config.guild(guild).category()
 
@@ -469,10 +473,13 @@ class JuiceVaultWebRemote:
         position_sec = 0.0
         if track:
             duration_sec = main._parse_duration(track.get("length")) or 0.0
-            base = float(main.play_positions.get(gid, 0.0))
-            started = getattr(voice, "_jv_started_at", None)
-            if started is not None and is_playing and not is_paused:
-                base += max(0.0, time.monotonic() - started)
+            if is_seeking:
+                base = float(main.seek_targets[gid])
+            else:
+                base = float(main.play_positions.get(gid, 0.0))
+                started = getattr(voice, "_jv_started_at", None)
+                if started is not None and is_playing and not is_paused:
+                    base += max(0.0, time.monotonic() - started)
             position_sec = min(base, duration_sec) if duration_sec > 0 else base
 
         cover_url = None
@@ -642,15 +649,10 @@ class JuiceVaultWebRemote:
                         voice.stop()
         elif action_name == "seek":
             delta = float(payload.get("delta", 10))
-            await main._request_seek(gid, delta)
+            await main._request_seek(gid, delta=delta)
         elif action_name == "seek_to":
             pos = float(payload.get("position", 0))
-            base = float(main.play_positions.get(gid, 0.0))
-            started = getattr(voice, "_jv_started_at", None)
-            if started is not None and voice and voice.is_playing() and not voice.is_paused():
-                base += max(0.0, time.monotonic() - started)
-            delta = pos - base
-            await main._request_seek(gid, delta)
+            await main._request_seek(gid, target_position=pos)
         elif action_name == "shuffle":
             queue = main.queues.get(gid)
             if queue:
@@ -794,6 +796,12 @@ class JuiceVaultWebRemote:
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
         delta = 10.0
+        position = None
+        if request.query.get("position") is not None:
+            try:
+                position = float(request.query.get("position"))
+            except ValueError:
+                pass
         if request.query.get("delta"):
             try:
                 delta = float(request.query.get("delta"))
@@ -802,11 +810,14 @@ class JuiceVaultWebRemote:
         elif request.can_read_body:
             try:
                 data = await request.json()
-                delta = float(data.get("delta", 10.0))
+                if "position" in data:
+                    position = float(data.get("position"))
+                if "delta" in data:
+                    delta = float(data.get("delta"))
             except Exception:
                 pass
         main = self._get_main_cog()
-        res = await main._request_seek(guild.id, delta)
+        res = await main._request_seek(guild.id, delta=delta, target_position=position)
         await self.broadcast_state(guild.id)
         return web.json_response({"success": res is not None, "target": res})
 

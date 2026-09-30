@@ -54,6 +54,7 @@ class JuiceVault(commands.Cog):
         self.failure_counts = {}
         self.seek_events = {}
         self.seek_targets = {}
+        self.pause_after_seek = {}
         self.play_positions = {}
         self.effects = {}
         self.web_remote = None
@@ -317,6 +318,10 @@ class JuiceVault(commands.Cog):
                 self._prefetch_tasks.pop(url, None)
 
     async def _download_track(self, track):
+        cached = track.get("_cached_file")
+        if cached and os.path.isfile(cached) and os.path.getsize(cached) > 1024:
+            return cached
+
         url = track.get("url")
         skip_cache = track.get("_skip_cache", False)
         if not skip_cache and url:
@@ -506,7 +511,7 @@ class JuiceVault(commands.Cog):
                     target = max(0.0, float(self.seek_targets.pop(gid, 0.0)))
                     current = self.current.get(gid)
                     if current:
-                        self.manual_queues.setdefault(gid, []).insert(0, dict(current, _jv_seek_copy=True))
+                        self.manual_queues.setdefault(gid, []).insert(0, dict(current, _jv_seek_copy=True, _cached_file=self.current_files.get(gid)))
                     self.play_positions[gid] = target
                     continue
                 if self.manual_queues.get(gid):
@@ -516,7 +521,8 @@ class JuiceVault(commands.Cog):
                     track = self.queues[gid].pop(0)
                     source_type = "normal"
                 self.current[gid] = track
-                start_offset = max(0.0, float(self.play_positions.pop(gid, 0.0)))
+                start_offset = max(0.0, float(self.play_positions.get(gid, 0.0)))
+                self.play_positions[gid] = start_offset
                 duration = self._parse_duration(track.get("length"))
                 if duration is not None:
                     start_offset = min(start_offset, max(0.0, duration - 0.25))
@@ -543,6 +549,8 @@ class JuiceVault(commands.Cog):
                     voice.play(source, after=after)
                     voice._jv_started_at = time.monotonic()
                     self.play_positions[gid] = start_offset
+                    if self.pause_after_seek.pop(gid, False) and voice.is_playing():
+                        voice.pause()
                     self._trigger_next_prefetch(gid)
                 except Exception as exc:
                     self.last_error[gid] = f"Playback: {type(exc).__name__}: {exc}"
@@ -583,9 +591,13 @@ class JuiceVault(commands.Cog):
                         log_file.close()
                     except OSError:
                         pass
-                self.current_files.pop(gid, None)
-                self._remove_file(local_path)
+                if not explicit_seek:
+                    self.current_files.pop(gid, None)
+                    self._remove_file(local_path)
                 if stop.is_set() or self.tasks.get(gid) is not task:
+                    if explicit_seek:
+                        self.current_files.pop(gid, None)
+                        self._remove_file(local_path)
                     return
                 if explicit_seek:
                     seek.clear()
@@ -598,7 +610,7 @@ class JuiceVault(commands.Cog):
                     target = max(0.0, target)
                     self.play_positions[gid] = target
                     if current:
-                        self.manual_queues.setdefault(gid, []).insert(0, dict(current, _jv_seek_copy=True))
+                        self.manual_queues.setdefault(gid, []).insert(0, dict(current, _jv_seek_copy=True, _cached_file=local_path))
                     continue
                 if explicit_skip:
                     skip.clear()
@@ -646,7 +658,7 @@ class JuiceVault(commands.Cog):
         voice.stop()
         return True
 
-    async def _request_seek(self, guild_id, delta):
+    async def _request_seek(self, guild_id, delta=0.0, target_position=None):
         guild = self.bot.get_guild(guild_id)
         voice = guild.voice_client if guild else None
         event = self.seek_events.get(guild_id)
@@ -657,15 +669,22 @@ class JuiceVault(commands.Cog):
             return None
         if event.is_set():
             return None
-        base = float(self.play_positions.get(guild_id, 0.0))
-        started = getattr(voice, "_jv_started_at", None)
-        if started is not None and voice.is_playing() and not voice.is_paused():
-            base += max(0.0, time.monotonic() - started)
         duration = self._parse_duration(current.get("length"))
-        target = max(0.0, base + float(delta))
+        if target_position is not None:
+            target = max(0.0, float(target_position))
+        else:
+            base = float(self.play_positions.get(guild_id, 0.0))
+            started = getattr(voice, "_jv_started_at", None)
+            if started is not None and voice.is_playing() and not voice.is_paused():
+                base += max(0.0, time.monotonic() - started)
+            target = max(0.0, base + float(delta))
         if duration is not None:
             target = min(target, max(0.0, duration - 0.25))
+        if not hasattr(self, "pause_after_seek"):
+            self.pause_after_seek = {}
+        self.pause_after_seek[guild_id] = bool(voice.is_paused())
         self.seek_targets[guild_id] = target
+        self.play_positions[guild_id] = target
         event.set()
         voice.stop()
         return target
