@@ -51,6 +51,8 @@ class JuiceVaultWebRemote:
             port=8088,
             token=None,
             custom_url=None,
+            ssl_cert=None,
+            ssl_key=None,
             require_auth=True,
         )
         self.runner = None
@@ -108,14 +110,16 @@ class JuiceVaultWebRemote:
 
         host = await self.config.host()
         port = await self.config.port()
+        cert_path = await self.config.ssl_cert()
+        proto = "https" if cert_path else "http"
         local_ip = get_local_ip() if host in ("0.0.0.0", "") else host
 
         if prefer_public:
             public_ip = await self.get_public_ip()
             if public_ip:
-                return f"http://{public_ip}:{port}/{token_param}"
+                return f"{proto}://{public_ip}:{port}/{token_param}"
 
-        return f"http://{local_ip}:{port}/{token_param}"
+        return f"{proto}://{local_ip}:{port}/{token_param}"
 
     async def start_server(self):
         """Start or restart the aiohttp web runner and TCP site."""
@@ -159,13 +163,30 @@ class JuiceVaultWebRemote:
 
             host = await self.config.host()
             port = await self.config.port()
+            cert_path = await self.config.ssl_cert()
+            key_path = await self.config.ssl_key()
+
+            ssl_ctx = None
+            proto = "http"
+            if cert_path and key_path:
+                if os.path.isfile(cert_path) and os.path.isfile(key_path):
+                    try:
+                        import ssl
+                        ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                        ssl_ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
+                        proto = "https"
+                        print(f"[JuiceVault Web Remote] Loaded SSL certificate from {cert_path}")
+                    except Exception as exc:
+                        print(f"[JuiceVault Web Remote] Failed to load SSL context: {exc}")
+                else:
+                    print(f"[JuiceVault Web Remote] Warning: SSL cert/key file path not found ({cert_path}, {key_path})")
 
             self.runner = web.AppRunner(app)
             await self.runner.setup()
-            self.site = web.TCPSite(self.runner, host, port)
+            self.site = web.TCPSite(self.runner, host, port, ssl_context=ssl_ctx)
             try:
                 await self.site.start()
-                print(f"[JuiceVault Web Remote] Server running on http://{host}:{port}")
+                print(f"[JuiceVault Web Remote] Server running on {proto}://{host}:{port}")
             except Exception as exc:
                 print(f"[JuiceVault Web Remote] Failed to bind to {host}:{port}: {exc}")
 
@@ -797,12 +818,14 @@ class JuiceVaultWebRemote:
         port = await self.config.port()
         host = await self.config.host()
         custom = await self.config.custom_url()
+        cert_path = await self.config.ssl_cert()
+        proto = "https" if cert_path else "http"
         local_ip = get_local_ip() if host in ("0.0.0.0", "") else host
         public_ip = await self.get_public_ip()
 
         token_param = f"?token={quote(token)}" if token else ""
-        local_url = f"http://{local_ip}:{port}/{token_param}"
-        public_url = f"http://{public_ip}:{port}/{token_param}" if public_ip else None
+        local_url = f"{proto}://{local_ip}:{port}/{token_param}"
+        public_url = f"{proto}://{public_ip}:{port}/{token_param}" if public_ip else None
         custom_url = f"{custom.rstrip('/')}/{token_param}" if custom else None
 
         primary_url = custom_url or public_url or local_url

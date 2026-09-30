@@ -820,6 +820,42 @@ class JuiceVault(commands.Cog):
         else:
             await ctx.send("JuiceVault Web Remote is not loaded.")
 
+    @remote.command(name="ssl")
+    async def remote_ssl(self, ctx, cert_path: str = None, key_path: str = None):
+        """Configure SSL certificate for direct HTTPS, or pass 'clear' to disable."""
+        if getattr(self, "web_remote", None):
+            if cert_path and cert_path.lower() == "clear":
+                await self.web_remote.config.ssl_cert.set(None)
+                await self.web_remote.config.ssl_key.set(None)
+                await self.web_remote.start_server()
+                await ctx.send("✅ SSL certificate cleared. Running plain HTTP.")
+                return
+
+            if not cert_path or not key_path:
+                cert = await self.web_remote.config.ssl_cert()
+                key = await self.web_remote.config.ssl_key()
+                if cert and key:
+                    await ctx.send(f"🔒 SSL currently active:\n• Cert: `{cert}`\n• Key: `{key}`\nUse `4jv remote ssl clear` to reset.")
+                else:
+                    await ctx.send("🔒 SSL not configured. Provide paths: `4jv remote ssl <cert_path> <key_path>` or use a Cloudflare Tunnel: `4jv remote url https://<your-tunnel>`")
+                return
+
+            import os
+            if not os.path.isfile(cert_path):
+                await ctx.send(f"❌ Certificate file not found: `{cert_path}`")
+                return
+            if not os.path.isfile(key_path):
+                await ctx.send(f"❌ Private key file not found: `{key_path}`")
+                return
+
+            await self.web_remote.config.ssl_cert.set(cert_path)
+            await self.web_remote.config.ssl_key.set(key_path)
+            await self.web_remote.start_server()
+            port = await self.web_remote.config.port()
+            await ctx.send(f"✅ SSL configured! Restarted server with HTTPS on port `{port}`.")
+        else:
+            await ctx.send("JuiceVault Web Remote is not loaded.")
+
     @remote.command(name="restart")
     async def remote_restart(self, ctx):
         """Restart the web remote server."""
