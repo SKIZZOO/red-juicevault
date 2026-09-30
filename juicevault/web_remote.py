@@ -76,7 +76,27 @@ class JuiceVaultWebRemote:
         if enabled:
             await self.start_server()
 
-    async def get_remote_url(self, with_token=True):
+    async def get_public_ip(self):
+        """Fetch the public WAN IP of the bot host to allow remote mobile connections."""
+        if getattr(self, "_cached_public_ip", None):
+            return self._cached_public_ip
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as sess:
+                for endpoint in ("https://api.ipify.org", "https://icanhazip.com", "https://ifconfig.me/ip"):
+                    try:
+                        async with sess.get(endpoint) as r:
+                            if r.status == 200:
+                                text = (await r.text()).strip()
+                                if text and "." in text and not text.startswith(("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.", "172.2", "172.3", "127.")):
+                                    self._cached_public_ip = text
+                                    return text
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        return None
+
+    async def get_remote_url(self, with_token=True, prefer_public=True):
         """Return the URL used to access the web remote on mobile."""
         custom = await self.config.custom_url()
         token = await self.config.token() if with_token else ""
@@ -88,8 +108,14 @@ class JuiceVaultWebRemote:
 
         host = await self.config.host()
         port = await self.config.port()
-        ip = get_local_ip() if host in ("0.0.0.0", "") else host
-        return f"http://{ip}:{port}/{token_param}"
+        local_ip = get_local_ip() if host in ("0.0.0.0", "") else host
+
+        if prefer_public:
+            public_ip = await self.get_public_ip()
+            if public_ip:
+                return f"http://{public_ip}:{port}/{token_param}"
+
+        return f"http://{local_ip}:{port}/{token_param}"
 
     async def start_server(self):
         """Start or restart the aiohttp web runner and TCP site."""
@@ -767,21 +793,37 @@ class JuiceVaultWebRemote:
 
 
     async def send_remote_embed(self, ctx):
-        url = await self.get_remote_url(with_token=True)
         token = await self.config.token()
         port = await self.config.port()
-        qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&format=png&data={quote(url)}"
+        host = await self.config.host()
+        custom = await self.config.custom_url()
+        local_ip = get_local_ip() if host in ("0.0.0.0", "") else host
+        public_ip = await self.get_public_ip()
+
+        token_param = f"?token={quote(token)}" if token else ""
+        local_url = f"http://{local_ip}:{port}/{token_param}"
+        public_url = f"http://{public_ip}:{port}/{token_param}" if public_ip else None
+        custom_url = f"{custom.rstrip('/')}/{token_param}" if custom else None
+
+        primary_url = custom_url or public_url or local_url
+        qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&format=png&data={quote(primary_url)}"
 
         vc = ctx.guild.voice_client if ctx.guild else None
         vc_name = vc.channel.name if vc and vc.channel else "Not connected"
 
+        lines = [
+            "Control playback, queues, EQ, search, and lock screen media directly from your phone!\n",
+            f"🔗 **Primary Phone Link:**\n[**Open JuiceVault Remote**]({primary_url})\n",
+        ]
+        if public_url and local_url != public_url and not custom_url:
+            lines.append(f"🌐 **Public IP:** `http://{public_ip}:{port}/`")
+            lines.append(f"🏠 **Local/Subnet IP:** `http://{local_ip}:{port}/`\n")
+
+        lines.append("📷 **Scan the QR Code** with your phone's camera:")
+
         embed = discord.Embed(
             title="📱 JuiceVault Mobile Web Remote",
-            description=(
-                f"Control playback, queues, EQ, search, and lock screen media directly from your phone!\n\n"
-                f"🔗 **Direct Phone Link:**\n[**Open JuiceVault Remote**]({url})\n\n"
-                f"📷 **Scan the QR Code** with your phone's camera to connect immediately:"
-            ),
+            description="\n".join(lines),
             color=discord.Color.from_rgb(155, 89, 182),
         )
         embed.set_image(url=qr_api_url)
@@ -789,11 +831,11 @@ class JuiceVaultWebRemote:
         embed.add_field(name="🌐 Port", value=f"`{port}`", inline=True)
         embed.add_field(name="🔊 Voice Channel", value=f"`{vc_name}`", inline=True)
         embed.add_field(
-            name="💡 Quick Tips",
+            name="⚠️ Connection Timed Out?",
             value=(
-                "• **Add to Home Screen:** In Safari or Chrome on your phone, tap 'Add to Home Screen' for a native app feel!\n"
-                "• **Lock Screen Controls:** Tap 'Enable' in the web remote to control playback from your phone's lock screen & control center.\n"
-                "• **iOS Shortcuts:** Open the Shortcuts tab in the remote for one-tap Siri actions!"
+                f"• **On a VPS:** Make sure port `{port}` is open in your firewall (`sudo ufw allow {port}/tcp` or cloud security group).\n"
+                f"• **On Home Wi-Fi:** Your phone and bot host must be on the same Wi-Fi, or use a tunnel.\n"
+                f"• **Custom Domain / Tunnel:** Set a Cloudflare Tunnel or domain with: `4jv remote url <url>`"
             ),
             inline=False,
         )
