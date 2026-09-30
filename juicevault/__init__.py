@@ -5,6 +5,7 @@ from .ui_patch import patch_ui
 from .eq_ui_patch import patch_eq_controls
 from .voice_patch import patch_voice_location
 from .external_search_patch import patch_external_search
+from .web_remote import patch_web_remote
 
 
 patch_juicevault_class(JuiceVault)
@@ -31,6 +32,7 @@ JuiceVaultUI._make_embed = _archive_make_embed
 patch_eq_controls()
 patch_voice_location()
 patch_external_search()
+patch_web_remote(JuiceVault, JuiceVaultUI)
 
 
 async def setup(bot):

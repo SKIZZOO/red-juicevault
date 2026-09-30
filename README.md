@@ -21,8 +21,12 @@ The JuiceVault control panel provides a live Now Playing display with playback s
 - 🔀 **Shuffle** — randomize the normal queue.
 - 🔁 **Repeat** — keep the current playback flow repeating.
 - 🎚️ **Audio effects / EQ** — Flat, Bass Boost, 8D Audio, Nightcore, Slowed, Echo, Wide, and Virtual Bass.
+- 📱 **Mobile Web Remote & PWA** — control playback, queues, and audio EQ directly from any mobile phone browser or install it as a standalone home-screen app.
+- 📷 **Instant QR Code pairing** — scan a QR code from Discord with your phone camera to connect immediately with secure token authentication.
+- 🔒 **Phone Lock Screen Media Controls** — MediaSession API integration allows skipping, pausing, and seeking directly from your phone's lock screen, dynamic island, or notification center.
+- ⚡ **REST API & iOS Shortcuts** — pre-built HTTP endpoints to control playback with Siri, Apple Shortcuts, Android widgets, or Tasker.
 - 🎶 **Lyrics button** — opens a Genius search for the currently playing artist and track.
-- 🎨 **Discord control panel** — interactive buttons for playback, search, categories, EQ, shuffle, repeat, and seeking.
+- 🎨 **Discord control panel** — interactive buttons for playback, search, categories, EQ, shuffle, repeat, 10-second seeking, and 📱 Remote.
 - 🔊 **Voice channel awareness** — shows the current voice channel and does not force the bot back when it is manually moved to another channel.
 - 🖼️ **Album artwork** — displays JuiceVault artwork when available; external tracks do not attempt JuiceVault cover lookups.
 - 🔗 **Direct track links** — the currently playing JuiceVault track links directly to its archive page.
@@ -45,6 +49,17 @@ The examples below use the default Red prefix `[p]`.
 [p]jv status
 ```
 
+### Mobile Remote & REST API
+
+```text
+[p]jv remote              # Displays mobile URL, auth token, and scannable QR Code
+[p]jv remote port <port>  # Change web server port (default: 8088)
+[p]jv remote token [tok]  # View or set secret auth token
+[p]jv remote url [url]    # Set custom domain / tunnel URL (e.g. Cloudflare / Tailscale)
+[p]jv remote restart      # Restart the web remote server
+[p]jv remote toggle       # Enable / disable the web remote server
+```
+
 ### Library & search
 
 ```text
@@ -61,7 +76,17 @@ The examples below use the default Red prefix `[p]`.
 [p]jvpanel
 ```
 
-The panel provides interactive controls for Category, Search, Refresh, Lyrics, EQ, Play/Stop, Pause/Resume, Previous, Next, Repeat, Shuffle, and 10-second seeking.
+The panel provides interactive controls for Category, Search, Refresh, Lyrics, EQ, Play/Stop, Pause/Resume, Previous, Next, Repeat, Shuffle, 10-second seeking, and a private **📱 Remote** button.
+
+## Mobile Phone Control (Web Remote & PWA)
+
+JuiceVault includes a built-in mobile web app and REST API powered by `aiohttp`:
+
+1. Run `[p]jv remote` in Discord (or click **📱 Remote** on the `[p]jvpanel`).
+2. Scan the QR code with your phone camera or click the link.
+3. **Add to Home Screen**: In Safari (iOS) or Chrome (Android), tap Share / Menu -> *Add to Home Screen* to use it as a fullscreen app!
+4. **Lock Screen Controls**: Tap *Enable* in the remote banner to activate background audio sync — now you can pause, skip, and see what's playing from your phone's lock screen and Apple Watch / Bluetooth controls.
+5. **iOS Shortcuts / Siri**: In the *Shortcuts* tab of the web app, copy one-tap webhook URLs into the Apple Shortcuts app ("Get Contents of URL") to control music with Siri or widgets!
 
 ## Installation
 
