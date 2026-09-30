@@ -173,6 +173,9 @@ class JuiceVaultWebRemote:
             app.router.add_post("/api/queue/add", self._api_queue_add)
             app.router.add_get("/api/shortcuts", self._api_shortcuts)
             app.router.add_get("/api/stream", self._api_stream)
+            app.router.add_get("/api/channels", self._api_channels)
+            app.router.add_get("/api/lyrics", self._api_lyrics)
+            app.router.add_post("/api/lyrics/send", self._api_lyrics_send)
 
             host = await self.config.host()
             port = await self.config.port()
@@ -1121,6 +1124,81 @@ class JuiceVaultWebRemote:
                 {"name": "Shuffle Queue", "url": f"{base}/api/playback/shuffle{t}"},
             ]
         })
+
+    async def _api_channels(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"channels": []})
+        channels = [
+            {"id": str(c.id), "name": c.name}
+            for c in guild.text_channels
+            if c.permissions_for(guild.me).send_messages and c.permissions_for(guild.me).embed_links
+        ]
+        return web.json_response({"channels": channels})
+
+    async def _api_lyrics(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        main = self._get_main_cog()
+        track = main.current.get(guild.id) if guild else None
+        if not track:
+            return web.json_response({"error": "No track currently playing"}, status=404)
+
+        from .lyrics import fetch_lyrics
+        title = str(track.get("title") or track.get("name") or track.get("file_name") or "Unknown Track").strip()
+        artist = str(track.get("artist") or "Juice WRLD").strip()
+        data = await fetch_lyrics(title, artist, main.session)
+        return web.json_response({
+            "title": data.get("title"),
+            "artist": data.get("artist"),
+            "lyrics": data.get("lyrics"),
+            "url": data.get("url"),
+            "found": bool(data.get("found")),
+        })
+
+    async def _api_lyrics_send(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"error": "No active voice guild found"}, status=404)
+        data = await request.json()
+        channel_id = data.get("channel_id")
+        channel = guild.get_channel(int(channel_id)) if channel_id else None
+        if not channel:
+            return web.json_response({"error": "Channel not found"}, status=404)
+
+        main = self._get_main_cog()
+        track = main.current.get(guild.id)
+        if not track:
+            return web.json_response({"error": "No track currently playing"}, status=400)
+
+        from .lyrics import fetch_lyrics, build_lyrics_embeds, clean_song_title
+        title = str(track.get("title") or track.get("name") or track.get("file_name") or "Unknown Track").strip()
+        artist = str(track.get("artist") or "Juice WRLD").strip()
+        cover_url = f"https://api.juicevault.xyz/cdn/music/covers/{track.get('id')}"
+
+        lyrics_data = await fetch_lyrics(title, artist, main.session)
+        ui = self._get_ui_cog()
+        color = getattr(ui, "PANEL_COLOR", 0xFF2D55) if ui else 0xFF2D55
+
+        embeds = build_lyrics_embeds(
+            title=title,
+            artist=artist,
+            lyrics=lyrics_data.get("lyrics"),
+            genius_url=lyrics_data.get("url"),
+            cover_url=cover_url,
+            color=color,
+        )
+        try:
+            for emb in embeds:
+                await channel.send(embed=emb)
+            return web.json_response({"success": True, "message": f"Lyrics for '{clean_song_title(title)}' sent to #{channel.name}!"})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
 
     async def _api_stream(self, request):
         """Stream current playing audio track live to the browser with Range request support."""

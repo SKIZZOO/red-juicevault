@@ -1331,6 +1331,72 @@ HTML_INDEX = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- Lyrics Options Sheet (Send in Channel / Give Me Link) -->
+  <div class="sheet-backdrop" id="lyricsSheet" onclick="if(event.target===this) closeLyricsModal()">
+    <div class="sheet-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+          <div class="cat-icon-badge" style="width:38px; height:38px; border-radius:10px; background:var(--accent-muted); border-color:var(--border-accent); color:var(--accent);">
+            <svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </div>
+          <div style="min-width:0;">
+            <div id="lyricsModalTitle" style="font-weight:700; font-size:0.95rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Lyrics Options</div>
+            <div id="lyricsModalDesc" style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Choose an option for the lyrics</div>
+          </div>
+        </div>
+        <button class="btn-kinetic btn-circle btn-action-sm" onclick="closeLyricsModal()">
+          <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <!-- Option 1: Send in a Discord Channel -->
+        <div class="ui-card" style="padding:14px; background:var(--surface); border:1px solid var(--border);">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <svg class="icon-svg" style="width:16px;height:16px;color:var(--accent);" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            <span style="font-weight:700; font-size:0.88rem; color:#fff;">Option 1: Send in a Channel</span>
+          </div>
+          <p style="font-size:0.74rem; color:var(--text-sub); margin-bottom:10px;">Select which Discord text channel to post the lyrics into:</p>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="lyricsChannelSelect" style="flex:1; background:#0d0d12; color:#fff; border:1px solid var(--border); border-radius:var(--radius-md); padding:8px 12px; font-size:0.82rem; font-family:inherit; outline:none;">
+              <option value="">Loading channels…</option>
+            </select>
+            <button class="btn-kinetic btn-primary" onclick="sendLyricsToSelectedChannel()" style="padding:8px 14px; white-space:nowrap;">
+              <span>Send Lyrics</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Option 2: Give Me the Link -->
+        <div class="ui-card" style="padding:14px; background:var(--surface); border:1px solid var(--border);">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <svg class="icon-svg" style="width:16px;height:16px;color:var(--accent);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span style="font-weight:700; font-size:0.88rem; color:#fff;">Option 2: Give Me the Link</span>
+          </div>
+          <p style="font-size:0.74rem; color:var(--text-sub); margin-bottom:10px;">Open the official Genius lyrics page for this track:</p>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-kinetic btn-badge" id="btnGeniusLink" onclick="openGeniusDirectLink()" style="flex:1; justify-content:center; padding:10px 14px; font-size:0.82rem;">
+              <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              <span>Open on Genius</span>
+            </button>
+            <button class="btn-kinetic btn-badge" onclick="copyGeniusLink()" style="padding:10px 12px;" title="Copy link to clipboard">
+              <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Lyrics In-Player Preview Box -->
+        <div class="ui-card" id="lyricsPreviewBox" style="padding:14px; background:#0a0a0f; border:1px solid rgba(255,255,255,0.06); max-height:220px; overflow-y:auto; display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-size:0.72rem; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:0.04em;">Lyrics Preview</span>
+            <span id="lyricsSourceBadge" style="font-size:0.65rem; color:var(--text-sub); font-family:'JetBrains Mono',monospace;">Genius</span>
+          </div>
+          <pre id="lyricsPreviewText" style="font-family:inherit; font-size:0.8rem; color:var(--text-muted); line-height:1.5; white-space:pre-wrap; margin:0;"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <audio id="liveAudio" preload="auto" playsinline style="display:none;"></audio>
 
   <script>
@@ -2323,11 +2389,114 @@ HTML_INDEX = """<!DOCTYPE html>
       action('set_eq', { effect });
     }
 
-    function openLyrics() {
-      if (!currentState || !currentState.track) return;
+    let cachedLyricsUrl = null;
+    let cachedServerChannels = [];
+
+    async function openLyrics() {
+      if (!currentState || !currentState.track) {
+        showToast('No track is currently playing');
+        return;
+      }
       const t = currentState.track;
-      const q = encodeURIComponent(`${t.artist || ''} ${t.title || ''}`.trim());
-      window.open(`https://genius.com/search?q=${q}`, '_blank');
+      const title = t.title || 'Untitled Track';
+      const artist = t.artist || 'Juice WRLD';
+
+      document.getElementById('lyricsModalTitle').innerText = title;
+      document.getElementById('lyricsModalDesc').innerText = `${artist} • Lyrics Options`;
+
+      const q = encodeURIComponent(`${artist} ${title}`.trim());
+      cachedLyricsUrl = `https://genius.com/search?q=${q}`;
+
+      const previewBox = document.getElementById('lyricsPreviewBox');
+      const previewText = document.getElementById('lyricsPreviewText');
+      if (previewBox) previewBox.style.display = 'none';
+      if (previewText) previewText.innerText = 'Loading lyrics…';
+
+      document.getElementById('lyricsSheet').classList.add('active');
+
+      loadServerChannels();
+
+      try {
+        const res = await fetch(`/api/lyrics?token=${encodeURIComponent(token)}`);
+        if (res.ok) {
+          const d = await res.json();
+          if (d.url) cachedLyricsUrl = d.url;
+          if (d.lyrics) {
+            if (previewText) previewText.innerText = d.lyrics;
+            if (previewBox) previewBox.style.display = 'block';
+            const srcBadge = document.getElementById('lyricsSourceBadge');
+            if (srcBadge) srcBadge.innerText = d.source || 'Genius';
+          }
+        }
+      } catch (_) {}
+    }
+
+    function closeLyricsModal() {
+      const sheet = document.getElementById('lyricsSheet');
+      if (sheet) sheet.classList.remove('active');
+    }
+
+    async function loadServerChannels() {
+      const select = document.getElementById('lyricsChannelSelect');
+      if (!select) return;
+      try {
+        const res = await fetch(`/api/channels?token=${encodeURIComponent(token)}`);
+        if (res.ok) {
+          const d = await res.json();
+          cachedServerChannels = d.channels || [];
+          if (cachedServerChannels.length > 0) {
+            select.innerHTML = cachedServerChannels.map(c => `
+              <option value="${escapeHtml(c.id)}">#${escapeHtml(c.name)}</option>
+            `).join('');
+          } else {
+            select.innerHTML = '<option value="">No text channels found</option>';
+          }
+        }
+      } catch (e) {
+        select.innerHTML = '<option value="">Error loading channels</option>';
+      }
+    }
+
+    async function sendLyricsToSelectedChannel() {
+      const select = document.getElementById('lyricsChannelSelect');
+      const channelId = select ? select.value : null;
+      if (!channelId) {
+        showToast('Please select a channel first');
+        return;
+      }
+      showToast('Sending lyrics to Discord…');
+      try {
+        const res = await fetch(`/api/lyrics/send?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel_id: channelId })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message || 'Lyrics sent to Discord!');
+          closeLyricsModal();
+        } else {
+          showToast(d.error || 'Failed to send lyrics');
+        }
+      } catch (e) {
+        showToast('Error: ' + e.message);
+      }
+    }
+
+    function openGeniusDirectLink() {
+      if (cachedLyricsUrl) {
+        window.open(cachedLyricsUrl, '_blank');
+      }
+    }
+
+    function copyGeniusLink() {
+      if (cachedLyricsUrl) {
+        navigator.clipboard.writeText(cachedLyricsUrl).then(() => {
+          showToast('Genius link copied to clipboard!');
+        }).catch(() => {
+          showToast(cachedLyricsUrl);
+        });
+      }
     }
 
     // Shortcuts helper render

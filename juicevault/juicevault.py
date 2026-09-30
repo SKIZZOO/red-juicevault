@@ -857,6 +857,28 @@ class JuiceVault(commands.Cog):
         self.manual_queues.setdefault(gid, []).append(track)
         await ctx.send(f"🎵 Added to Requested: **{self._track_text(track)}**")
 
+    @commands.guild_only()
+    @commands.command(name="lyrics")
+    async def global_lyrics(self, ctx):
+        """View lyrics options for the currently playing song."""
+        await self._lyrics_command(ctx)
+
+    @jv.command(name="lyrics")
+    async def jv_lyrics(self, ctx):
+        """View lyrics options for the currently playing song."""
+        await self._lyrics_command(ctx)
+
+    async def _lyrics_command(self, ctx):
+        track = self.current.get(ctx.guild.id)
+        if not track:
+            await ctx.send("No track is currently playing.")
+            return
+        ui = self.bot.get_cog("JuiceVaultUI")
+        panel = getattr(ui, "panel", None) or ui
+        from .eq_ui_patch import JuiceVaultLyricsChoiceView
+        view = JuiceVaultLyricsChoiceView(panel, ctx.guild.id, track, ctx.channel)
+        await ctx.send(embed=view.build_embed(), view=view)
+
     @jv.command(name="refresh")
     async def refresh(self, ctx):
         self._categories_cache = None
