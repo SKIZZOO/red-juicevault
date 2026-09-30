@@ -203,16 +203,36 @@ HTML_INDEX = """<!DOCTYPE html>
         gap: 24px;
         align-items: start;
       }
-      .desktop-nav {
+      .desktop-segment {
         display: flex !important;
       }
       .mobile-nav {
         display: none !important;
       }
       .card-player-wrap {
+        display: block !important;
         position: sticky;
         top: 80px;
       }
+      .card-content-wrap {
+        display: block !important;
+      }
+    }
+    @media (max-width: 859px) {
+      .desktop-segment {
+        display: none !important;
+      }
+      .card-content-wrap {
+        display: none;
+      }
+    }
+    /* Tab Content Switcher */
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.16s ease;
     }
     /* Cards */
     .ui-card {
@@ -868,20 +888,33 @@ HTML_INDEX = """<!DOCTYPE html>
             </button>
           </div>
 
-          <!-- Lock Screen Controls Helper Banner -->
-          <div class="banner-box" id="lockscreenBanner">
-            <div class="banner-text">
-              <strong>Lock Screen Media:</strong> Enable background audio to control playback from your phone's lock screen & control center.
+          <!-- Live Browser Audio & Lock Screen Banner -->
+          <div class="banner-box" id="liveAudioBanner" style="flex-direction:column; align-items:stretch; gap:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <svg class="icon-svg" style="color:var(--accent); width:18px; height:18px;" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                <div>
+                  <div style="font-weight:700; font-size:0.84rem; color:#fff;" id="liveStatusTitle">Listen on Phone / Browser</div>
+                  <div style="font-size:0.72rem; color:var(--text-sub);">Stream live audio & enable lock screen media</div>
+                </div>
+              </div>
+              <button class="btn-kinetic btn-badge" id="btnListenLive" onclick="toggleLiveAudio()">
+                <span id="liveBtnLabel">Listen Live</span>
+              </button>
             </div>
-            <button class="btn-kinetic btn-badge" onclick="enableLockScreen()">Enable</button>
+            <div id="liveAudioControls" style="display:none; align-items:center; gap:10px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06);">
+              <svg class="icon-svg" style="width:14px; height:14px; color:var(--text-sub);" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+              <input type="range" min="0" max="1" step="0.05" value="1" id="liveVolumeSlider" style="flex:1; accent-color:var(--accent); cursor:pointer;" oninput="updateLiveVolume(this.value)">
+              <span id="liveVolPercent" style="font-size:0.72rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub);">100%</span>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- RIGHT COLUMN: TABS (Queue, Search, Collections, Shortcuts) -->
       <div class="card-content-wrap">
-        <!-- Segment Bar Switcher for Desktop & Mobile -->
-        <div class="segment-bar">
+        <!-- Segment Bar Switcher for Desktop Only -->
+        <div class="segment-bar desktop-segment">
           <button class="segment-btn active" onclick="switchTab('queue')">
             <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             <span>Queue</span>
@@ -1051,7 +1084,72 @@ HTML_INDEX = """<!DOCTYPE html>
     </div>
   </div>
 
-  <audio id="silentAudio" loop playsinline preload="auto" style="display:none;"></audio>
+  <!-- Track Action Popup Sheet (Play Now / Move Next / Remove) -->
+  <div class="sheet-backdrop" id="trackActionSheet" onclick="if(event.target===this) closeTrackModal()">
+    <div class="sheet-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+          <div class="brand-logo-disc" style="width:40px; height:40px; border-radius:10px;">
+            <svg class="icon-svg fill-current" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </div>
+          <div style="min-width:0;">
+            <div id="modalTrackTitle" style="font-weight:700; font-size:0.95rem; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Track Title</div>
+            <div id="modalTrackDesc" style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Artist • 3:20</div>
+          </div>
+        </div>
+        <button class="btn-kinetic btn-circle btn-action-sm" onclick="closeTrackModal()">
+          <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <!-- Option 1: Play Right Now -->
+        <div class="btn-kinetic track-card" style="border:1px solid var(--accent); background:var(--accent-muted); cursor:pointer;" onclick="modalAction('play_now')">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:36px; height:36px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; color:#fff;">
+              <svg class="icon-svg fill-current" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+            </div>
+            <div>
+              <div style="font-weight:700; font-size:0.9rem; color:#fff;">Play Right Now</div>
+              <div style="font-size:0.74rem; color:var(--text-sub);">Interrupt current track and play this song immediately</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Option 2: Move to Next -->
+        <div class="btn-kinetic track-card" style="cursor:pointer;" onclick="modalAction('move_next')">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:36px; height:36px; border-radius:50%; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; color:#fff;">
+              <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+            </div>
+            <div>
+              <div style="font-weight:700; font-size:0.9rem; color:#fff;">Play Next</div>
+              <div style="font-size:0.74rem; color:var(--text-sub);">Place at the front of queue to play after current song</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Option 3: Remove from Queue -->
+        <div class="btn-kinetic track-card" style="cursor:pointer;" onclick="modalAction('remove')">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:36px; height:36px; border-radius:50%; background:rgba(239,68,68,0.15); display:flex; align-items:center; justify-content:center; color:var(--danger);">
+              <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </div>
+            <div>
+              <div style="font-weight:700; font-size:0.9rem; color:var(--danger);">Remove From Queue</div>
+              <div style="font-size:0.74rem; color:var(--text-sub);">Delete track from queue</div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn-kinetic btn-flat" style="padding:12px; margin-top:4px;" onclick="closeTrackModal()">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <audio id="liveAudio" preload="auto" playsinline style="display:none;"></audio>
 
   <script>
     // State management
@@ -1170,18 +1268,73 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
-    function enableLockScreen() {
-      const audio = document.getElementById('silentAudio');
-      audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-      audio.play().then(() => {
-        lockScreenActive = true;
-        document.getElementById('lockscreenBanner').style.display = 'none';
-        showToast('Lock screen media controls active');
+    let liveStreamActive = false;
+    let currentLiveTrackId = null;
+
+    function toggleLiveAudio() {
+      const audio = document.getElementById('liveAudio');
+      liveStreamActive = !liveStreamActive;
+      const btn = document.getElementById('btnListenLive');
+      const controls = document.getElementById('liveAudioControls');
+      const title = document.getElementById('liveStatusTitle');
+
+      if (liveStreamActive) {
+        btn.classList.add('active');
+        btn.innerHTML = '<span>Stop Listening</span>';
+        controls.style.display = 'flex';
+        title.innerText = 'Live Audio: Streaming';
+        syncLiveAudio(true);
         setupMediaSession();
-        updateMediaSession();
-      }).catch(err => {
-        console.log('Audio playback error:', err);
-      });
+        showToast('Live audio connected');
+      } else {
+        audio.pause();
+        audio.removeAttribute('src');
+        btn.classList.remove('active');
+        btn.innerHTML = '<span>Listen Live</span>';
+        controls.style.display = 'none';
+        title.innerText = 'Listen on Phone / Browser';
+        currentLiveTrackId = null;
+        showToast('Live audio disconnected');
+      }
+    }
+
+    function updateLiveVolume(val) {
+      const audio = document.getElementById('liveAudio');
+      audio.volume = parseFloat(val);
+      const pctEl = document.getElementById('liveVolPercent');
+      if (pctEl) pctEl.innerText = `${Math.round(val * 100)}%`;
+    }
+
+    function syncLiveAudio(force = false) {
+      if (!liveStreamActive || !currentState) return;
+      const audio = document.getElementById('liveAudio');
+      const t = currentState.track;
+
+      if (!t || !currentState.is_running) {
+        if (!audio.paused) audio.pause();
+        return;
+      }
+
+      const trackKey = (t.id || t.title || 'track') + '_' + (t.duration_seconds || 0);
+
+      if (force || currentLiveTrackId !== trackKey) {
+        currentLiveTrackId = trackKey;
+        const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&t=${encodeURIComponent(trackKey)}`;
+        audio.src = streamUrl;
+        audio.currentTime = Math.max(0, currentElapsed);
+        if (currentState.is_playing) {
+          audio.play().catch(e => console.log('Live playback interaction required:', e));
+        }
+      } else {
+        if (Math.abs(audio.currentTime - currentElapsed) > 2.5) {
+          audio.currentTime = currentElapsed;
+        }
+        if (currentState.is_playing && audio.paused) {
+          audio.play().catch(() => {});
+        } else if (!currentState.is_playing && !audio.paused) {
+          audio.pause();
+        }
+      }
     }
 
     function setupMediaSession() {
@@ -1264,6 +1417,11 @@ HTML_INDEX = """<!DOCTYPE html>
       document.getElementById('queueCount').innerText = state.queue_size || 0;
 
       updateMediaSession();
+      syncLiveAudio();
+      const qTab = document.getElementById('tab-queue');
+      if (qTab && qTab.classList.contains('active')) {
+        loadQueue();
+      }
     }
 
     function updateScrubberUI() {
@@ -1343,6 +1501,64 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
+    let selectedQueueItem = null;
+
+    function openTrackModal(source, index, title, artist, length) {
+      selectedQueueItem = { source, index, title, artist, length };
+      const titleEl = document.getElementById('modalTrackTitle');
+      const descEl = document.getElementById('modalTrackDesc');
+      if (titleEl) titleEl.innerText = title || 'Untitled Track';
+      if (descEl) descEl.innerText = `${artist || 'Juice WRLD'} • ${length || '—'}`;
+      const sheet = document.getElementById('trackActionSheet');
+      if (sheet) sheet.classList.add('active');
+      if (navigator.vibrate) navigator.vibrate(10);
+    }
+
+    function closeTrackModal() {
+      const sheet = document.getElementById('trackActionSheet');
+      if (sheet) sheet.classList.remove('active');
+      selectedQueueItem = null;
+    }
+
+    async function modalAction(actionType) {
+      if (!selectedQueueItem) return;
+      const { source, index, title } = selectedQueueItem;
+      closeTrackModal();
+
+      try {
+        if (actionType === 'remove') {
+          const res = await fetch(`/api/queue/remove?token=${encodeURIComponent(token)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: source, index })
+          });
+          const d = await res.json();
+          showToast(d.success ? 'Track removed from queue' : 'Remove failed');
+          loadQueue();
+        } else if (actionType === 'play_now') {
+          const res = await fetch(`/api/queue/play_now?token=${encodeURIComponent(token)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: source, index })
+          });
+          const d = await res.json();
+          showToast(d.message || `Playing now: ${title}`);
+          loadQueue();
+        } else if (actionType === 'move_next') {
+          const res = await fetch(`/api/queue/move_next?token=${encodeURIComponent(token)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: source, index })
+          });
+          const d = await res.json();
+          showToast(d.message || `Moved to play next: ${title}`);
+          loadQueue();
+        }
+      } catch (err) {
+        showToast('Action failed: ' + err.message);
+      }
+    }
+
     // Load Queue
     async function loadQueue() {
       try {
@@ -1350,45 +1566,46 @@ HTML_INDEX = """<!DOCTYPE html>
         const data = await res.json();
         const reqList = document.getElementById('reqList');
         if (data.requested && data.requested.length > 0) {
-          reqList.innerHTML = data.requested.map((t, idx) => `
-            <div class="track-card">
+          reqList.innerHTML = data.requested.map((t, idx) => {
+            const title = (t.title || 'Untitled Track').replace(/'/g, "&#39;");
+            const artist = (t.artist || 'Juice WRLD').replace(/'/g, "&#39;");
+            const len = (t.length || '—').replace(/'/g, "&#39;");
+            return `
+            <div class="track-card" style="cursor:pointer;" onclick="openTrackModal('requested', ${idx}, '${title}', '${artist}', '${len}')">
               <div class="track-meta-col">
                 <div class="track-name">${t.title || 'Untitled'}</div>
                 <div class="track-desc">${t.artist || 'Juice WRLD'} • ${t.length || '—'}</div>
               </div>
-              <button class="btn-kinetic btn-circle btn-action-sm" onclick="removeQueueItem(${idx})" title="Remove">
-                <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
+              <span class="btn-badge" style="font-size:0.68rem; padding:3px 7px;">Manage</span>
             </div>
-          `).join('');
+          `;
+          }).join('');
         } else {
-          reqList.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No requested tracks.</div>';
+          reqList.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No requested tracks. Use Search to queue songs.</div>';
         }
 
         const upList = document.getElementById('upcomingList');
         if (data.upcoming && data.upcoming.length > 0) {
-          upList.innerHTML = data.upcoming.slice(0, 30).map((t, idx) => `
-            <div class="track-card">
+          upList.innerHTML = data.upcoming.slice(0, 30).map((t, idx) => {
+            const title = (t.title || 'Untitled Track').replace(/'/g, "&#39;");
+            const artist = (t.artist || 'Juice WRLD').replace(/'/g, "&#39;");
+            const len = (t.length || '—').replace(/'/g, "&#39;");
+            return `
+            <div class="track-card" style="cursor:pointer;" onclick="openTrackModal('upcoming', ${idx}, '${title}', '${artist}', '${len}')">
               <div class="track-meta-col">
                 <div class="track-name">${idx + 1}. ${t.title || 'Untitled'}</div>
                 <div class="track-desc">${t.artist || 'Juice WRLD'} • ${t.length || '—'}</div>
               </div>
+              <span class="btn-badge" style="font-size:0.68rem; padding:3px 7px;">Manage</span>
             </div>
-          `).join('');
+          `;
+          }).join('');
+        } else {
+          upList.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Archive queue empty.</div>';
         }
       } catch (e) {
         console.error('Queue load error:', e);
       }
-    }
-
-    async function removeQueueItem(index) {
-      await fetch(`/api/queue/remove?token=${encodeURIComponent(token)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index })
-      });
-      showToast('Track removed');
-      loadQueue();
     }
 
     // Search
@@ -1440,12 +1657,19 @@ HTML_INDEX = """<!DOCTYPE html>
 
     // Categories
     async function loadCategories() {
-      if (!currentState || !currentState.categories) return;
+      if (!currentState || !currentState.categories) {
+        await fetchStatus();
+      }
       const grid = document.getElementById('catGrid');
+      if (!grid) return;
+      if (!currentState || !currentState.categories) {
+        grid.innerHTML = '<div class="track-card" style="color:var(--text-sub); font-size:0.8rem;">Loading collections…</div>';
+        return;
+      }
       const cats = currentState.categories;
-      const active = currentState.category || 'all';
+      const active = (currentState.category || 'all').toLowerCase();
       grid.innerHTML = Object.entries(cats).map(([name, count]) => `
-        <div class="cat-item ${name.toLowerCase() === active.toLowerCase() ? 'active' : ''}" onclick="changeCategory('${name}')">
+        <div class="cat-item ${name.toLowerCase() === active ? 'active' : ''}" onclick="changeCategory('${name}')">
           <div class="cat-item-title">${name}</div>
           <div class="cat-item-count">${count} tracks</div>
         </div>
@@ -1453,13 +1677,22 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     async function changeCategory(category) {
-      await fetch(`/api/category?token=${encodeURIComponent(token)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category })
-      });
+      if (currentState) {
+        currentState.category = category;
+        const b = document.getElementById('categoryBadge');
+        if (b) b.innerText = category.toUpperCase();
+      }
+      loadCategories();
       showToast(`Category: ${category}`);
-      setTimeout(loadCategories, 400);
+      try {
+        await fetch(`/api/category?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category })
+        });
+      } catch (e) {
+        console.error('Category change error:', e);
+      }
     }
 
     // EQ Sheet

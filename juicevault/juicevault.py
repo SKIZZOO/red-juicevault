@@ -48,6 +48,7 @@ class JuiceVault(commands.Cog):
         self.queues = {}
         self.manual_queues = {}
         self.current = {}
+        self.current_files = {}
         self.last_error = {}
         self.search_results = {}
         self.failure_counts = {}
@@ -350,6 +351,7 @@ class JuiceVault(commands.Cog):
         self.queues.pop(guild_id, None)
         self.manual_queues.pop(guild_id, None)
         self.current.pop(guild_id, None)
+        self.current_files.pop(guild_id, None)
         self.search_results.pop(guild_id, None)
         self.last_error.pop(guild_id, None)
         self.failure_counts.pop(guild_id, None)
@@ -438,6 +440,7 @@ class JuiceVault(commands.Cog):
                 log_file = None
                 try:
                     local_path = await self._download_track(track)
+                    self.current_files[gid] = local_path
                     log_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".juicevault-ffmpeg.log", delete=False)
                     def after(error):
                         if error:
@@ -460,6 +463,7 @@ class JuiceVault(commands.Cog):
                             log_file.close()
                         except OSError:
                             pass
+                    self.current_files.pop(gid, None)
                     self._remove_file(local_path)
                     if source_type == "external":
                         print(f"[JuiceVault] dropping unavailable external track {self._track_text(track)}: {type(exc).__name__}: {exc}")
@@ -491,6 +495,7 @@ class JuiceVault(commands.Cog):
                         log_file.close()
                     except OSError:
                         pass
+                self.current_files.pop(gid, None)
                 self._remove_file(local_path)
                 if stop.is_set() or self.tasks.get(gid) is not task:
                     return
@@ -820,9 +825,73 @@ class JuiceVault(commands.Cog):
         else:
             await ctx.send("JuiceVault Web Remote is not loaded.")
 
+    @remote.command(name="tunnel")
+    async def remote_tunnel(self, ctx, action: str = "start"):
+        """Spawn a zero-config Cloudflare Quick Tunnel for free HTTPS with trusted SSL.
+        
+        Usage:
+        4jv remote tunnel         -> Start Cloudflare HTTPS tunnel
+        4jv remote tunnel stop    -> Stop Cloudflare HTTPS tunnel
+        """
+        if not getattr(self, "web_remote", None):
+            await ctx.send("JuiceVault Web Remote is not loaded.")
+            return
+
+        if action.lower() in ("stop", "close", "off"):
+            await self.web_remote.stop_cloudflare_tunnel()
+            await ctx.send("⏹️ Cloudflare Quick Tunnel stopped. Reverted to standard IP access.")
+            return
+
+        async with ctx.typing():
+            try:
+                msg = await ctx.send("⏳ Initiating Cloudflare Quick Tunnel (obtaining trusted HTTPS domain)…")
+                tunnel_url = await self.web_remote.start_cloudflare_tunnel()
+                await msg.delete()
+                await self.web_remote.send_remote_embed(ctx)
+            except Exception as exc:
+                await ctx.send(f"❌ Failed to start Cloudflare tunnel: `{exc}`")
+
+    @remote.command(name="https")
+    async def remote_https(self, ctx, state: str = "on"):
+        """Enable or disable direct HTTPS using an auto-generated self-signed SSL certificate.
+        
+        Usage:
+        4jv remote https on       -> Auto-generate SSL cert & run HTTPS on your port
+        4jv remote https off      -> Revert to plain HTTP
+        """
+        if not getattr(self, "web_remote", None):
+            await ctx.send("JuiceVault Web Remote is not loaded.")
+            return
+
+        from redbot.core.data_manager import cog_data_path
+        data_dir = cog_data_path(raw_name="JuiceVault")
+        cert_path = str(data_dir / "juicevault_cert.pem")
+        key_path = str(data_dir / "juicevault_key.pem")
+
+        if state.lower() in ("off", "disable", "stop", "clear"):
+            await self.web_remote.config.ssl_cert.set(None)
+            await self.web_remote.config.ssl_key.set(None)
+            await self.web_remote.start_server()
+            port = await self.web_remote.config.port()
+            await ctx.send(f"✅ HTTPS disabled. Web remote is running plain HTTP on port `{port}`.")
+            return
+
+        if not (os.path.isfile(cert_path) and os.path.isfile(key_path)):
+            created = self.web_remote.generate_self_signed_cert(cert_path, key_path)
+            if not created:
+                await ctx.send("❌ Could not auto-generate SSL certificate. Use `4jv remote tunnel` for free 1-click Cloudflare HTTPS!")
+                return
+
+        await self.web_remote.config.ssl_cert.set(cert_path)
+        await self.web_remote.config.ssl_key.set(key_path)
+        await self.web_remote.start_server()
+        port = await self.web_remote.config.port()
+        await ctx.send(f"🔒 **HTTPS Enabled!** Auto-generated self-signed SSL certificate and restarted server on port `{port}`.")
+        await self.web_remote.send_remote_embed(ctx)
+
     @remote.command(name="ssl")
     async def remote_ssl(self, ctx, cert_path: str = None, key_path: str = None):
-        """Configure SSL certificate for direct HTTPS, or pass 'clear' to disable."""
+        """Configure custom SSL certificate for direct HTTPS, or pass 'clear' to disable."""
         if getattr(self, "web_remote", None):
             if cert_path and cert_path.lower() == "clear":
                 await self.web_remote.config.ssl_cert.set(None)
@@ -837,7 +906,7 @@ class JuiceVault(commands.Cog):
                 if cert and key:
                     await ctx.send(f"🔒 SSL currently active:\n• Cert: `{cert}`\n• Key: `{key}`\nUse `4jv remote ssl clear` to reset.")
                 else:
-                    await ctx.send("🔒 SSL not configured. Provide paths: `4jv remote ssl <cert_path> <key_path>` or use a Cloudflare Tunnel: `4jv remote url https://<your-tunnel>`")
+                    await ctx.send("🔒 SSL not configured. Provide paths: `4jv remote ssl <cert_path> <key_path>` or use `4jv remote tunnel` for instant zero-config HTTPS.")
                 return
 
             import os

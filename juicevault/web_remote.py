@@ -9,8 +9,13 @@ endpoints designed for iOS Shortcuts, Siri, and mobile widgets.
 import asyncio
 import json
 import os
+import platform
+import re
 import secrets
+import shutil
 import socket
+import ssl
+import stat
 import time
 from urllib.parse import quote, unquote
 
@@ -18,6 +23,7 @@ import aiohttp
 from aiohttp import web
 import discord
 from redbot.core import Config, commands
+from redbot.core.data_manager import cog_data_path
 
 from .web_assets import HTML_INDEX, MANIFEST_JSON, SERVICE_WORKER_JS
 from .juicevault_ui import category_label, JuiceVaultPanelView
@@ -60,6 +66,8 @@ class JuiceVaultWebRemote:
         self.ws_clients = set()
         self._server_lock = asyncio.Lock()
         self._last_state_cache = {}
+        self._tunnel_proc = None
+        self._tunnel_url = None
 
     def _get_main_cog(self):
         return self.bot.get_cog("JuiceVault")
@@ -157,9 +165,12 @@ class JuiceVaultWebRemote:
             app.router.add_post("/api/category", self._api_category)
             app.router.add_get("/api/queue", self._api_queue)
             app.router.add_post("/api/queue/remove", self._api_queue_remove)
+            app.router.add_post("/api/queue/play_now", self._api_queue_play_now)
+            app.router.add_post("/api/queue/move_next", self._api_queue_move_next)
             app.router.add_get("/api/search", self._api_search)
             app.router.add_post("/api/queue/add", self._api_queue_add)
             app.router.add_get("/api/shortcuts", self._api_shortcuts)
+            app.router.add_get("/api/stream", self._api_stream)
 
             host = await self.config.host()
             port = await self.config.port()
@@ -215,6 +226,164 @@ class JuiceVaultWebRemote:
     async def stop_server(self):
         async with self._server_lock:
             await self._stop_server_internal()
+
+    def generate_self_signed_cert(self, cert_path, key_path):
+        """Generate a self-signed SSL certificate and private key."""
+        os.makedirs(os.path.dirname(os.path.abspath(cert_path)), exist_ok=True)
+        try:
+            from cryptography import x509
+            from cryptography.x509.oid import NameOID
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.asymmetric import rsa
+            from cryptography.hazmat.primitives import serialization
+            import datetime, ipaddress
+
+            key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            subject = issuer = x509.Name([
+                x509.NameAttribute(NameOID.COMMON_NAME, u"JuiceVault Remote"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"JuiceVault"),
+            ])
+            cert = (
+                x509.CertificateBuilder()
+                .subject_name(subject)
+                .issuer_name(issuer)
+                .public_key(key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(datetime.datetime.utcnow() - datetime.timedelta(days=1))
+                .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=3650))
+                .add_extension(
+                    x509.SubjectAlternativeName([
+                        x509.DNSName(u"localhost"),
+                        x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+                    ]),
+                    critical=False,
+                )
+                .sign(key, hashes.SHA256())
+            )
+            with open(key_path, "wb") as f:
+                f.write(
+                    key.private_bytes(
+                        encoding=serialization.Encoding.PEM,
+                        format=serialization.PrivateFormat.TraditionalOpenSSL,
+                        encryption_algorithm=serialization.NoEncryption(),
+                    )
+                )
+            with open(cert_path, "wb") as f:
+                f.write(cert.public_bytes(serialization.Encoding.PEM))
+            return True
+        except Exception as exc:
+            openssl = shutil.which("openssl")
+            if openssl:
+                import subprocess
+                cmd = [
+                    openssl, "req", "-x509", "-newkey", "rsa:2048",
+                    "-keyout", key_path, "-out", cert_path,
+                    "-days", "3650", "-nodes", "-subj", "/CN=JuiceVault Remote"
+                ]
+                res = subprocess.run(cmd, capture_output=True)
+                return res.returncode == 0
+            print(f"[JuiceVault Web Remote] Self-signed SSL generation failed: {exc}")
+            return False
+
+    async def get_or_download_cloudflared(self):
+        """Locate cloudflared executable in PATH or download standalone binary."""
+        bin_in_path = shutil.which("cloudflared")
+        if bin_in_path:
+            return bin_in_path
+
+        data_dir = cog_data_path(raw_name="JuiceVault")
+        bin_dir = data_dir / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+
+        is_win = platform.system() == "Windows"
+        is_arm = "arm" in platform.machine().lower() or "aarch" in platform.machine().lower()
+
+        if is_win:
+            exe_name = "cloudflared.exe"
+            url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+        elif is_arm:
+            exe_name = "cloudflared"
+            url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+        else:
+            exe_name = "cloudflared"
+            url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+
+        target_file = bin_dir / exe_name
+        if target_file.exists():
+            return str(target_file)
+
+        print(f"[JuiceVault Web Remote] Downloading Cloudflare Quick Tunnel from {url}...")
+        try:
+            async with aiohttp.ClientSession() as sess:
+                async with sess.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+                    if resp.status == 200:
+                        content = await resp.read()
+                        with open(target_file, "wb") as f:
+                            f.write(content)
+                        if not is_win:
+                            os.chmod(target_file, os.stat(target_file).st_mode | stat.S_IEXEC)
+                        print("[JuiceVault Web Remote] cloudflared downloaded successfully.")
+                        return str(target_file)
+        except Exception as exc:
+            print(f"[JuiceVault Web Remote] Failed downloading cloudflared: {exc}")
+        return None
+
+    async def start_cloudflare_tunnel(self):
+        """Launch Cloudflare Quick Tunnel and return the generated https://*.trycloudflare.com URL."""
+        if self._tunnel_proc:
+            try:
+                self._tunnel_proc.terminate()
+            except Exception:
+                pass
+            self._tunnel_proc = None
+
+        bin_path = await self.get_or_download_cloudflared()
+        if not bin_path:
+            raise RuntimeError("Could not find or download cloudflared executable.")
+
+        port = await self.config.port()
+        cmd = [bin_path, "tunnel", "--url", f"http://127.0.0.1:{port}"]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        self._tunnel_proc = proc
+
+        tunnel_url = None
+        for _ in range(40):
+            await asyncio.sleep(0.4)
+            line = await proc.stderr.readline()
+            if not line:
+                break
+            text = line.decode("utf-8", errors="ignore")
+            match = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", text)
+            if match:
+                tunnel_url = match.group(0)
+                break
+
+        if tunnel_url:
+            self._tunnel_url = tunnel_url
+            await self.config.custom_url.set(tunnel_url)
+            async def drain_stderr():
+                while proc.returncode is None:
+                    line = await proc.stderr.readline()
+                    if not line:
+                        break
+            asyncio.create_task(drain_stderr())
+            return tunnel_url
+        raise RuntimeError("Cloudflare Quick Tunnel timed out generating public URL.")
+
+    async def stop_cloudflare_tunnel(self):
+        """Terminate active Cloudflare Quick Tunnel."""
+        if self._tunnel_proc:
+            try:
+                self._tunnel_proc.terminate()
+            except Exception:
+                pass
+            self._tunnel_proc = None
+        self._tunnel_url = None
+        await self.config.custom_url.set(None)
 
     @web.middleware
     async def _cors_middleware(self, request, handler):
@@ -512,8 +681,10 @@ class JuiceVaultWebRemote:
                 await main._request_seek(gid, -999999)
         elif action_name == "set_category":
             cat = main._category_name(payload.get("category", "all"))
-            tracks = await main.fetch_tracks(cat)
             await main.config.guild(guild).category.set(cat)
+            tracks = await main.fetch_tracks(cat)
+            if cat not in main.CATEGORY_URLS:
+                tracks = main._filter_tracks(tracks, cat)
             if gid in main.tasks:
                 main.queues[gid] = tracks
                 main.failure_counts[gid] = 0
@@ -712,15 +883,88 @@ class JuiceVaultWebRemote:
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
         data = await request.json()
+        target_type = str(data.get("type", "requested")).lower()
         idx = int(data.get("index", 0))
         main = self._get_main_cog()
         gid = guild.id
-        manual = main.manual_queues.get(gid, [])
-        if 0 <= idx < len(manual):
-            removed = manual.pop(idx)
-            await self.broadcast_state(gid)
-            return web.json_response({"success": True, "removed": removed})
+
+        if target_type == "upcoming":
+            q = main.queues.get(gid, [])
+            if 0 <= idx < len(q):
+                removed = q.pop(idx)
+                await self.broadcast_state(gid)
+                return web.json_response({"success": True, "removed": removed})
+        else:
+            manual = main.manual_queues.get(gid, [])
+            if 0 <= idx < len(manual):
+                removed = manual.pop(idx)
+                await self.broadcast_state(gid)
+                return web.json_response({"success": True, "removed": removed})
         return web.json_response({"error": "Index out of range"}, status=400)
+
+    async def _api_queue_play_now(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
+        data = await request.json()
+        target_type = str(data.get("type", "upcoming")).lower()
+        idx = int(data.get("index", 0))
+        main = self._get_main_cog()
+        gid = guild.id
+
+        track = None
+        if target_type == "requested":
+            manual = main.manual_queues.get(gid, [])
+            if 0 <= idx < len(manual):
+                track = manual.pop(idx)
+        else:
+            q = main.queues.get(gid, [])
+            if 0 <= idx < len(q):
+                track = q.pop(idx)
+
+        if not track:
+            return web.json_response({"error": "Track not found"}, status=400)
+
+        main.manual_queues.setdefault(gid, []).insert(0, track)
+        voice = guild.voice_client
+        if voice and (voice.is_playing() or voice.is_paused()):
+            voice.stop()
+
+        await self.broadcast_state(gid)
+        title = track.get("title") or track.get("name") or "Track"
+        return web.json_response({"success": True, "message": f"Playing now: {title}"})
+
+    async def _api_queue_move_next(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
+        data = await request.json()
+        target_type = str(data.get("type", "upcoming")).lower()
+        idx = int(data.get("index", 0))
+        main = self._get_main_cog()
+        gid = guild.id
+
+        track = None
+        if target_type == "requested":
+            manual = main.manual_queues.get(gid, [])
+            if 0 <= idx < len(manual):
+                track = manual.pop(idx)
+        else:
+            q = main.queues.get(gid, [])
+            if 0 <= idx < len(q):
+                track = q.pop(idx)
+
+        if not track:
+            return web.json_response({"error": "Track not found"}, status=400)
+
+        main.manual_queues.setdefault(gid, []).insert(0, track)
+        await self.broadcast_state(gid)
+        title = track.get("title") or track.get("name") or "Track"
+        return web.json_response({"success": True, "message": f"Moved to play next: {title}"})
 
     async def _api_search(self, request):
         if not await self._authenticate(request):
@@ -812,6 +1056,28 @@ class JuiceVaultWebRemote:
             ]
         })
 
+    async def _api_stream(self, request):
+        """Stream current playing audio track live to the browser with Range request support."""
+        if not await self._authenticate(request):
+            return web.Response(status=401, text="Unauthorized")
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.Response(status=404, text="No active guild")
+        main = self._get_main_cog()
+        gid = guild.id
+        current_file = getattr(main, "current_files", {}).get(gid)
+        if not current_file or not os.path.isfile(current_file):
+            return web.Response(status=404, text="No track currently playing")
+
+        return web.FileResponse(
+            current_file,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "no-cache",
+                "Content-Type": "audio/mpeg",
+            },
+        )
+
 
     async def send_remote_embed(self, ctx):
         token = await self.config.token()
@@ -854,11 +1120,11 @@ class JuiceVaultWebRemote:
         embed.add_field(name="🌐 Port", value=f"`{port}`", inline=True)
         embed.add_field(name="🔊 Voice Channel", value=f"`{vc_name}`", inline=True)
         embed.add_field(
-            name="⚠️ Connection Timed Out?",
+            name="🔒 Free HTTPS Options (No Cert Needed)",
             value=(
-                f"• **On a VPS:** Make sure port `{port}` is open in your firewall (`sudo ufw allow {port}/tcp` or cloud security group).\n"
-                f"• **On Home Wi-Fi:** Your phone and bot host must be on the same Wi-Fi, or use a tunnel.\n"
-                f"• **Custom Domain / Tunnel:** Set a Cloudflare Tunnel or domain with: `4jv remote url <url>`"
+                "• **1-Click Cloudflare HTTPS (Recommended):** `4jv remote tunnel` (Instant trusted SSL, 0 config!)\n"
+                "• **Direct HTTPS on Open Port:** `4jv remote https on` (Auto-generates self-signed SSL cert)\n"
+                "• **Custom Domain:** `4jv remote url <url>` | **Stop Tunnel:** `4jv remote tunnel stop`"
             ),
             inline=False,
         )

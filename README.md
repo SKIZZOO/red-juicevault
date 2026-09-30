@@ -53,10 +53,12 @@ The examples below use the default Red prefix `[p]`.
 
 ```text
 [p]jv remote                     # Displays mobile URL, auth token, and scannable QR Code
+[p]jv remote tunnel [start|stop] # 1-Click Cloudflare Quick Tunnel (Free trusted HTTPS, 0 config!)
+[p]jv remote https [on|off]      # Direct HTTPS with auto-generated self-signed SSL cert
+[p]jv remote ssl <cert> <key>    # Use your own SSL certificate and key
 [p]jv remote port <port>         # Change web server port (default: 8088)
 [p]jv remote token [tok]         # View or set secret auth token
 [p]jv remote url [url]           # Set custom domain / tunnel URL (e.g. Cloudflare / reverse proxy)
-[p]jv remote ssl <cert> <key>    # Enable direct HTTPS with SSL certificate and key
 [p]jv remote restart             # Restart the web remote server
 [p]jv remote toggle              # Enable / disable the web remote server
 ```
@@ -86,12 +88,13 @@ JuiceVault includes a built-in mobile web app and REST API powered by `aiohttp`:
 1. Run `[p]jv remote` in Discord (or click **📱 Remote** on the `[p]jvpanel`).
 2. Scan the QR code with your phone camera or click the link.
 3. **Kinetics & OriginKit UI**: Engineered with tactile spring physics, soundwave visualizer bars, zero emojis (pure custom SVGs), and responsive layouts for both mobile phones and desktop displays.
-4. **HTTPS Support**:
-   - **Cloudflare Tunnel (Easiest)**: Run `cloudflared tunnel --url http://localhost:8088` and set `[p]jv remote url https://your-tunnel.trycloudflare.com` for instant free SSL.
-   - **Direct SSL**: Provide your SSL cert and private key with `[p]jv remote ssl <cert_path> <key_path>`.
-5. **Add to Home Screen**: In Safari (iOS) or Chrome (Android), tap Share / Menu -> *Add to Home Screen* to use it as a fullscreen app!
-6. **Lock Screen Controls**: Tap *Enable* in the remote banner to activate background audio sync — now you can pause, skip, and see what's playing from your phone's lock screen and Apple Watch / Bluetooth controls.
-7. **iOS Shortcuts / Siri**: In the *Shortcuts* tab of the web app, copy one-tap webhook URLs into the Apple Shortcuts app ("Get Contents of URL") to control music with Siri or widgets!
+4. **Live Browser Audio Streaming**: Tap **Listen Live** on your phone or PC to hear the music streaming directly through your browser, synced with Discord playback in real time with hardware volume and lock screen controls!
+5. **Interactive Queue Management**: Tap any song in the Requested or Upcoming Queue to open an action sheet with options to **Play Right Now**, **Play Next**, or **Remove From Queue**.
+6. **Zero-Config HTTPS (No Certificate Needed)**:
+   - **1-Click Cloudflare Tunnel (Recommended)**: Run `[p]jv remote tunnel` to instantly generate a secure, trusted `https://*.trycloudflare.com` URL with an official Cloudflare SSL certificate (no ports or router configuration needed).
+   - **Direct Port HTTPS**: Run `[p]jv remote https on` to automatically generate a self-signed 2048-bit SSL certificate and run HTTPS directly on your open port.
+7. **Add to Home Screen**: In Safari (iOS) or Chrome (Android), tap Share / Menu -> *Add to Home Screen* to use it as a fullscreen app!
+8. **iOS Shortcuts / Siri**: In the *Shortcuts* tab of the web app, copy one-tap webhook URLs into the Apple Shortcuts app ("Get Contents of URL") to control music with Siri or widgets!
 
 ## Installation
 
