@@ -164,6 +164,7 @@ class JuiceVaultWebRemote:
                 add_route("/api/playback/set_eq", self._api_eq)
 
             app.router.add_post("/api/category", self._api_category)
+            app.router.add_get("/api/category/tracks", self._api_category_tracks)
             app.router.add_get("/api/queue", self._api_queue)
             app.router.add_post("/api/queue/remove", self._api_queue_remove)
             app.router.add_post("/api/queue/play_now", self._api_queue_play_now)
@@ -689,11 +690,25 @@ class JuiceVaultWebRemote:
             cat = main._category_name(payload.get("category", "all"))
             await main.config.guild(guild).category.set(cat)
             tracks = await main.fetch_tracks(cat)
-            if cat not in main.CATEGORY_URLS:
+            if hasattr(main, "CATEGORY_URLS") and cat not in main.CATEGORY_URLS and cat not in ("all", "session edits", "session"):
                 tracks = main._filter_tracks(tracks, cat)
             if gid in main.tasks:
                 main.queues[gid] = tracks
                 main.failure_counts[gid] = 0
+        elif action_name == "play_category":
+            cat = main._category_name(payload.get("category", "all"))
+            shuffle = bool(payload.get("shuffle", True))
+            await main.config.guild(guild).category.set(cat)
+            tracks = await main.fetch_tracks(cat)
+            if hasattr(main, "CATEGORY_URLS") and cat not in main.CATEGORY_URLS and cat not in ("all", "session edits", "session"):
+                tracks = main._filter_tracks(tracks, cat)
+            if shuffle:
+                import random
+                random.shuffle(tracks)
+            if gid in main.tasks:
+                main.queues[gid] = tracks
+                main.failure_counts[gid] = 0
+                await main._request_skip(gid, 1)
 
         await self.broadcast_state(gid)
         if ui:
@@ -876,6 +891,32 @@ class JuiceVaultWebRemote:
         await self._dispatch_ws_action(None, guild, "set_category", {"category": cat})
         return web.json_response({"success": True, "category": cat})
 
+    async def _api_category_tracks(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        category = request.query.get("category", "all")
+        query = request.query.get("q", "").strip().casefold()
+        limit = min(100, max(1, int(request.query.get("limit", 60))))
+        main = self._get_main_cog()
+        try:
+            tracks = await main.fetch_tracks(category)
+            if hasattr(main, "CATEGORY_URLS") and category not in main.CATEGORY_URLS and category not in ("all", "session edits", "session"):
+                tracks = main._filter_tracks(tracks, category)
+            if query:
+                tracks = [t for t in tracks if query in main._search_text(t)]
+            sample = tracks[:limit]
+            results = [{
+                "id": str(t.get("id")),
+                "title": str(t.get("title") or t.get("name") or t.get("file_name")),
+                "artist": str(t.get("artist") or "Juice WRLD"),
+                "length": str(t.get("length") or "—"),
+                "category": str(t.get("category") or category),
+                "cover_url": f"https://api.juicevault.xyz/cdn/music/covers/{t.get('id')}",
+            } for t in sample]
+            return web.json_response({"category": category, "total": len(tracks), "tracks": results})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
     async def _api_queue(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
@@ -1046,12 +1087,22 @@ class JuiceVaultWebRemote:
         if gid not in main.tasks:
             return web.json_response({"error": "Player is offline. Start the player first."}, status=400)
 
-        main.manual_queues.setdefault(gid, []).insert(0, track)
+        play_now = bool(data.get("play_now", False))
+        if play_now:
+            main.manual_queues.setdefault(gid, []).insert(0, track)
+            voice = guild.voice_client
+            if voice and (voice.is_playing() or voice.is_paused()):
+                voice.stop()
+            msg = f"Playing now: '{track.get('title')}'"
+        else:
+            main.manual_queues.setdefault(gid, []).append(track)
+            msg = f"Added '{track.get('title')}' to Requested queue!"
+
         ui = self._get_ui_cog()
         if ui:
             await ui.update_panel(gid)
         await self.broadcast_state(gid)
-        return web.json_response({"success": True, "message": f"Added '{track.get('title')}' to Requested queue!"})
+        return web.json_response({"success": True, "message": msg})
 
     async def _api_shortcuts(self, request):
         if not await self._authenticate(request):

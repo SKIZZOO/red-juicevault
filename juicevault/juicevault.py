@@ -247,9 +247,18 @@ class JuiceVault(commands.Cog):
             return dict(self._categories_cache)
 
         counts = {}
-        for track in await self.fetch_tracks():
+        tracks = await self.fetch_tracks()
+        counts["all"] = len(tracks)
+        session_count = 0
+        for track in tracks:
             category = self._category_name(track.get("category"))
-            counts[category] = counts.get(category, 0) + 1
+            if category != "all":
+                counts[category] = counts.get(category, 0) + 1
+            if bool(track.get("is_session_edit")):
+                session_count += 1
+        if session_count:
+            counts["session edits"] = session_count
+
         for name, url in self.CATEGORY_URLS.items():
             if name != "cut":
                 try:
@@ -260,6 +269,8 @@ class JuiceVault(commands.Cog):
                     pass
         if "cuts" in counts:
             counts["cut"] = counts.pop("cuts")
+        if "stem" in counts and "stems" not in counts:
+            counts["stems"] = counts.pop("stem")
         self._categories_cache = dict(counts)
         self._categories_cache_time = now
         return dict(counts)

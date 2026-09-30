@@ -619,48 +619,147 @@ HTML_INDEX = """<!DOCTYPE html>
     .search-field::placeholder {
       color: var(--text-sub);
     }
-    /* Category Grid */
+    /* Category Grid & Library Collections */
+    .active-col-banner {
+      padding: 4px;
+    }
+    .active-col-icon-wrap {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      background: var(--accent-muted);
+      border: 1px solid var(--border-accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
     .grid-categories {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 12px;
+    }
+    @media (max-width: 560px) {
+      .grid-categories {
+        grid-template-columns: 1fr;
+      }
     }
     .cat-item {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      padding: 14px;
+      padding: 14px 16px;
       cursor: pointer;
       transition: transform 0.2s var(--spring), background 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 8px;
+      position: relative;
+    }
+    .cat-item.featured {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, rgba(255, 45, 85, 0.08) 0%, rgba(18, 18, 24, 0.95) 100%);
+      border-color: rgba(255, 45, 85, 0.35);
+      box-shadow: 0 4px 20px rgba(255, 45, 85, 0.06);
     }
     .cat-item:hover {
       background: var(--surface-elevated);
-      border-color: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.22);
       transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
     }
     .cat-item:active {
-      transform: scale(0.96);
+      transform: scale(0.98);
     }
     .cat-item.active {
       border-color: var(--accent);
-      background: var(--accent-muted);
-      box-shadow: 0 0 16px var(--accent-glow);
+      background: linear-gradient(135deg, rgba(255, 45, 85, 0.16) 0%, rgba(18, 18, 24, 0.92) 100%);
+      box-shadow: 0 0 20px var(--accent-glow);
     }
-    .cat-item-title {
-      font-size: 0.85rem;
-      font-weight: 700;
+    .cat-item.browsing:not(.active) {
+      border-color: rgba(255, 255, 255, 0.35);
+      background: var(--surface-elevated);
+    }
+    .cat-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .cat-icon-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      display: flex;
+      align-items: center;
+      justify-content: center;
       color: #fff;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      flex-shrink: 0;
+    }
+    .cat-item.active .cat-icon-badge {
+      background: var(--accent-muted);
+      border-color: var(--border-accent);
+      color: var(--accent);
+    }
+    .cat-active-pill {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent);
+      background: var(--accent-muted);
+      border: 1px solid var(--border-accent);
+      padding: 2px 7px;
+      border-radius: 999px;
     }
     .cat-item-count {
       font-size: 0.72rem;
       color: var(--text-sub);
       font-family: 'JetBrains Mono', monospace;
+    }
+    .cat-meta-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .cat-item-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
+    .cat-item-subtitle {
+      font-size: 0.7rem;
+      color: var(--accent);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .cat-item-desc {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      line-height: 1.35;
+      margin-top: 2px;
+    }
+    .cat-actions-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 4px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .track-thumb {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: #1a1a24;
+      flex-shrink: 0;
+      border: 1px solid rgba(255, 255, 255, 0.08);
     }
     /* Bottom Navigation Bar for Mobile */
     nav.mobile-nav {
@@ -1029,18 +1128,66 @@ HTML_INDEX = """<!DOCTYPE html>
 
         <!-- TAB: CATEGORIES -->
         <div class="tab-content" id="tab-categories">
-          <div class="ui-card">
+          <!-- Active Library Banner -->
+          <div class="ui-card" style="margin-bottom:14px; position:relative; overflow:hidden;">
+            <div class="active-col-banner" id="activeColBanner">
+              <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                  <div class="active-col-icon-wrap" id="activeColIcon">
+                    <svg class="icon-svg" style="width:20px;height:20px;color:var(--accent);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                  </div>
+                  <div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span style="font-size:0.7rem; font-weight:700; letter-spacing:0.06em; color:var(--accent); text-transform:uppercase;">Active Collection</span>
+                      <span class="btn-badge" id="activeColTrackCount" style="font-size:0.68rem; padding:2px 7px;">3,881 tracks</span>
+                    </div>
+                    <div id="activeColName" style="font-size:1.05rem; font-weight:700; color:#fff; margin-top:2px;">All Music (Full Archive)</div>
+                  </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <button class="btn-kinetic btn-primary" onclick="playSelectedCollection(true)" title="Shuffle & play active collection on Discord">
+                    <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                    <span>Shuffle & Play</span>
+                  </button>
+                  <button class="btn-kinetic" onclick="loadCategories()" title="Refresh collections">
+                    <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Collections Grid Card -->
+          <div class="ui-card" style="margin-bottom:14px;">
             <div class="section-header">
               <span class="section-title">
                 <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-                Collections & Library
+                Juice WRLD Vault Collections
               </span>
+              <span style="font-size:0.74rem; color:var(--text-sub);">8 Archives Available</span>
             </div>
             <div class="grid-categories" id="catGrid">
-              <div class="cat-item" onclick="changeCategory('all')">
-                <div class="cat-item-title">All Music</div>
-                <div class="cat-item-count">Loading…</div>
+              <!-- Populated dynamically by loadCategories() -->
+            </div>
+          </div>
+
+          <!-- Collection Track Browser Card -->
+          <div class="ui-card" id="colBrowserCard">
+            <div class="section-header" style="flex-wrap:wrap; gap:10px;">
+              <span class="section-title">
+                <svg class="icon-svg" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                Browse Collection: <span id="colBrowserLabel" style="color:var(--accent);">All Music</span>
+              </span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span id="colBrowserCountBadge" style="font-size:0.72rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub);">Loading tracks…</span>
               </div>
+            </div>
+            <div class="search-input-group" style="margin-bottom:12px;">
+              <svg class="icon-svg" style="color:var(--text-sub); width:15px; height:15px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" class="search-field" id="colSearchInput" placeholder="Filter songs in this collection…" oninput="filterCollectionTracks()">
+            </div>
+            <div class="track-list" id="colTracksList">
+              <div class="track-card" style="color:var(--text-sub); font-size:0.8rem;">Select a collection above to browse tracks.</div>
             </div>
           </div>
         </div>
@@ -1565,6 +1712,10 @@ HTML_INDEX = """<!DOCTYPE html>
         lastQueueChecksum = queueKey;
         loadQueue();
       }
+      const catTab = document.getElementById('tab-categories');
+      if (catTab && catTab.classList.contains('active')) {
+        updateActiveCategoryBanner();
+      }
     }
 
     function updateScrubberUI() {
@@ -1825,6 +1976,112 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
+    // Collections & Library Data
+    const KNOWN_COLLECTIONS = [
+      {
+        id: 'all',
+        title: 'All Music',
+        tag: 'Complete Vault Archive',
+        desc: 'The complete archive of 3,881+ tracks across all eras, studio leaks, session cuts, stems & remasters.',
+        iconSvg: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>',
+        featured: true
+      },
+      {
+        id: 'main',
+        title: 'Main Vault',
+        tag: 'Unreleased Vault',
+        desc: 'Core leaked grails, studio unreleased singles, and mastered catalog.',
+        iconSvg: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+        featured: false
+      },
+      {
+        id: 'session edits',
+        title: 'Studio Sessions',
+        tag: 'Raw Studio Takes',
+        desc: 'Unedited studio session takes, alternate verses, and freestyle sessions.',
+        iconSvg: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+        featured: false
+      },
+      {
+        id: 'instrumental',
+        title: 'Instrumentals',
+        tag: 'Beats & Productions',
+        desc: 'Original studio instrumentals, melodic trap beats, guitar and synth backings.',
+        iconSvg: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+        featured: false
+      },
+      {
+        id: 'stems',
+        title: 'Stems & Multitracks',
+        tag: 'Isolated Layers',
+        desc: 'Raw isolated vocal layers, studio acapellas, melodies, and drum stems.',
+        iconSvg: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+        featured: false
+      },
+      {
+        id: 'released',
+        title: 'Officially Released',
+        tag: 'Label Discography',
+        desc: 'Commercial studio albums (GBGR, DRFL, LND, FD), official singles & features.',
+        iconSvg: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+        featured: false
+      },
+      {
+        id: 'cut',
+        title: 'Cuts & Snippets',
+        tag: 'Previews & Snippets',
+        desc: 'Rare preview cuts, IG live snippets, concert performances, and short leaks.',
+        iconSvg: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>',
+        featured: false
+      },
+      {
+        id: 'remaster',
+        title: 'Remasters',
+        tag: 'Audio Engineered',
+        desc: 'Cleaned, remastered, and sound-engineered high-definition restorations.',
+        iconSvg: '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>',
+        featured: false
+      }
+    ];
+
+    let currentSelectedCategory = 'all';
+    let currentCategoryTracks = [];
+    let filteredCategoryTracks = [];
+
+    function getCollectionCount(colId, cats = null) {
+      if (!cats && currentState && currentState.categories) cats = currentState.categories;
+      if (!cats) return '—';
+      const idLower = colId.toLowerCase();
+      if (cats[colId] !== undefined) return cats[colId];
+      if (cats[idLower] !== undefined) return cats[idLower];
+      if (idLower === 'stems' && cats['stem'] !== undefined) return cats['stem'];
+      if (idLower === 'cut' && cats['cuts'] !== undefined) return cats['cuts'];
+      if (idLower === 'instrumental' && cats['instrumentals'] !== undefined) return cats['instrumentals'];
+      if (idLower === 'remaster' && cats['remasters'] !== undefined) return cats['remasters'];
+      if (idLower === 'all') {
+        if (cats['all'] !== undefined) return cats['all'];
+        const sum = Object.values(cats).reduce((a, b) => (typeof b === 'number' ? a + b : a), 0);
+        return sum || 3881;
+      }
+      return '—';
+    }
+
+    function updateActiveCategoryBanner() {
+      const active = (currentState && (currentState.category || 'all')).toLowerCase();
+      const activeColObj = KNOWN_COLLECTIONS.find(c => c.id === active || (c.id === 'session edits' && (active === 'session' || active === 'session edits'))) || KNOWN_COLLECTIONS[0];
+      const bannerName = document.getElementById('activeColName');
+      const bannerCount = document.getElementById('activeColTrackCount');
+      const bannerIcon = document.getElementById('activeColIcon');
+      if (bannerName) bannerName.innerText = `${activeColObj.title} (${activeColObj.tag})`;
+      if (bannerCount) {
+        const cnt = getCollectionCount(activeColObj.id);
+        bannerCount.innerText = typeof cnt === 'number' ? `${cnt.toLocaleString()} tracks` : `${cnt} tracks`;
+      }
+      if (bannerIcon) {
+        bannerIcon.innerHTML = `<svg class="icon-svg" style="width:20px;height:20px;color:var(--accent);" viewBox="0 0 24 24">${activeColObj.iconSvg}</svg>`;
+      }
+    }
+
     // Categories
     async function loadCategories() {
       if (!currentState || !currentState.categories) {
@@ -1832,18 +2089,55 @@ HTML_INDEX = """<!DOCTYPE html>
       }
       const grid = document.getElementById('catGrid');
       if (!grid) return;
-      if (!currentState || !currentState.categories) {
-        grid.innerHTML = '<div class="track-card" style="color:var(--text-sub); font-size:0.8rem;">Loading collections…</div>';
-        return;
-      }
-      const cats = currentState.categories;
-      const active = (currentState.category || 'all').toLowerCase();
-      grid.innerHTML = Object.entries(cats).map(([name, count]) => `
-        <div class="cat-item ${name.toLowerCase() === active ? 'active' : ''}" onclick="changeCategory('${name}')">
-          <div class="cat-item-title">${name}</div>
-          <div class="cat-item-count">${count} tracks</div>
-        </div>
-      `).join('');
+
+      const cats = (currentState && currentState.categories) ? currentState.categories : {};
+      const active = (currentState && (currentState.category || 'all')).toLowerCase();
+      if (!currentSelectedCategory) currentSelectedCategory = active;
+
+      updateActiveCategoryBanner();
+
+      grid.innerHTML = KNOWN_COLLECTIONS.map(col => {
+        const cnt = getCollectionCount(col.id, cats);
+        const countStr = typeof cnt === 'number' ? `${cnt.toLocaleString()} tracks` : `${cnt} tracks`;
+        const isActive = (col.id === active || (col.id === 'session edits' && (active === 'session' || active === 'session edits')));
+        const isBrowsing = (col.id === currentSelectedCategory || (col.id === 'session edits' && (currentSelectedCategory === 'session' || currentSelectedCategory === 'session edits')));
+
+        return `
+          <div class="cat-item ${col.featured ? 'featured' : ''} ${isActive ? 'active' : ''} ${isBrowsing ? 'browsing' : ''}" onclick="selectCategory('${col.id}')">
+            <div class="cat-header-row">
+              <div class="cat-icon-badge">
+                <svg class="icon-svg" viewBox="0 0 24 24">${col.iconSvg}</svg>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                ${isActive ? '<span class="cat-active-pill">PLAYING</span>' : ''}
+                <span class="cat-item-count">${countStr}</span>
+              </div>
+            </div>
+            <div class="cat-meta-wrap">
+              <div class="cat-item-title">${escapeHtml(col.title)}</div>
+              <div class="cat-item-subtitle">${escapeHtml(col.tag)}</div>
+              <div class="cat-item-desc">${escapeHtml(col.desc)}</div>
+            </div>
+            <div class="cat-actions-row">
+              <button class="btn-kinetic btn-badge" onclick="event.stopPropagation(); changeCategory('${col.id}');" style="padding:4px 9px;">
+                ${isActive ? 'Active' : 'Set as Current'}
+              </button>
+              <button class="btn-kinetic btn-badge" onclick="event.stopPropagation(); playSpecificCategory('${col.id}', true);" title="Shuffle & play on Discord" style="padding:4px 8px;">
+                <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                <span>Shuffle</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      loadCollectionTracks(currentSelectedCategory || active || 'all');
+    }
+
+    function selectCategory(catId) {
+      currentSelectedCategory = catId;
+      document.querySelectorAll('.cat-item').forEach(el => el.classList.remove('browsing'));
+      loadCategories();
     }
 
     async function changeCategory(category) {
@@ -1852,8 +2146,9 @@ HTML_INDEX = """<!DOCTYPE html>
         const b = document.getElementById('categoryBadge');
         if (b) b.innerText = category.toUpperCase();
       }
+      currentSelectedCategory = category;
+      showToast(`Active Collection: ${category}`);
       loadCategories();
-      showToast(`Category: ${category}`);
       try {
         await fetch(`/api/category?token=${encodeURIComponent(token)}`, {
           method: 'POST',
@@ -1865,16 +2160,132 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
-    // EQ Sheet
+    async function playSpecificCategory(category, shuffle = true) {
+      if (currentState) {
+        currentState.category = category;
+        const b = document.getElementById('categoryBadge');
+        if (b) b.innerText = category.toUpperCase();
+      }
+      currentSelectedCategory = category;
+      loadCategories();
+      showToast(`${shuffle ? 'Shuffling' : 'Playing'} ${category} collection…`);
+      action('play_category', { category, shuffle });
+    }
+
+    function playSelectedCollection(shuffle = true) {
+      const activeCat = (currentState && currentState.category) || currentSelectedCategory || 'all';
+      playSpecificCategory(activeCat, shuffle);
+    }
+
+    async function loadCollectionTracks(category) {
+      const listEl = document.getElementById('colTracksList');
+      const labelEl = document.getElementById('colBrowserLabel');
+      const countEl = document.getElementById('colBrowserCountBadge');
+      const colObj = KNOWN_COLLECTIONS.find(c => c.id === category || (c.id === 'session edits' && category === 'session')) || { title: category };
+
+      if (labelEl) labelEl.innerText = colObj.title;
+      if (countEl) countEl.innerText = 'Loading tracks…';
+      if (listEl) listEl.innerHTML = '<div class="track-card" style="color:var(--text-sub); font-size:0.8rem;">Loading tracks from vault…</div>';
+
+      try {
+        const res = await fetch(`/api/category/tracks?category=${encodeURIComponent(category)}&limit=100&token=${encodeURIComponent(token)}`);
+        if (!res.ok) {
+          if (listEl) listEl.innerHTML = '<div class="track-card" style="color:var(--danger); font-size:0.8rem;">Failed to load collection tracks.</div>';
+          return;
+        }
+        const data = await res.json();
+        currentCategoryTracks = data.tracks || [];
+        filteredCategoryTracks = currentCategoryTracks;
+        if (countEl) countEl.innerText = `${(data.total || currentCategoryTracks.length).toLocaleString()} tracks`;
+        renderCollectionTracksList();
+      } catch (e) {
+        if (listEl) listEl.innerHTML = `<div class="track-card" style="color:var(--danger); font-size:0.8rem;">Error loading tracks: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderCollectionTracksList() {
+      const listEl = document.getElementById('colTracksList');
+      if (!listEl) return;
+      if (!filteredCategoryTracks || filteredCategoryTracks.length === 0) {
+        listEl.innerHTML = '<div class="track-card" style="color:var(--text-sub); font-size:0.8rem;">No tracks found matching filter.</div>';
+        return;
+      }
+
+      listEl.innerHTML = filteredCategoryTracks.map((t, idx) => `
+        <div class="track-card">
+          <img src="${escapeHtml(t.cover_url)}" class="track-thumb" onerror="this.src='https://api.juicevault.xyz/favicon.ico'" alt="">
+          <div class="track-meta-col" style="flex:1; min-width:0;">
+            <div class="track-name" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</div>
+            <div class="track-desc">${escapeHtml(t.artist || 'Juice WRLD')} • ${escapeHtml(t.length || '—')}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button class="btn-kinetic btn-primary btn-badge" onclick="playCollectionTrackByIndex(${idx})" style="padding:4px 9px;" title="Play now on Discord">
+              <svg class="icon-svg" style="width:11px;height:11px;" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+              <span>Play</span>
+            </button>
+            <button class="btn-kinetic btn-badge" onclick="queueCollectionTrackByIndex(${idx})" style="padding:4px 9px;" title="Add to queue">
+              <span>+ Queue</span>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function filterCollectionTracks() {
+      const query = (document.getElementById('colSearchInput')?.value || '').trim().toLowerCase();
+      if (!query) {
+        filteredCategoryTracks = currentCategoryTracks;
+      } else {
+        filteredCategoryTracks = currentCategoryTracks.filter(t => 
+          (t.title && t.title.toLowerCase().includes(query)) ||
+          (t.artist && t.artist.toLowerCase().includes(query))
+        );
+      }
+      renderCollectionTracksList();
+    }
+
+    async function playCollectionTrackByIndex(idx) {
+      const track = filteredCategoryTracks[idx];
+      if (!track) return;
+      try {
+        const res = await fetch(`/api/queue/add?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ track, play_now: true })
+        });
+        const d = await res.json();
+        showToast(d.message || `Playing now: ${track.title}`);
+      } catch (e) {
+        showToast('Play failed: ' + e.message);
+      }
+    }
+
+    async function queueCollectionTrackByIndex(idx) {
+      const track = filteredCategoryTracks[idx];
+      if (!track) return;
+      try {
+        const res = await fetch(`/api/queue/add?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ track, play_now: false })
+        });
+        const d = await res.json();
+        showToast(d.message || `Queued: ${track.title}`);
+      } catch (e) {
+        showToast('Queue failed: ' + e.message);
+      }
+    }
+
+    // EQ Profiles (No emojis, modern SVG icons)
     const DEFAULT_EQ_LIST = [
-      { id: "none", label: "🎵 Flat", desc: "Original unprocessed studio sound" },
-      { id: "bass", label: "🔊 Bass Boost", desc: "Deep punchy bass boost (+11dB)" },
-      { id: "8d", label: "🌀 8D Audio", desc: "360° rotating spatial surround sound" },
-      { id: "nightcore", label: "⚡ Nightcore", desc: "High pitch and accelerated tempo (+22%)" },
-      { id: "slowed", label: "🐌 Slowed & Reverb", desc: "Deep pitched chopped & slowed lo-fi" },
-      { id: "echo", label: "🌌 Echo & Reverb", desc: "Spacious delay and echo ambiance" },
-      { id: "wide", label: "🎧 Stereo Wide", desc: "Immersive 3D stereo stage expansion" },
-      { id: "virtual bass", label: "💥 Sub-Bass Boost", desc: "Massive low-end rumble (+16dB)" },
+      { id: "none", label: "Flat", desc: "Original unprocessed studio sound", icon: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>' },
+      { id: "bass", label: "Bass Boost", desc: "Deep punchy bass boost (+11dB)", icon: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>' },
+      { id: "8d", label: "8D Audio", desc: "360° rotating spatial surround sound", icon: '<circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>' },
+      { id: "nightcore", label: "Nightcore", desc: "High pitch and accelerated tempo (+22%)", icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' },
+      { id: "slowed", label: "Slowed & Reverb", desc: "Deep pitched chopped & slowed lo-fi", icon: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/>' },
+      { id: "echo", label: "Echo & Reverb", desc: "Spacious delay and echo ambiance", icon: '<path d="M2 12h2a8 8 0 0 1 8 8v2"/><path d="M2 4h2a16 16 0 0 1 16 16v2"/>' },
+      { id: "wide", label: "Stereo Wide", desc: "Immersive 3D stereo stage expansion", icon: '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>' },
+      { id: "virtual bass", label: "Sub-Bass Boost", desc: "Massive low-end rumble (+16dB)", icon: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>' },
     ];
 
     function openEqModal() {
@@ -1884,9 +2295,12 @@ HTML_INDEX = """<!DOCTYPE html>
       const activeEffect = (currentState && currentState.effect) ? currentState.effect : 'none';
       container.innerHTML = effects.map(eq => `
         <div class="track-card ${activeEffect === eq.id ? 'active' : ''}" style="cursor:pointer; ${activeEffect === eq.id ? 'border-color:var(--accent); background:var(--accent-muted);' : ''}" onclick="setEq('${eq.id}')">
-          <div>
-            <div style="font-weight:600; font-size:0.88rem; color:#fff;">${eq.label}</div>
-            <div style="font-size:0.72rem; color:var(--text-sub); margin-top:2px;">${eq.desc}</div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            ${eq.icon ? `<div class="cat-icon-badge" style="width:28px;height:28px;"><svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24">${eq.icon}</svg></div>` : ''}
+            <div>
+              <div style="font-weight:600; font-size:0.88rem; color:#fff;">${escapeHtml(eq.label)}</div>
+              <div style="font-size:0.72rem; color:var(--text-sub); margin-top:2px;">${escapeHtml(eq.desc)}</div>
+            </div>
           </div>
           ${activeEffect === eq.id ? '<svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
         </div>

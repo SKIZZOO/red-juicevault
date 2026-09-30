@@ -9,10 +9,14 @@ AUDIO_EXTENSIONS = (".mp3", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".flac", ".
 COLLECTION_ENDPOINTS = {
     "all": "/music/list",
     "instrumental": "/music/instrumentals/list",
+    "instrumentals": "/music/instrumentals/list",
     "remaster": "/music/remasters/list",
+    "remasters": "/music/remasters/list",
     "stems": "/music/stems/list",
+    "stem": "/music/stems/list",
     "released": "/music/released/list",
     "cut": "/music/cuts/list",
+    "cuts": "/music/cuts/list",
 }
 
 ALIASES = {
@@ -27,6 +31,8 @@ ALIASES = {
     "session edits": "session edits",
     "unreleased": "unreleased",
     "main": "main",
+    "stem": "stems",
+    "stems": "stems",
 }
 
 
@@ -98,11 +104,21 @@ async def fetch_collection(session, category):
 async def get_category_counts(session):
     tracks = await fetch_collection(session, "all")
     counts = {}
+    counts["all"] = len(tracks)
+
+    session_edits_count = 0
     for track in tracks:
         category = normalize_category(track.get("category"))
-        if category == "all":
-            continue
-        counts[category] = counts.get(category, 0) + 1
+        if category != "all":
+            counts[category] = counts.get(category, 0) + 1
+        if bool(track.get("is_session_edit")):
+            session_edits_count += 1
+
+    if session_edits_count:
+        counts["session edits"] = session_edits_count
+
+    if "stem" in counts and "stems" not in counts:
+        counts["stems"] = counts.pop("stem")
 
     try:
         cut_tracks = await fetch_collection(session, "cut")
