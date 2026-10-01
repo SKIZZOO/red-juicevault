@@ -63,6 +63,7 @@ class JuiceVault(commands.Cog):
         self._categories_cache = None
         self._categories_cache_time = 0.0
         self._tracks_cache = {}
+        self._preserved_files = set()
 
     async def cog_load(self):
         await self._ensure_session()
@@ -379,6 +380,8 @@ class JuiceVault(commands.Cog):
     @staticmethod
     def _remove_file(path):
         if path:
+            if "juicevault_soundboard" in path:
+                return
             try:
                 os.remove(path)
             except OSError:
@@ -534,7 +537,14 @@ class JuiceVault(commands.Cog):
                     track = self.queues[gid].pop(0)
                     source_type = "normal"
                 self.current[gid] = track
-                start_offset = max(0.0, float(self.play_positions.get(gid, 0.0)))
+                if track.get("_resume_position") is not None:
+                    start_offset = max(0.0, float(track.pop("_resume_position")))
+                    if not track.pop("_resume_was_playing", True):
+                        if not hasattr(self, "pause_after_seek"):
+                            self.pause_after_seek = {}
+                        self.pause_after_seek[gid] = True
+                else:
+                    start_offset = max(0.0, float(self.play_positions.get(gid, 0.0)))
                 self.play_positions[gid] = start_offset
                 duration = self._parse_duration(track.get("length"))
                 if duration is not None:
@@ -611,7 +621,10 @@ class JuiceVault(commands.Cog):
                         pass
                 if not explicit_seek:
                     self.current_files.pop(gid, None)
-                    self._remove_file(local_path)
+                    if local_path and local_path not in getattr(self, "_preserved_files", set()):
+                        self._remove_file(local_path)
+                    elif local_path:
+                        self._preserved_files.discard(local_path)
                 if stop.is_set() or self.tasks.get(gid) is not task:
                     if explicit_seek:
                         self.current_files.pop(gid, None)

@@ -176,6 +176,9 @@ class JuiceVaultWebRemote:
             app.router.add_get("/api/channels", self._api_channels)
             app.router.add_get("/api/lyrics", self._api_lyrics)
             app.router.add_post("/api/lyrics/send", self._api_lyrics_send)
+            app.router.add_get("/api/soundboard", self._api_soundboard)
+            app.router.add_post("/api/soundboard/play", self._api_soundboard_play)
+            app.router.add_post("/api/soundboard/stop", self._api_soundboard_stop)
 
             host = await self.config.host()
             port = await self.config.port()
@@ -504,7 +507,9 @@ class JuiceVaultWebRemote:
                 "position_seconds": round(position_sec, 1),
                 "cover_url": cover_url,
                 "is_external": bool(track.get("_external")),
-                "source": str(track.get("_source") or "JuiceVault Archive"),
+                "is_soundboard": bool(track.get("_is_soundboard")),
+                "sound_color": track.get("_sound_color", "#eb2f96"),
+                "source": "Soundboard" if track.get("_is_soundboard") else str(track.get("_source") or "JuiceVault Archive"),
             }
 
         # Categories list - non-blocking instant access
@@ -713,6 +718,14 @@ class JuiceVaultWebRemote:
                 main.queues[gid] = tracks
                 main.failure_counts[gid] = 0
                 await main._request_skip(gid, 1)
+        elif action_name == "play_soundboard":
+            sound_id = payload.get("sound_id")
+            if sound_id:
+                from .soundboard import play_soundboard_in_guild
+                await play_soundboard_in_guild(main, gid, sound_id)
+        elif action_name == "stop_soundboard":
+            from .soundboard import stop_soundboard_in_guild
+            await stop_soundboard_in_guild(main, gid)
 
         await self.broadcast_state(gid)
         if ui:
@@ -1265,6 +1278,53 @@ class JuiceVaultWebRemote:
             return web.json_response({"success": True, "message": f"Lyrics for '{clean_song_title(title)}' sent to #{channel.name}!"})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
+
+    async def _api_soundboard(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        from .soundboard import get_soundboard_sounds
+        return web.json_response({"success": True, "sounds": get_soundboard_sounds()})
+
+    async def _api_soundboard_play(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
+        sound_id = request.query.get("sound_id")
+        if not sound_id and request.can_read_body:
+            try:
+                data = await request.json()
+                sound_id = data.get("sound_id")
+            except Exception:
+                pass
+        if not sound_id:
+            return web.json_response({"error": "Missing sound_id parameter"}, status=400)
+
+        main = self._get_main_cog()
+        from .soundboard import play_soundboard_in_guild
+        success, msg = await play_soundboard_in_guild(main, guild.id, sound_id)
+        if not success:
+            return web.json_response({"error": msg}, status=400)
+
+        await self.broadcast_state(guild.id)
+        return web.json_response({"success": True, "message": msg})
+
+    async def _api_soundboard_stop(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
+
+        main = self._get_main_cog()
+        from .soundboard import stop_soundboard_in_guild
+        success, msg = await stop_soundboard_in_guild(main, guild.id)
+        if not success:
+            return web.json_response({"error": msg}, status=400)
+
+        await self.broadcast_state(guild.id)
+        return web.json_response({"success": True, "message": msg})
 
     async def _api_stream(self, request):
         """Stream current playing audio track live to the browser with Range request support."""

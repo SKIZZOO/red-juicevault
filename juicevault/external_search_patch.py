@@ -425,6 +425,8 @@ def patch_external_search():
     def remove_file(path):
         if not path:
             return
+        if "juicevault_soundboard" in path:
+            return
         parent = os.path.dirname(path)
         try:
             original_remove(path)

@@ -894,8 +894,73 @@ HTML_INDEX = """<!DOCTYPE html>
       flex-direction: column;
       gap: 10px;
     }
-    .auth-box.active {
+    /* Soundboard Grid & Pads */
+    .soundboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+    }
+    .sound-pad {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 10px;
       display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 8px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.16s var(--ease), border-color 0.16s ease, box-shadow 0.16s ease;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sound-pad:hover {
+      transform: translateY(-2px);
+      border-color: var(--pad-color, var(--accent));
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 10px var(--pad-glow, rgba(235, 47, 150, 0.25));
+    }
+    .sound-pad:active {
+      transform: scale(0.96);
+    }
+    .sound-pad.is-playing {
+      border-color: var(--pad-color, var(--accent)) !important;
+      box-shadow: 0 0 16px var(--pad-glow, rgba(235, 47, 150, 0.5)) !important;
+      animation: padPulse 1.1s infinite alternate ease-in-out;
+    }
+    @keyframes padPulse {
+      0% { transform: scale(1); filter: brightness(1); }
+      100% { transform: scale(1.03); filter: brightness(1.2); }
+    }
+    .sound-pad-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--pad-bg, rgba(235, 47, 150, 0.12));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--pad-color, var(--accent));
+      transition: transform 0.2s ease, background 0.2s ease;
+      flex-shrink: 0;
+    }
+    .sound-pad:hover .sound-pad-icon {
+      transform: scale(1.08);
+      background: var(--pad-color, var(--accent));
+      color: #fff;
+    }
+    .sound-pad-title {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--text-main);
+      line-height: 1.25;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 1.9em;
     }
   </style>
 </head>
@@ -1017,6 +1082,10 @@ HTML_INDEX = """<!DOCTYPE html>
               <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
               <span>EQ Presets</span>
             </button>
+            <button class="btn-kinetic btn-flat" onclick="switchMobileNav('soundboard')">
+              <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+              <span>Soundboard</span>
+            </button>
             <button class="btn-kinetic btn-flat" onclick="action('stop')">
               <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
               <span>Stop</span>
@@ -1070,6 +1139,10 @@ HTML_INDEX = """<!DOCTYPE html>
           <button class="segment-btn" onclick="switchTab('categories')">
             <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
             <span>Library</span>
+          </button>
+          <button class="segment-btn" onclick="switchTab('soundboard')">
+            <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+            <span>Sounds</span>
           </button>
           <button class="segment-btn" onclick="switchTab('shortcuts')">
             <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -1232,6 +1305,68 @@ HTML_INDEX = """<!DOCTYPE html>
             </div>
           </div>
         </div>
+
+        <!-- TAB: SOUNDBOARD -->
+        <div class="tab-content" id="tab-soundboard">
+          <div class="ui-card" style="margin-bottom:14px;">
+            <div class="section-header" style="flex-wrap:wrap; gap:10px;">
+              <span class="section-title">
+                <svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+                Meme Soundboard
+                <span style="font-size:0.7rem; font-weight:600; padding:2px 8px; border-radius:10px; background:rgba(235,47,150,0.15); color:var(--accent); margin-left:6px;">50 Sounds</span>
+              </span>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn-kinetic btn-badge" id="sbStopBtn" style="display:none; background:var(--danger); color:#fff; font-weight:600;" onclick="stopSoundboard()">
+                  <svg class="icon-svg" style="width:12px; height:12px; margin-right:4px;" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                  Stop Sound
+                </button>
+              </div>
+            </div>
+
+            <p style="font-size:0.78rem; color:var(--text-sub); margin-bottom:12px; line-height:1.45;">
+              Tap any sound to pause current music and broadcast on Discord voice. The song resumes automatically right where it left off when the sound ends.
+            </p>
+
+            <!-- Search and Controls Filter -->
+            <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+              <div class="search-input-group">
+                <svg class="icon-svg" style="color:var(--text-sub);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" class="search-field" id="soundboardSearch" placeholder="Filter 50 meme sounds (e.g. Vine Boom, Bruh, Sad Violin)…" oninput="filterSoundboard()">
+                <button class="btn-kinetic btn-badge" onclick="clearSoundboardFilter()">Clear</button>
+              </div>
+
+              <!-- Options Bar -->
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:0.75rem; color:var(--text-sub);">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+                  <input type="checkbox" id="sbPreviewToggle" checked style="accent-color:var(--accent);">
+                  <span>Play audio preview locally in browser too</span>
+                </label>
+                <span id="sbFilteredCount" style="font-family:'JetBrains Mono',monospace;">50 sounds</span>
+              </div>
+            </div>
+
+            <!-- Active Sound Playing Banner -->
+            <div id="sbActiveBanner" style="display:none; background:linear-gradient(135deg, rgba(235,47,150,0.14), rgba(114,46,209,0.12)); border:1px solid rgba(235,47,150,0.35); border-radius:10px; padding:10px 14px; margin-bottom:14px; align-items:center; justify-content:space-between;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div class="equalizer-bars" style="height:14px; gap:2px;">
+                  <span class="bar" style="background:var(--accent); animation-duration:0.6s;"></span>
+                  <span class="bar" style="background:var(--accent); animation-duration:0.9s;"></span>
+                  <span class="bar" style="background:var(--accent); animation-duration:0.7s;"></span>
+                </div>
+                <div>
+                  <div style="font-size:0.68rem; text-transform:uppercase; color:var(--accent); font-weight:700;">Live Soundboard</div>
+                  <div id="sbActiveName" style="font-size:0.85rem; font-weight:700; color:var(--text-main);">Sound Name</div>
+                </div>
+              </div>
+              <button class="btn-kinetic btn-flat" style="padding:4px 8px; font-size:0.72rem; color:var(--danger);" onclick="stopSoundboard()">Resume Song</button>
+            </div>
+
+            <!-- Soundboard Grid -->
+            <div id="soundboardGrid" class="soundboard-grid">
+              <div style="color:var(--text-sub); font-size:0.8rem; padding:12px;">Loading soundboard…</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1253,6 +1388,10 @@ HTML_INDEX = """<!DOCTYPE html>
     <button class="nav-btn" onclick="switchMobileNav('categories')">
       <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
       <span>Library</span>
+    </button>
+    <button class="nav-btn" onclick="switchMobileNav('soundboard')">
+      <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>Sounds</span>
     </button>
     <button class="nav-btn" onclick="switchMobileNav('shortcuts')">
       <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -1471,20 +1610,21 @@ HTML_INDEX = """<!DOCTYPE html>
       document.querySelectorAll('.segment-btn').forEach(el => el.classList.remove('active'));
       const target = document.getElementById('tab-' + tabId);
       if (target) target.classList.add('active');
-      const idx = ['queue', 'search', 'categories', 'shortcuts'].indexOf(tabId);
+      const idx = ['queue', 'search', 'categories', 'soundboard', 'shortcuts'].indexOf(tabId);
       if (idx !== -1) {
-        const btns = document.querySelectorAll('.segment-btn');
+        const btns = document.querySelectorAll('.segment-bar.desktop-segment .segment-btn');
         if (btns[idx]) btns[idx].classList.add('active');
       }
       if (tabId === 'queue') loadQueue();
       if (tabId === 'categories') loadCategories();
+      if (tabId === 'soundboard') loadSoundboard();
       if (tabId === 'shortcuts') renderShortcuts();
       if (navigator.vibrate) navigator.vibrate(8);
     }
 
     function switchMobileNav(tabId) {
       document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-      const idx = ['player', 'queue', 'search', 'categories', 'shortcuts'].indexOf(tabId);
+      const idx = ['player', 'queue', 'search', 'categories', 'soundboard', 'shortcuts'].indexOf(tabId);
       if (idx !== -1) {
         const btns = document.querySelectorAll('.nav-btn');
         if (btns[idx]) btns[idx].classList.add('active');
@@ -2054,9 +2194,25 @@ HTML_INDEX = """<!DOCTYPE html>
         document.getElementById('trackTitle').innerText = t.title || 'Untitled';
         document.getElementById('trackArtist').innerText = t.artist || 'Juice WRLD';
         document.getElementById('coverImg').src = t.cover_url || 'https://api.juicevault.xyz/favicon.ico';
-        document.getElementById('categoryBadge').innerText = (state.category_label || state.category || 'All').toUpperCase();
-        document.getElementById('sourceBadge').innerText = t.is_external ? (t.source || 'External') : 'JuiceVault';
+        document.getElementById('categoryBadge').innerText = t.is_soundboard ? 'SOUNDBOARD' : ((state.category_label || state.category || 'All').toUpperCase());
+        document.getElementById('sourceBadge').innerText = t.is_soundboard ? 'MEME SOUND' : (t.is_external ? (t.source || 'External') : 'JuiceVault');
         document.getElementById('eqBadge').innerText = (state.effect || 'Flat').toUpperCase();
+
+        if (t.is_soundboard) {
+          const banner = document.getElementById('sbActiveBanner');
+          if (banner) banner.style.display = 'flex';
+          const nameEl = document.getElementById('sbActiveName');
+          if (nameEl) nameEl.textContent = t.title || 'Meme Sound';
+          const stopBtn = document.getElementById('sbStopBtn');
+          if (stopBtn) stopBtn.style.display = 'inline-flex';
+        } else if (currentSbPlayingId) {
+          currentSbPlayingId = null;
+          document.querySelectorAll('.sound-pad').forEach(el => el.classList.remove('is-playing'));
+          const banner = document.getElementById('sbActiveBanner');
+          if (banner) banner.style.display = 'none';
+          const stopBtn = document.getElementById('sbStopBtn');
+          if (stopBtn) stopBtn.style.display = 'none';
+        }
 
         const trackKey = (t.id || t.title || 'track') + '_' + (t.length || t.duration_seconds || '');
         durationSeconds = t.duration_seconds || 0;
@@ -2942,6 +3098,135 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function copyShortcut(url) {
       navigator.clipboard.writeText(url).then(() => showToast('Shortcut URL copied'));
+    }
+
+    // Soundboard Engine
+    let soundboardSounds = [];
+    let currentSbPlayingId = null;
+    let localSbAudio = null;
+
+    async function loadSoundboard() {
+      const grid = document.getElementById('soundboardGrid');
+      if (!grid) return;
+      if (soundboardSounds.length > 0) {
+        renderSoundboardGrid(soundboardSounds);
+        return;
+      }
+      grid.innerHTML = '<div style="color:var(--text-sub); font-size:0.8rem; padding:12px; grid-column:1/-1;">Loading 50 meme sounds…</div>';
+      try {
+        const res = await fetch(`/api/soundboard?token=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        soundboardSounds = data.sounds || [];
+        renderSoundboardGrid(soundboardSounds);
+      } catch (e) {
+        grid.innerHTML = `<div style="color:var(--danger); font-size:0.8rem; padding:12px; grid-column:1/-1;">Failed to load soundboard: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderSoundboardGrid(list) {
+      const grid = document.getElementById('soundboardGrid');
+      if (!grid) return;
+      const countEl = document.getElementById('sbFilteredCount');
+      if (countEl) countEl.textContent = `${list.length} sound${list.length === 1 ? '' : 's'}`;
+
+      if (!list || list.length === 0) {
+        grid.innerHTML = '<div style="color:var(--text-sub); font-size:0.8rem; padding:14px; grid-column:1/-1;">No matching sounds found.</div>';
+        return;
+      }
+
+      grid.innerHTML = list.map(s => {
+        const isCurrent = (currentSbPlayingId === s.id);
+        const color = s.color || '#eb2f96';
+        return `
+          <div class="sound-pad ${isCurrent ? 'is-playing' : ''}" id="sb_pad_${s.id}" style="--pad-color:${color}; --pad-glow:${color}55; --pad-bg:${color}1a;" onclick="triggerSoundboard('${s.id}')">
+            <div class="sound-pad-icon">
+              <svg class="icon-svg" style="width:14px; height:14px;" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            </div>
+            <div class="sound-pad-title">${escapeHtml(s.name)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filterSoundboard() {
+      const input = document.getElementById('soundboardSearch');
+      const q = (input ? input.value : '').trim().toLowerCase();
+      if (!q) {
+        renderSoundboardGrid(soundboardSounds);
+        return;
+      }
+      const filtered = soundboardSounds.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
+      renderSoundboardGrid(filtered);
+    }
+
+    function clearSoundboardFilter() {
+      const input = document.getElementById('soundboardSearch');
+      if (input) input.value = '';
+      renderSoundboardGrid(soundboardSounds);
+    }
+
+    async function triggerSoundboard(soundId) {
+      const sound = soundboardSounds.find(s => s.id === soundId);
+      const name = sound ? sound.name : soundId;
+      currentSbPlayingId = soundId;
+
+      document.querySelectorAll('.sound-pad').forEach(el => el.classList.remove('is-playing'));
+      const activePad = document.getElementById('sb_pad_' + soundId);
+      if (activePad) activePad.classList.add('is-playing');
+
+      const stopBtn = document.getElementById('sbStopBtn');
+      if (stopBtn) stopBtn.style.display = 'inline-flex';
+      const activeBanner = document.getElementById('sbActiveBanner');
+      if (activeBanner) activeBanner.style.display = 'flex';
+      const activeName = document.getElementById('sbActiveName');
+      if (activeName) activeName.textContent = name;
+
+      const previewCheckbox = document.getElementById('sbPreviewToggle');
+      if (previewCheckbox && previewCheckbox.checked && sound && sound.url) {
+        try {
+          if (localSbAudio) {
+            localSbAudio.pause();
+            localSbAudio = null;
+          }
+          localSbAudio = new Audio(sound.url);
+          localSbAudio.volume = 0.85;
+          localSbAudio.play().catch(() => {});
+        } catch (_) {}
+      }
+
+      showToast(`Soundboard: ${name} (music paused)`);
+
+      try {
+        const res = await fetch(`/api/soundboard/play?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sound_id: soundId })
+        });
+        const d = await res.json();
+        if (d.error) showToast('Soundboard error: ' + d.error);
+      } catch (e) {
+        showToast('Error playing soundboard: ' + e.message);
+      }
+    }
+
+    async function stopSoundboard() {
+      if (localSbAudio) {
+        localSbAudio.pause();
+        localSbAudio = null;
+      }
+      currentSbPlayingId = null;
+      document.querySelectorAll('.sound-pad').forEach(el => el.classList.remove('is-playing'));
+      const stopBtn = document.getElementById('sbStopBtn');
+      if (stopBtn) stopBtn.style.display = 'none';
+      const activeBanner = document.getElementById('sbActiveBanner');
+      if (activeBanner) activeBanner.style.display = 'none';
+
+      showToast('Resuming music…');
+      try {
+        await fetch(`/api/soundboard/stop?token=${encodeURIComponent(token)}`, { method: 'POST' });
+      } catch (e) {
+        showToast('Error stopping: ' + e.message);
+      }
     }
 
     // Lifecycle listeners for instant mobile reconnect on unlock / tab focus

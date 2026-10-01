@@ -2,6 +2,7 @@ import importlib
 import sys
 
 _submodules = [
+    "soundboard",
     "juicevault",
     "juicevault_ui",
     "api_sources",
