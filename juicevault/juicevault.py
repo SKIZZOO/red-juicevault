@@ -1301,26 +1301,47 @@ class JuiceVault(commands.Cog):
             await ctx.send("JuiceVault Web Remote is not loaded.")
 
     @remote.command(name="tunnel")
-    async def remote_tunnel(self, ctx, action: str = "start"):
-        """Spawn a zero-config Cloudflare Quick Tunnel for free HTTPS with trusted SSL.
+    async def remote_tunnel(self, ctx, action: str = "start", *, token: str = None):
+        """Spawn or connect Cloudflare Tunnel for free HTTPS with trusted SSL.
         
         Usage:
-        4jv remote tunnel         -> Start Cloudflare HTTPS tunnel
-        4jv remote tunnel stop    -> Stop Cloudflare HTTPS tunnel
+        4jv remote tunnel                   -> Start free Cloudflare Quick Tunnel (*.trycloudflare.com)
+        4jv remote tunnel token <token>     -> Run persistent Named Tunnel for your domain (e.g. juicevault.space)
+        4jv remote tunnel stop              -> Stop Cloudflare Tunnel
+        4jv remote tunnel clear             -> Stop tunnel and remove saved tunnel token
         """
         if not getattr(self, "web_remote", None):
             await ctx.send("JuiceVault Web Remote is not loaded.")
             return
 
-        if action.lower() in ("stop", "close", "off"):
+        act = action.lower()
+        if act in ("stop", "close", "off"):
             await self.web_remote.stop_cloudflare_tunnel()
-            await ctx.send("⏹️ Cloudflare Quick Tunnel stopped. Reverted to standard IP access.")
+            await ctx.send("⏹️ Cloudflare Tunnel stopped. Reverted to standard IP access.")
             return
+        elif act in ("clear", "reset"):
+            await self.web_remote.stop_cloudflare_tunnel(clear_token=True)
+            await ctx.send("✅ Cloudflare tunnel token removed and tunnel stopped.")
+            return
+
+        # Check if action itself is the token keyword
+        named_token = token.strip() if token else None
+        if act == "token" and named_token:
+            run_token = named_token
+        elif act not in ("start", "on", "launch", "token") and not named_token:
+            # Maybe the user pasted the token directly: 4jv remote tunnel <token>
+            run_token = action.strip()
+        else:
+            run_token = None
 
         async with ctx.typing():
             try:
-                msg = await ctx.send("⏳ Initiating Cloudflare Quick Tunnel (obtaining trusted HTTPS domain)…")
-                tunnel_url = await self.web_remote.start_cloudflare_tunnel()
+                if run_token:
+                    msg = await ctx.send("⏳ Connecting Cloudflare Named Tunnel with token…")
+                    tunnel_url = await self.web_remote.start_cloudflare_tunnel(token=run_token)
+                else:
+                    msg = await ctx.send("⏳ Initiating Cloudflare Quick Tunnel (obtaining trusted HTTPS domain)…")
+                    tunnel_url = await self.web_remote.start_cloudflare_tunnel()
                 await msg.delete()
                 await self.web_remote.send_remote_embed(ctx)
             except Exception as exc:

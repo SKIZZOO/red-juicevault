@@ -57,6 +57,7 @@ class JuiceVaultWebRemote:
             port=8088,
             token=None,
             custom_url=None,
+            tunnel_token=None,
             ssl_cert=None,
             ssl_key=None,
             require_auth=True,
@@ -94,6 +95,11 @@ class JuiceVaultWebRemote:
         enabled = await self.config.enabled()
         if enabled:
             await self.start_server()
+
+        tunnel_token = await self.config.tunnel_token()
+        if tunnel_token:
+            print("[JuiceVault Web Remote] Restoring persistent Cloudflare Tunnel for custom domain...")
+            asyncio.create_task(self.start_cloudflare_tunnel(token=tunnel_token))
 
     async def get_public_ip(self):
         """Fetch the public WAN IP of the bot host to allow remote mobile connections."""
@@ -356,8 +362,8 @@ class JuiceVaultWebRemote:
             print(f"[JuiceVault Web Remote] Failed downloading cloudflared: {exc}")
         return None
 
-    async def start_cloudflare_tunnel(self):
-        """Launch Cloudflare Quick Tunnel and return the generated https://*.trycloudflare.com URL."""
+    async def start_cloudflare_tunnel(self, token=None):
+        """Launch Cloudflare Tunnel (Quick Tunnel or Named Tunnel with persistent token)."""
         if self._tunnel_proc:
             try:
                 self._tunnel_proc.terminate()
@@ -365,11 +371,53 @@ class JuiceVaultWebRemote:
                 pass
             self._tunnel_proc = None
 
+        if not token:
+            token = await self.config.tunnel_token()
+
         bin_path = await self.get_or_download_cloudflared()
         if not bin_path:
             raise RuntimeError("Could not find or download cloudflared executable.")
 
         port = await self.config.port()
+
+        if token:
+            cmd = [bin_path, "tunnel", "run", "--token", token]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            self._tunnel_proc = proc
+            await self.config.tunnel_token.set(token)
+
+            await asyncio.sleep(2.0)
+            if proc.returncode is not None:
+                err = await proc.stderr.read()
+                self._tunnel_proc = None
+                raise RuntimeError(f"Cloudflare Tunnel exited ({proc.returncode}): {err.decode(errors='ignore')[:250]}")
+
+            custom = await self.config.custom_url()
+            url = custom or "https://juicevault.space"
+            self._tunnel_url = url
+            await self.config.custom_url.set(url)
+
+            async def drain_token_monitor():
+                while proc.returncode is None:
+                    line = await proc.stderr.readline()
+                    if not line:
+                        break
+                if self._tunnel_proc is proc:
+                    print("[JuiceVault Web Remote] Token tunnel exited. Restarting in 5s...")
+                    self._tunnel_proc = None
+                    await asyncio.sleep(5)
+                    try:
+                        await self.start_cloudflare_tunnel(token=token)
+                    except Exception as exc:
+                        print(f"[JuiceVault Web Remote] Token tunnel restart failed: {exc}")
+
+            asyncio.create_task(drain_token_monitor())
+            return url
+
         cmd = [bin_path, "tunnel", "--url", f"http://127.0.0.1:{port}"]
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -398,18 +446,15 @@ class JuiceVaultWebRemote:
                     line = await proc.stderr.readline()
                     if not line:
                         break
-                # Process died — clear stale URL and try auto-restart once
                 if self._tunnel_proc is proc:
                     print("[JuiceVault Web Remote] Cloudflare tunnel process exited. Clearing URL and attempting restart...")
                     self._tunnel_proc = None
                     self._tunnel_url = None
                     await self.config.custom_url.set(None)
-                    # Broadcast updated state so the remote page stops trying the dead URL
                     try:
                         await asyncio.sleep(2)
                         new_url = await self.start_cloudflare_tunnel()
                         print(f"[JuiceVault Web Remote] Tunnel restarted: {new_url}")
-                        # Notify all WebSocket clients of the new URL
                         msg = json.dumps({"type": "tunnel_url", "url": new_url})
                         for ws in list(self.ws_clients):
                             try:
@@ -422,8 +467,8 @@ class JuiceVaultWebRemote:
             return tunnel_url
         raise RuntimeError("Cloudflare Quick Tunnel timed out generating public URL.")
 
-    async def stop_cloudflare_tunnel(self):
-        """Terminate active Cloudflare Quick Tunnel."""
+    async def stop_cloudflare_tunnel(self, clear_token=False):
+        """Terminate active Cloudflare Quick or Named Tunnel."""
         if self._tunnel_proc:
             try:
                 self._tunnel_proc.terminate()
@@ -431,7 +476,13 @@ class JuiceVaultWebRemote:
                 pass
             self._tunnel_proc = None
         self._tunnel_url = None
-        await self.config.custom_url.set(None)
+        if clear_token:
+            await self.config.tunnel_token.set(None)
+            await self.config.custom_url.set(None)
+        else:
+            custom = await self.config.custom_url()
+            if custom and "trycloudflare.com" in custom:
+                await self.config.custom_url.set(None)
 
     @web.middleware
     async def _cors_middleware(self, request, handler):
