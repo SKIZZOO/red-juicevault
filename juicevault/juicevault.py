@@ -35,6 +35,8 @@ class JuiceVault(commands.Cog):
     FAILURE_BACKOFF_SECONDS = 8
     MAX_CONSECUTIVE_FAILURES = 3
     VOICE_STOP_TIMEOUT = 5.0
+    DOWNLOAD_CHUNK_SIZE = 256 * 1024
+
     VIP_USER_IDS = {612747552999211011, 340511257067257857}
     VIP_VIDEO_URL = "https://www.youtube.com/watch?v=7uNd46F3Ubs"
     VIP_START_OFFSET = 4.0
@@ -378,7 +380,8 @@ class JuiceVault(commands.Cog):
                 if response.status != 200:
                     body = await response.text(errors="ignore")
                     raise RuntimeError(f"JuiceVault stream HTTP {response.status}: {body[:200]}")
-                async for chunk in response.content.iter_chunked(self.DOWNLOAD_CHUNK_SIZE):
+                chunk_size = getattr(self, "DOWNLOAD_CHUNK_SIZE", 256 * 1024)
+                async for chunk in response.content.iter_chunked(chunk_size):
                     if chunk:
                         handle.write(chunk)
             handle.close()
