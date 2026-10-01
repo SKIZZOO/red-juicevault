@@ -1057,29 +1057,69 @@ class JuiceVaultWebRemote:
                     "_external": False,
                 })
         else:
-            from .external_search_patch import _extract_search, _source_name
+            from .external_search_patch import _extract_search, _source_name, _format_seconds
             try:
                 info = await asyncio.to_thread(_extract_search, query)
-                title = str(info.get("title") or info.get("fulltitle") or query).strip()
-                artist = str(info.get("artist") or info.get("uploader") or info.get("channel") or "Unknown artist").strip()
-                source_name = str(info.get("_source") or _source_name(info)).strip()
-                url = info.get("webpage_url") or info.get("original_url") or info.get("url")
-                results.append({
-                    "id": f"external:{info.get('id') or abs(hash(query))}",
-                    "title": title,
-                    "artist": artist,
-                    "length": str(info.get("duration_string") or info.get("duration") or "—"),
-                    "cover_url": info.get("thumbnail"),
-                    "url": url,
-                    "_external": True,
-                    "_source": source_name,
-                    "_webpage_url": url,
-                    "_query": query,
-                })
+                if info.get("_is_playlist"):
+                    entries = info.get("entries") or []
+                    for t in entries:
+                        results.append({
+                            "id": t.get("id"),
+                            "title": t.get("title"),
+                            "artist": t.get("artist"),
+                            "length": t.get("length") or "—",
+                            "cover_url": t.get("cover_url"),
+                            "url": t.get("url"),
+                            "_external": True,
+                            "_source": t.get("_source"),
+                            "_webpage_url": t.get("_webpage_url"),
+                            "_query": t.get("_query"),
+                        })
+                    return web.json_response({
+                        "success": True,
+                        "is_playlist": True,
+                        "playlist_title": str(info.get("title") or "Online Playlist").strip(),
+                        "playlist_uploader": str(info.get("uploader") or info.get("artist") or "Online").strip(),
+                        "playlist_count": len(results),
+                        "results": results,
+                    })
+
+                search_list = info.get("_search_results") or [info]
+                for item in search_list:
+                    if not item:
+                        continue
+                    item_id = str(item.get("id") or abs(hash(query)))
+                    if not item_id.startswith("external:"):
+                        item_id = f"external:{item_id}"
+                    item_title = str(item.get("title") or item.get("fulltitle") or query).strip()
+                    item_artist = str(item.get("artist") or item.get("uploader") or item.get("channel") or "Unknown artist").strip()
+                    source_name = str(item.get("_source") or _source_name(item)).strip()
+                    item_url = item.get("webpage_url") or item.get("original_url") or item.get("url")
+                    if not item_url and "youtube" in source_name.casefold():
+                        raw_id = item.get("id") or ""
+                        if raw_id:
+                            item_url = f"https://www.youtube.com/watch?v={raw_id}"
+                    dur = item.get("length") or item.get("duration_string") or _format_seconds(item.get("duration"))
+                    thumb = item.get("cover_url") or item.get("thumbnail")
+                    if not thumb and isinstance(item.get("thumbnails"), list) and item["thumbnails"]:
+                        thumb = item["thumbnails"][-1].get("url")
+
+                    results.append({
+                        "id": item_id,
+                        "title": item_title,
+                        "artist": item_artist,
+                        "length": dur or "—",
+                        "cover_url": thumb,
+                        "url": item_url,
+                        "_external": True,
+                        "_source": source_name,
+                        "_webpage_url": item_url,
+                        "_query": query,
+                    })
             except Exception as exc:
                 return web.json_response({"results": [], "error": str(exc)})
 
-        return web.json_response({"success": True, "results": results})
+        return web.json_response({"success": True, "is_playlist": False, "results": results})
 
     async def _api_queue_add(self, request):
         if not await self._authenticate(request):
@@ -1088,8 +1128,9 @@ class JuiceVaultWebRemote:
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
         data = await request.json()
+        tracks = data.get("tracks")
         track = data.get("track")
-        if not track:
+        if not tracks and not track:
             return web.json_response({"error": "Missing track data"}, status=400)
 
         main = self._get_main_cog()
@@ -1098,15 +1139,33 @@ class JuiceVaultWebRemote:
             return web.json_response({"error": "Player is offline. Start the player first."}, status=400)
 
         play_now = bool(data.get("play_now", False))
-        if play_now:
-            main.manual_queues.setdefault(gid, []).insert(0, track)
-            voice = guild.voice_client
-            if voice and (voice.is_playing() or voice.is_paused()):
-                voice.stop()
-            msg = f"Playing now: '{track.get('title')}'"
+
+        if tracks and isinstance(tracks, list):
+            valid_tracks = [t for t in tracks if isinstance(t, dict)]
+            if not valid_tracks:
+                return web.json_response({"error": "No valid tracks provided"}, status=400)
+
+            queue = main.manual_queues.setdefault(gid, [])
+            if play_now:
+                for i, t in enumerate(valid_tracks):
+                    queue.insert(i, t)
+                voice = guild.voice_client
+                if voice and (voice.is_playing() or voice.is_paused()):
+                    voice.stop()
+                msg = f"Playing playlist now ({len(valid_tracks)} tracks)"
+            else:
+                queue.extend(valid_tracks)
+                msg = f"Added {len(valid_tracks)} tracks to Requested queue!"
         else:
-            main.manual_queues.setdefault(gid, []).append(track)
-            msg = f"Added '{track.get('title')}' to Requested queue!"
+            if play_now:
+                main.manual_queues.setdefault(gid, []).insert(0, track)
+                voice = guild.voice_client
+                if voice and (voice.is_playing() or voice.is_paused()):
+                    voice.stop()
+                msg = f"Playing now: '{track.get('title')}'"
+            else:
+                main.manual_queues.setdefault(gid, []).append(track)
+                msg = f"Added '{track.get('title')}' to Requested queue!"
 
         ui = self._get_ui_cog()
         if ui:

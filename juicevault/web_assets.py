@@ -2348,27 +2348,75 @@ HTML_INDEX = """<!DOCTYPE html>
       searchMode = mode;
       document.getElementById('modeVault').classList.toggle('active', mode === 'vault');
       document.getElementById('modeExternal').classList.toggle('active', mode === 'external');
+      const input = document.getElementById('searchInput');
+      if (input) {
+        input.placeholder = mode === 'external'
+          ? 'Song title, artist, or YouTube/SoundCloud playlist URL…'
+          : 'Search song title or artist…';
+      }
     }
 
     async function executeSearch() {
       const q = document.getElementById('searchInput').value.trim();
       if (!q) return;
       const resContainer = document.getElementById('searchResults');
-      resContainer.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Searching archive…</div>';
+      resContainer.innerHTML = `<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Searching ${searchMode === 'external' ? 'online (YouTube / SoundCloud)…' : 'archive…'}</div>`;
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&source=${searchMode}&token=${encodeURIComponent(token)}`);
         const data = await res.json();
         currentSearchResults = data.results || [];
+
+        if (data.error) {
+          resContainer.innerHTML = `<div class="track-card" style="color: var(--danger); font-size: 0.8rem;">Search error: ${escapeHtml(data.error)}</div>`;
+          return;
+        }
+
         if (currentSearchResults.length > 0) {
-          resContainer.innerHTML = currentSearchResults.map((item, idx) => `
+          let html = '';
+          if (data.is_playlist) {
+            html += `
+              <div class="playlist-header-card" style="background: linear-gradient(135deg, rgba(235, 47, 150, 0.12), rgba(114, 46, 209, 0.08)); border: 1px solid rgba(235, 47, 150, 0.28); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                  <div style="min-width: 0;">
+                    <div style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); font-weight: 700; margin-bottom: 2px;">
+                      Online Playlist • ${escapeHtml(data.playlist_uploader || 'Online')}
+                    </div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                      ${escapeHtml(data.playlist_title || 'Playlist')}
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-sub); margin-top: 2px;">
+                      ${currentSearchResults.length} track${currentSearchResults.length === 1 ? '' : 's'} found
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                    <button class="btn-kinetic btn-badge" style="background: var(--accent); color: #fff; font-weight: 600;" onclick="addAllPlaylistTracks(true)">
+                      <svg class="icon-svg" style="width: 12px; height: 12px; margin-right: 4px;" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                      Play All
+                    </button>
+                    <button class="btn-kinetic btn-badge" onclick="addAllPlaylistTracks(false)">
+                      <svg class="icon-svg" style="width: 12px; height: 12px; margin-right: 4px;" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Queue All
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+
+          html += currentSearchResults.map((item, idx) => `
             <div class="track-card">
               <div class="track-meta-col">
                 <div class="track-name">${escapeHtml(item.title || 'Untitled')}</div>
-                <div class="track-desc">${escapeHtml(item.artist || 'Juice WRLD')} • ${escapeHtml(item.length || '—')}</div>
+                <div class="track-desc">${escapeHtml(item.artist || 'Juice WRLD')} • ${escapeHtml(item.length || '—')}${item._source ? ' • ' + escapeHtml(item._source) : ''}</div>
               </div>
-              <button class="btn-kinetic btn-badge" onclick="addSearchResultByIndex(${idx})">+ Add</button>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn-kinetic btn-badge" onclick="addSearchResultByIndex(${idx}, true)" title="Play Now">Play</button>
+                <button class="btn-kinetic btn-badge" onclick="addSearchResultByIndex(${idx}, false)" title="Add to Queue">+ Add</button>
+              </div>
             </div>
           `).join('');
+
+          resContainer.innerHTML = html;
         } else {
           resContainer.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No results found.</div>';
         }
@@ -2377,20 +2425,36 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
-    function addSearchResultByIndex(idx) {
+    function addSearchResultByIndex(idx, playNow = false) {
       const item = currentSearchResults[idx];
-      if (item) addToQueue(item);
+      if (item) addToQueue(item, playNow);
     }
 
-    async function addToQueue(item) {
+    async function addToQueue(item, playNow = false) {
       try {
         const res = await fetch(`/api/queue/add?token=${encodeURIComponent(token)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ track: item })
+          body: JSON.stringify({ track: item, play_now: playNow })
         });
         const d = await res.json();
-        showToast(d.message || 'Added to Requested');
+        showToast(d.message || (playNow ? 'Playing now' : 'Added to Requested'));
+      } catch (e) {
+        showToast('Error: ' + e.message);
+      }
+    }
+
+    async function addAllPlaylistTracks(playNow = false) {
+      if (!currentSearchResults || !currentSearchResults.length) return;
+      try {
+        showToast(playNow ? 'Starting playlist playback…' : 'Adding playlist to queue…');
+        const res = await fetch(`/api/queue/add?token=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tracks: currentSearchResults, play_now: playNow })
+        });
+        const d = await res.json();
+        showToast(d.message || (playNow ? 'Playing playlist now' : 'Added playlist to queue'));
       } catch (e) {
         showToast('Error: ' + e.message);
       }
