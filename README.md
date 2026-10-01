@@ -1,166 +1,156 @@
-# Red JuiceVault
+# Red JuiceVault 🧃
 
-A polished 24/7 JuiceVault music player for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot).
+[![Red-DiscordBot](https://img.shields.io/badge/Red--DiscordBot-V3-red.svg)](https://github.com/Cog-Creators/Red-DiscordBot)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Creator](https://img.shields.io/badge/Made%20by-SKIZZOO-purple.svg)](https://guns.lol/skizzoo)
 
-## UI Preview
+A high-performance, polished 24/7 JuiceVault music player and companion Mobile Web Remote for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot).
 
-The JuiceVault control panel provides a live Now Playing display with playback status, voice channel, category, queue information, Lyrics, EQ, and interactive playback controls.
+Featuring a **mobile-first PWA controller**, **1:1 phase-locked audio streaming ("Listen Together")**, an interactive **50 Meme Soundboard**, **live audio EQ presets (8D, Bass Boost, Nightcore)**, **YouTube playlist support**, and **automated Cloudflare Tunnel HTTPS**.
 
-![JuiceVault UI Preview](docs/ui-preview.png)
+---
 
-## Features
+## 📸 Showcase & Preview
 
-- 🎵 **24/7 JuiceVault playback** — continuously plays tracks from the JuiceVault archive.
-- 🔄 **Automatic queue refill** — reloads the archive when the normal queue reaches the end.
-- 🎚️ **Categories** — browse JuiceVault collections such as All Music, Instrumentals, Remasters, Stems, Released, and Cut Files.
-- 🔎 **JuiceVault Search** — search the archive and add results directly to Requested.
-- 🌐 **External Search** — search online sources supported by `yt-dlp`, with automatic fallback to JuiceVault when external playback is exhausted or fails.
-- 📥 **Requested queue** — manually requested tracks are played before the normal archive queue.
-- ⏮️ **Previous / Next** — move through playback history and the queue.
-- ⏩ **10-second seek** — jump backward or forward by 10 seconds.
-- 🔀 **Shuffle** — randomize the normal queue.
-- 🔁 **Repeat** — keep the current playback flow repeating.
-- 🎚️ **Audio effects / EQ** — Flat, Bass Boost, 8D Audio, Nightcore, Slowed, Echo, Wide, and Virtual Bass.
-- 📱 **Mobile Web Remote & PWA** — control playback, queues, and audio EQ directly from any mobile phone browser or install it as a standalone home-screen app.
-- 📷 **Instant QR Code pairing** — scan a QR code from Discord with your phone camera to connect immediately with secure token authentication.
-- 🔒 **Phone Lock Screen Media Controls** — MediaSession API integration allows skipping, pausing, and seeking directly from your phone's lock screen, dynamic island, or notification center.
-- ⚡ **REST API & iOS Shortcuts** — pre-built HTTP endpoints to control playback with Siri, Apple Shortcuts, Android widgets, or Tasker.
-- 🎶 **Lyrics button** — opens a Genius search for the currently playing artist and track.
-- 🎨 **Discord control panel** — interactive buttons for playback, search, categories, EQ, shuffle, repeat, 10-second seeking, and 📱 Remote.
-- 🔊 **Voice channel awareness** — shows the current voice channel and does not force the bot back when it is manually moved to another channel.
-- 🖼️ **Album artwork** — displays JuiceVault artwork when available; external tracks do not attempt JuiceVault cover lookups.
-- 🔗 **Direct track links** — the currently playing JuiceVault track links directly to its archive page.
-- 👤 **Creator link** — the panel credits SKIZZOO with a link to the creator page.
-- 💾 **Playback recovery** — restores the configured playback setup after a Red restart.
+![JuiceVault UI Showcase](docs/remote-showcase.png)
 
-## Commands
+![Listen Together & Soundboard Mockup](docs/mobile-listen-together.png)
 
-The examples below use the default Red prefix `[p]`.
+![JuiceVault Discord Control Panel](docs/ui-preview.png)
 
-### Player
+---
 
+## ✨ Key Features
+
+### 🎧 "Listen Together" (1:1 Discord Phase-Locked Audio Sync)
+- **1:1 Real-Time Audio Streaming**: Listen to the exact song playing in Discord directly on your phone or computer browser.
+- **Phase-Locked Loop (PLL) Engine**: Sub-30ms clock synchronization ensures your browser audio plays in lockstep with Discord voice channel members with zero echo.
+- **Live Hardware Volume Slider & Micro-Steering**: Smooth dynamic pitch and rate adjustments keep audio perfectly aligned without stuttering.
+- **Lock Screen Media Player**: Full integration with the iOS / Android `MediaSession` API allows play, pause, skip, and scrubbing directly from your lock screen, notification center, or Apple Dynamic Island.
+
+### 🔊 50 Meme Soundboard
+- **50 Curated Viral Sounds**: Instant soundboard pads (Airhorn, OOF, Bruh, Yeet, Sad Trombone, Wow, etc.) from MyInstants.
+- **Smart Music Ducking / Auto-Pause**: When any soundboard pad is triggered, current music playback pauses instantly, plays the soundboard effect into the voice channel, and seamlessly resumes the music.
+- **Audio Previews**: Optional local audio preview checkbox lets you audition sounds directly on your device.
+
+### 📱 Mobile Web Remote PWA
+- **Compact & Modern Layout**: Streamlined, ultra-responsive dark glassmorphic UI optimized to fit cleanly on mobile screens without excessive scrolling.
+- **1-Tap Pairing**: Instant QR Code pairing generated from Discord with secure auth tokens.
+- **Installable PWA**: Tap *Add to Home Screen* in Safari (iOS) or Chrome (Android) for a standalone fullscreen mobile app with custom app icons.
+- **Live WebSocket Sync**: Real-time 60fps playback scrubber, live soundwave visualizer, and dynamic status badges.
+- **Full Queue Management**: Tap any track to play immediately, move next, or remove from queue.
+
+### 🌐 Cloudflare Tunnel & Custom Domains
+- **Named Tunnel Support**: Connect your own custom domain (e.g. `https://remote.juicevault.space`) with automated background service recovery.
+- **1-Click Quick Tunnel**: Instant temporary `https://*.trycloudflare.com` URL with zero router configuration or port forwarding needed.
+- **Direct HTTPS**: Optional built-in 2048-bit self-signed SSL generator for open port deployments.
+
+### 🎚️ Dynamic Audio EQ & Effects
+- **Real-Time Audio Presets**: Flat, Bass Boost, 8D Audio (orbital panning), Nightcore (1.22x pitch/tempo), Slowed (0.86x reverb), Echo, Wide Stereo, and Virtual Sub-Bass.
+- **Web Remote EQ Processing**: Built-in Web Audio API filter graph applies audio effects to both Discord voice and your phone stream simultaneously.
+
+### 🎵 Music Engine & Search
+- **24/7 Continuous Playback**: Endless archive playback from JuiceVault collections (All Music, Instrumentals, Remasters, Stems, Released, Cut Files).
+- **YouTube Playlists & Search**: Search any online song or paste full YouTube playlists to queue all tracks automatically via `yt-dlp`.
+- **Requested Queue Priority**: User requests always play ahead of the background archive stream.
+- **VIP User Auto-Greeting**: Automated 3-second delayed greeting video with auto-resume when designated VIP users join the voice channel.
+- **Offline Disk Cache Resilience**: Automatic atomic disk caching prevents downtime during upstream archive API outages.
+
+---
+
+## 🕹️ Discord Commands
+
+Prefix: `[p]` (e.g. `4jv` or `!jv`)
+
+### Player & Playback
 ```text
-[p]jv start
-[p]jv stop
-[p]jv skip
-[p]jv next
-[p]jv skip10
-[p]jv shuffle
-[p]jv status
+[p]jv start                       # Start 24/7 archive playback
+[p]jv stop                        # Stop playback and leave voice
+[p]jv play <query | URL>          # Play external song or full YouTube playlist
+[p]jv skip                        # Skip current track
+[p]jv previous                    # Play previous track from history
+[p]jv skip10                      # Jump forward 10 seconds
+[p]jv rewind10                    # Jump backward 10 seconds
+[p]jv shuffle                     # Shuffle current archive queue
+[p]jv status                      # Display current player status
+[p]jvpanel                        # Open interactive Discord button control panel
 ```
 
-### Mobile Remote & REST API
-
+### Mobile Web Remote & Tunnel
 ```text
-[p]jv remote                     # Displays mobile URL, auth token, and scannable QR Code
-[p]jv remote tunnel [start|stop] # 1-Click Cloudflare Quick Tunnel (Free trusted HTTPS, 0 config!)
-[p]jv remote https [on|off]      # Direct HTTPS with auto-generated self-signed SSL cert
-[p]jv remote ssl <cert> <key>    # Use your own SSL certificate and key
-[p]jv remote port <port>         # Change web server port (default: 8088)
-[p]jv remote token [tok]         # View or set secret auth token
-[p]jv remote url [url]           # Set custom domain / tunnel URL (e.g. Cloudflare / reverse proxy)
-[p]jv remote restart             # Restart the web remote server
-[p]jv remote toggle              # Enable / disable the web remote server
+[p]jv remote                             # Display remote link, token, and scannable QR Code
+[p]jv remote url <https://your.domain>   # Bind a custom domain (e.g. https://remote.juicevault.space)
+[p]jv remote tunnel token <token>        # Start persistent Cloudflare Named Tunnel with token
+[p]jv remote tunnel                      # Start free 1-click Cloudflare Quick Tunnel (*.trycloudflare.com)
+[p]jv remote tunnel stop                 # Stop active Cloudflare tunnel
+[p]jv remote tunnel clear                # Remove saved tunnel token and stop tunnel
+[p]jv remote https [on|off]              # Toggle self-signed direct HTTPS on your port
+[p]jv remote port <port>                 # Change web server port (default: 8088 or 2556)
+[p]jv remote token [new_token]           # View or regenerate secret auth token
+[p]jv remote restart                     # Restart web remote server
 ```
 
-### Library & search
-
+### Library & Collections
 ```text
-[p]jv categories
-[p]jv category <name>
-[p]jv search <query>
-[p]jv play <query or number>
-[p]jv refresh
+[p]jv categories                  # List available archive categories
+[p]jv category <name>             # Switch active collection (e.g. Released, Instrumentals)
+[p]jv search <query>              # Search JuiceVault archive and queue track
+[p]jv refresh                     # Clear cache and refresh track catalog
 ```
 
-### Control panel
+---
 
-```text
-[p]jvpanel
-```
+## 🚀 Installation
 
-The panel provides interactive controls for Category, Search, Refresh, Lyrics, EQ, Play/Stop, Pause/Resume, Previous, Next, Repeat, Shuffle, 10-second seeking, and a private **📱 Remote** button.
+### 1. Requirements
+- Python 3.9+
+- [Red-DiscordBot V3](https://github.com/Cog-Creators/Red-DiscordBot)
+- [FFmpeg](https://ffmpeg.org/download.html) installed and in your system `PATH`.
 
-## Mobile Phone Control (Web Remote & PWA)
-
-JuiceVault includes a built-in mobile web app and REST API powered by `aiohttp`:
-
-1. Run `[p]jv remote` in Discord (or click **📱 Remote** on the `[p]jvpanel`).
-2. Scan the QR code with your phone camera or click the link.
-3. **Kinetics & OriginKit UI**: Engineered with tactile spring physics, soundwave visualizer bars, zero emojis (pure custom SVGs), and responsive layouts for both mobile phones and desktop displays.
-4. **Live Browser Audio Streaming**: Tap **Listen Live** on your phone or PC to hear the music streaming directly through your browser, synced with Discord playback in real time with hardware volume and lock screen controls!
-5. **Interactive Queue Management**: Tap any song in the Requested or Upcoming Queue to open an action sheet with options to **Play Right Now**, **Play Next**, or **Remove From Queue**.
-6. **Zero-Config HTTPS (No Certificate Needed)**:
-   - **1-Click Cloudflare Tunnel (Recommended)**: Run `[p]jv remote tunnel` to instantly generate a secure, trusted `https://*.trycloudflare.com` URL with an official Cloudflare SSL certificate (no ports or router configuration needed).
-   - **Direct Port HTTPS**: Run `[p]jv remote https on` to automatically generate a self-signed 2048-bit SSL certificate and run HTTPS directly on your open port.
-7. **Add to Home Screen**: In Safari (iOS) or Chrome (Android), tap Share / Menu -> *Add to Home Screen* to use it as a fullscreen app!
-8. **iOS Shortcuts / Siri**: In the *Shortcuts* tab of the web app, copy one-tap webhook URLs into the Apple Shortcuts app ("Get Contents of URL") to control music with Siri or widgets!
-
-## Installation
-
-Install FFmpeg on the host running Red, then add and install the repository:
-
+### 2. Add and Load Cog
 ```text
 [p]repo add juicevault https://github.com/SKIZZOO/red-juicevault
 [p]cog install juicevault juicevault
 [p]load juicevault
 ```
 
-Join the desired voice channel and start playback:
-
+### 3. Start Playing
+Join a voice channel and run:
 ```text
 [p]jv start
 ```
 
-## Requirements
+### 4. Open Mobile Web Remote
+```text
+[p]jv remote
+```
+Scan the QR code with your smartphone camera to launch the controller!
 
-The cog uses:
+---
 
-- **Red-DiscordBot** — cog framework and Discord bot integration.
-- **discord.py** — Discord API and voice integration through Red.
-- **FFmpeg** — audio decoding and playback.
-- **aiohttp** — HTTP/API requests.
-- **PyNaCl** — Discord voice encryption support.
-- **imageio-ffmpeg** — FFmpeg helper support.
-- **yt-dlp** — external online audio search/download support.
-- **davey** — Discord voice protocol support.
+## 🛠️ Tech Stack & Dependencies
 
-Python dependencies are listed in [`requirements.txt`](requirements.txt).
+- **[Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot)** — modular Discord bot framework.
+- **[discord.py](https://github.com/Rapptz/discord.py)** — Discord voice & client integration.
+- **[aiohttp](https://github.com/aio-libs/aiohttp)** — asynchronous Web Remote HTTP server & WebSocket gateway.
+- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — YouTube playlist & external audio resolution.
+- **[cloudflared](https://github.com/cloudflare/cloudflared)** — zero-config Cloudflare Quick & Named Tunnel connector.
+- **[FFmpeg](https://ffmpeg.org/)** — audio decoding, filtering, and real-time DSP effects.
+- **[OriginKit & Kinetics CSS]** — responsive, physics-based glassmorphic web interface.
 
-## JuiceVault API
+---
 
-The cog uses the public JuiceVault archive/API to retrieve music metadata and streamable tracks.
+## 👤 Credits
 
-JuiceVault collections currently used by the cog include:
-
-- All Music
-- Instrumentals
-- Remasters
-- Stems
-- Released
-- Cut Files
-
-## External Sources
-
-External search uses `yt-dlp` for supported online sources. External tracks are placed into the Requested queue so they can play next, and the player returns to the JuiceVault archive when the external queue is finished.
-
-## Credits / Thanks
-
-### Thanks to
-
-- 🧃 **JuiceVault** — for the music archive and API.
-- 🤖 **Red-DiscordBot** — for the cog framework.
-- 💬 **discord.py** — for Discord integration and voice playback support.
-- 🎬 **yt-dlp** — for external source extraction and downloading.
-- ⚙️ **FFmpeg** — for reliable audio processing and playback.
-
-### Made by
-
-**SKIZZOO**
-
-- GitHub: [SKIZZOO](https://github.com/SKIZZOO)
+**Made by SKIZZOO**
+- GitHub: [@SKIZZOO](https://github.com/SKIZZOO)
 - Website: [guns.lol/skizzoo](https://guns.lol/skizzoo)
 
-## License
+Special thanks to the **JuiceVault** team, **Red-DiscordBot** contributors, and the **discord.py** community.
 
-See the repository for the current project license and source code.
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).

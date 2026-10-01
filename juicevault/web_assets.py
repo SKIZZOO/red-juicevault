@@ -225,6 +225,65 @@ HTML_INDEX = """<!DOCTYPE html>
       .card-content-wrap {
         display: none;
       }
+      .app-container {
+        padding: 10px 12px calc(72px + var(--safe-bottom)) !important;
+      }
+      .ui-card {
+        padding: 14px 14px 12px !important;
+      }
+      .player-visual {
+        max-width: 140px !important;
+        margin: 0 auto 8px !important;
+      }
+      .track-meta {
+        margin-bottom: 8px !important;
+      }
+      .track-title {
+        font-size: 1.05rem !important;
+      }
+      .track-artist {
+        font-size: 0.8rem !important;
+      }
+      .pill-row {
+        margin-top: 6px !important;
+        gap: 4px !important;
+      }
+      .pill-tag {
+        font-size: 0.68rem !important;
+        padding: 2px 6px !important;
+      }
+      .scrubber-wrap {
+        margin: 8px 0 10px !important;
+      }
+      .controls-main {
+        gap: 8px !important;
+        margin-bottom: 10px !important;
+      }
+      .btn-play-pause {
+        width: 48px !important;
+        height: 48px !important;
+      }
+      .btn-action-md {
+        width: 36px !important;
+        height: 36px !important;
+      }
+      .btn-action-sm {
+        width: 30px !important;
+        height: 30px !important;
+      }
+      .controls-sub {
+        margin-bottom: 8px !important;
+        gap: 6px !important;
+      }
+      .controls-sub .btn-flat {
+        padding: 4px 8px !important;
+        font-size: 0.72rem !important;
+      }
+      .banner-box {
+        padding: 8px 10px !important;
+        margin-top: 8px !important;
+        gap: 8px !important;
+      }
     }
     /* Tab Content Switcher */
     .tab-content {
@@ -239,7 +298,7 @@ HTML_INDEX = """<!DOCTYPE html>
       background: var(--surface-card);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      padding: 20px;
+      padding: 18px;
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -249,13 +308,13 @@ HTML_INDEX = """<!DOCTYPE html>
       position: relative;
       width: 100%;
       aspect-ratio: 1;
-      max-width: 280px;
-      margin: 0 auto 18px;
+      max-width: 200px;
+      margin: 0 auto 12px;
       border-radius: var(--radius-md);
       overflow: hidden;
       background: #14141a;
       border: 1px solid var(--border);
-      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 28px rgba(168, 85, 247, 0.15);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.65), 0 0 24px rgba(168, 85, 247, 0.12);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1096,29 +1155,35 @@ HTML_INDEX = """<!DOCTYPE html>
             </button>
           </div>
 
-          <!-- Live Browser Audio & Lock Screen Banner -->
-          <div class="banner-box" id="liveAudioBanner" style="flex-direction:column; align-items:stretch; gap:10px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <!-- Listen Together & Lock Screen Banner -->
+          <div class="banner-box" id="liveAudioBanner" style="flex-direction:column; align-items:stretch; gap:8px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
               <div style="display:flex; align-items:center; gap:8px;">
-                <svg class="icon-svg" style="color:var(--accent); width:18px; height:18px; flex-shrink:0;" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                <div style="width:28px; height:28px; border-radius:50%; background:var(--accent-muted); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                  <svg class="icon-svg" style="color:var(--accent); width:15px; height:15px;" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                </div>
                 <div>
-                  <div style="font-weight:700; font-size:0.84rem; color:#fff;" id="liveStatusTitle">Phone & Lock Screen Audio</div>
-                  <div style="font-size:0.72rem; color:var(--text-sub);" id="liveStatusSub">Active lock screen media & background remote controls</div>
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="font-weight:700; font-size:0.82rem; color:#fff;" id="liveStatusTitle">Listen Together</div>
+                    <span class="pill-tag accent" style="font-size:0.62rem; padding:1px 5px; text-transform:uppercase;" id="liveSyncBadge">1:1 Sync</span>
+                  </div>
+                  <div style="font-size:0.7rem; color:var(--text-sub);" id="liveStatusSub">1:1 Real-time synced audio with Discord voice channel</div>
                 </div>
               </div>
               <div style="display:flex; gap:6px; align-items:center;">
                 <button class="btn-kinetic btn-badge active" id="btnLockScreen" onclick="toggleLockScreenControls()" title="Lock Screen Remote Controls">
-                  <span id="lockScreenBtnLabel">Lock Controls: ON</span>
+                  <span id="lockScreenBtnLabel">Lock: ON</span>
                 </button>
-                <button class="btn-kinetic btn-badge" id="btnListenLive" onclick="toggleLiveAudio()" title="Listen to stream on this device">
-                  <span id="liveBtnLabel">Listen Live</span>
+                <button class="btn-kinetic btn-badge" id="btnListenLive" onclick="toggleLiveAudio()" title="Stream synchronized audio directly on this phone">
+                  <span id="liveBtnLabel">Listen Together</span>
                 </button>
               </div>
             </div>
-            <div id="liveAudioControls" style="display:none; align-items:center; gap:10px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06);">
-              <svg class="icon-svg" style="width:14px; height:14px; color:var(--text-sub);" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            <div id="liveAudioControls" style="display:none; align-items:center; gap:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06);">
+              <svg class="icon-svg" style="width:13px; height:13px; color:var(--text-sub);" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
               <input type="range" min="0" max="1" step="0.05" value="1" id="liveVolumeSlider" style="flex:1; accent-color:var(--accent); cursor:pointer;" oninput="updateLiveVolume(this.value)">
-              <span id="liveVolPercent" style="font-size:0.72rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub);">100%</span>
+              <span id="liveVolPercent" style="font-size:0.7rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub);">100%</span>
+              <span style="font-size:0.65rem; color:var(--accent); font-family:'JetBrains Mono',monospace;" id="syncDriftLabel">±0ms</span>
             </div>
           </div>
         </div>
@@ -1997,12 +2062,15 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
+    let liveSyncInterval = null;
+
     function toggleLiveAudio() {
       const audio = document.getElementById('liveAudio');
       liveStreamActive = !liveStreamActive;
       const btn = document.getElementById('btnListenLive');
       const controls = document.getElementById('liveAudioControls');
       const title = document.getElementById('liveStatusTitle');
+      const badge = document.getElementById('liveSyncBadge');
 
       if (liveStreamActive) {
         initWebAudio();
@@ -2011,11 +2079,20 @@ HTML_INDEX = """<!DOCTYPE html>
         btn.classList.add('active');
         btn.innerHTML = '<span>Stop Listening</span>';
         controls.style.display = 'flex';
-        title.innerText = 'Live Audio: Streaming';
+        title.innerText = 'Listen Together: Active';
+        if (badge) badge.innerText = '1:1 Sync';
         syncLiveAudio(true);
         setupMediaSession();
-        showToast('Live audio connected');
+        if (liveSyncInterval) clearInterval(liveSyncInterval);
+        liveSyncInterval = setInterval(() => {
+          if (liveStreamActive) syncLiveAudio(false);
+        }, 250);
+        showToast('Listen Together: 1:1 sync connected');
       } else {
+        if (liveSyncInterval) {
+          clearInterval(liveSyncInterval);
+          liveSyncInterval = null;
+        }
         if (pannerAnimFrame) {
           cancelAnimationFrame(pannerAnimFrame);
           pannerAnimFrame = null;
@@ -2023,14 +2100,15 @@ HTML_INDEX = """<!DOCTYPE html>
         audio.pause();
         audio.removeAttribute('src');
         btn.classList.remove('active');
-        btn.innerHTML = '<span>Listen Live</span>';
+        btn.innerHTML = '<span>Listen Together</span>';
         controls.style.display = 'none';
-        title.innerText = 'Phone & Lock Screen Audio';
+        title.innerText = 'Listen Together';
+        if (badge) badge.innerText = '1:1 Sync';
         currentLiveTrackId = null;
         if (lockScreenControlsEnabled) {
           armBackgroundMediaSession();
         }
-        showToast('Live audio disconnected');
+        showToast('Listen Together disconnected');
       }
     }
 
@@ -2053,6 +2131,8 @@ HTML_INDEX = """<!DOCTYPE html>
         return;
       }
 
+      const eff = String(currentState.effect || '').toLowerCase();
+      const speed = (t && t.effect_speed) || (eff.includes('night') ? 1.22 : (eff.includes('slow') ? 0.86 : 1.0));
       const trackKey = (t.id || t.title || 'track') + '_' + (t.duration_seconds || 0);
 
       if (force || currentLiveTrackId !== trackKey) {
@@ -2060,14 +2140,11 @@ HTML_INDEX = """<!DOCTYPE html>
         const gid = (currentState && currentState.guild && currentState.guild.id) ? currentState.guild.id : '';
         const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&guild_id=${encodeURIComponent(gid)}&t=${encodeURIComponent(trackKey)}`;
         
-        const targetPos = Math.max(0, currentElapsed);
         audio.src = streamUrl;
         audio.load();
 
         const onMetadata = () => {
-          if (targetPos > 0.5) {
-            try { audio.currentTime = targetPos; } catch (e) {}
-          }
+          try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
           applyLiveEQ(currentState.effect);
           if (currentState && currentState.is_playing) {
             audio.play().catch(e => console.log('Live playback play error:', e));
@@ -2082,17 +2159,46 @@ HTML_INDEX = """<!DOCTYPE html>
             console.log('Interaction or metadata wait required:', e);
           });
         }
-      } else {
-        applyLiveEQ(currentState.effect);
-        if (currentState.is_playing) {
-          if (audio.paused) {
-            audio.play().catch(() => {});
+        return;
+      }
+
+      applyLiveEQ(currentState.effect);
+
+      if (!currentState.is_playing) {
+        if (!audio.paused) audio.pause();
+        return;
+      }
+
+      if (audio.paused && currentState.is_playing) {
+        try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
+        audio.play().catch(() => {});
+      }
+
+      // High-precision 1:1 Phase-Locked Loop (PLL) clock sync with Discord
+      if (!audio.paused && audio.duration > 0) {
+        const drift = audio.currentTime - currentElapsed;
+        const driftMs = Math.round(drift * 1000);
+        const driftLabel = document.getElementById('syncDriftLabel');
+        if (driftLabel) {
+          driftLabel.innerText = (driftMs >= 0 ? `+${driftMs}ms` : `${driftMs}ms`);
+        }
+
+        if (Math.abs(drift) > 0.35) {
+          // Large drift (>350ms) -> Hard seek directly to Discord master position
+          try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
+          audio.playbackRate = speed;
+        } else if (Math.abs(drift) > 0.03) {
+          // Micro-drift (30ms - 350ms): Smooth rate adjustment without audio clicks
+          if (drift < 0) {
+            // Audio lagging behind Discord -> accelerate by 5%
+            audio.playbackRate = speed * 1.05;
+          } else {
+            // Audio ahead of Discord -> decelerate by 5%
+            audio.playbackRate = speed * 0.95;
           }
-          if (Math.abs(audio.currentTime - currentElapsed) > 2.0) {
-            try { audio.currentTime = currentElapsed; } catch (e) {}
-          }
-        } else if (!currentState.is_playing && !audio.paused) {
-          audio.pause();
+        } else {
+          // Locked in exact 1:1 sync (within 30ms)
+          audio.playbackRate = speed;
         }
       }
     }
@@ -2217,16 +2323,17 @@ HTML_INDEX = """<!DOCTYPE html>
         const trackKey = (t.id || t.title || 'track') + '_' + (t.length || t.duration_seconds || '');
         durationSeconds = t.duration_seconds || 0;
         const serverPos = typeof t.position_seconds === 'number' ? t.position_seconds : 0;
+        const nowSec = Date.now() / 1000;
+        const rttOffset = state.server_timestamp ? Math.max(0, Math.min(1.5, nowSec - state.server_timestamp)) : 0;
+        const speed = (t && t.effect_speed) || 1.0;
+        const liveDiscordPos = serverPos + (state.is_playing ? rttOffset * speed : 0);
 
         if (trackKey !== currentTrackKey) {
           currentTrackKey = trackKey;
-          currentElapsed = serverPos;
+          currentElapsed = liveDiscordPos;
         } else if (!isScrubbing) {
-          // If playing the same track, do not reset to 0:00 during EQ changes or brief transitions
-          if (serverPos > 0 || currentElapsed < 1.0) {
-            if (Math.abs(currentElapsed - serverPos) > 1.5) {
-              currentElapsed = serverPos;
-            }
+          if (Math.abs(currentElapsed - liveDiscordPos) > 0.35) {
+            currentElapsed = liveDiscordPos;
           }
         }
         document.getElementById('timeDuration').innerText = t.length || formatTime(durationSeconds);
@@ -2290,20 +2397,9 @@ HTML_INDEX = """<!DOCTYPE html>
       lastTickTime = now;
 
       if (!isScrubbing && currentState && currentState.is_playing && durationSeconds > 0) {
-        if (liveStreamActive) {
-          const audio = document.getElementById('liveAudio');
-          if (audio && !audio.paused && audio.currentTime > 0) {
-            currentElapsed = audio.currentTime;
-          } else {
-            const eff = String(currentState.effect || '').toLowerCase();
-            const speed = eff.includes('night') ? 1.22 : (eff.includes('slow') ? 0.86 : 1.0);
-            currentElapsed = Math.min(durationSeconds, currentElapsed + dt * speed);
-          }
-        } else {
-          const eff = String(currentState.effect || '').toLowerCase();
-          const speed = eff.includes('night') ? 1.22 : (eff.includes('slow') ? 0.86 : 1.0);
-          currentElapsed = Math.min(durationSeconds, currentElapsed + dt * speed);
-        }
+        const eff = String(currentState.effect || '').toLowerCase();
+        const speed = (currentState.track && currentState.track.effect_speed) || (eff.includes('night') ? 1.22 : (eff.includes('slow') ? 0.86 : 1.0));
+        currentElapsed = Math.min(durationSeconds, currentElapsed + dt * speed);
         updateScrubberUI();
       }
       requestAnimationFrame(progressLoop);

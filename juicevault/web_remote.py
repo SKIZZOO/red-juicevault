@@ -569,6 +569,8 @@ class JuiceVaultWebRemote:
         # Parse duration & elapsed position
         duration_sec = 0.0
         position_sec = 0.0
+        eff = str(main.effects.get(gid, "none")).lower()
+        effect_speed = 1.22 if "night" in eff else (0.86 if "slow" in eff else 1.0)
         if track:
             duration_sec = main._parse_duration(track.get("length")) or 0.0
             if is_seeking:
@@ -577,7 +579,7 @@ class JuiceVaultWebRemote:
                 base = float(main.play_positions.get(gid, 0.0))
                 started = getattr(voice, "_jv_started_at", None)
                 if started is not None and is_playing and not is_paused:
-                    base += max(0.0, time.monotonic() - started)
+                    base += max(0.0, (time.monotonic() - started) * effect_speed)
             position_sec = min(base, duration_sec) if duration_sec > 0 else base
 
         cover_url = None
@@ -594,8 +596,9 @@ class JuiceVaultWebRemote:
                 "artist": str(track.get("artist") or "Juice WRLD"),
                 "category": str(track.get("category") or category),
                 "length": str(track.get("length") or "—"),
-                "duration_seconds": round(duration_sec, 1),
-                "position_seconds": round(position_sec, 1),
+                "duration_seconds": round(duration_sec, 2),
+                "position_seconds": round(position_sec, 3),
+                "effect_speed": effect_speed,
                 "cover_url": cover_url,
                 "is_external": bool(track.get("_external")),
                 "is_soundboard": bool(track.get("_is_soundboard")),
@@ -614,6 +617,7 @@ class JuiceVaultWebRemote:
             "is_running": is_running,
             "is_playing": is_playing,
             "is_paused": is_paused,
+            "server_timestamp": time.time(),
             "track": track_dict,
             "category": category,
             "category_label": category_label(category),
@@ -621,6 +625,7 @@ class JuiceVaultWebRemote:
             "queue_size": len(main.queues.get(gid, [])),
             "requested_size": len(main.manual_queues.get(gid, [])),
             "effect": main.effects.get(gid, "none"),
+            "effect_speed": effect_speed,
             "effects": [
                 {"id": val, "label": label, "desc": desc}
                 for val, label, desc in EQ_OPTIONS
