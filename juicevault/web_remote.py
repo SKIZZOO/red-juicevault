@@ -1215,17 +1215,46 @@ class JuiceVaultWebRemote:
         if not guild:
             return web.Response(status=404, text="No active guild")
         main = self._get_main_cog()
+        if not main:
+            return web.Response(status=503, text="JuiceVault cog unavailable")
         gid = guild.id
         current_file = getattr(main, "current_files", {}).get(gid)
+
+        # If a track is switching, seeked, or downloading, wait briefly for the file
         if not current_file or not os.path.isfile(current_file):
-            return web.Response(status=404, text="No track currently playing")
+            for _ in range(12):
+                await asyncio.sleep(0.15)
+                current_file = getattr(main, "current_files", {}).get(gid)
+                if current_file and os.path.isfile(current_file):
+                    break
+
+        if not current_file or not os.path.isfile(current_file):
+            cur = getattr(main, "current", {}).get(gid)
+            if cur and cur.get("_cached_file") and os.path.isfile(cur["_cached_file"]):
+                current_file = cur["_cached_file"]
+
+        if not current_file or not os.path.isfile(current_file):
+            return web.Response(status=404, text="No track currently playing or audio not ready")
+
+        ext = os.path.splitext(current_file)[1].lower()
+        content_type = {
+            ".mp3": "audio/mpeg",
+            ".m4a": "audio/mp4",
+            ".aac": "audio/aac",
+            ".ogg": "audio/ogg",
+            ".flac": "audio/flac",
+            ".wav": "audio/wav",
+            ".webm": "audio/webm",
+            ".opus": "audio/opus",
+        }.get(ext, "audio/mpeg")
 
         return web.FileResponse(
             current_file,
             headers={
                 "Accept-Ranges": "bytes",
-                "Cache-Control": "no-cache",
-                "Content-Type": "audio/mpeg",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Content-Type": content_type,
+                "Access-Control-Allow-Origin": "*",
             },
         )
 

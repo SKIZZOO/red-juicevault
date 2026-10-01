@@ -1612,7 +1612,9 @@ HTML_INDEX = """<!DOCTYPE html>
         updateMediaSession();
         if (liveStreamActive) {
           const a = document.getElementById('liveAudio');
-          if (a) a.currentTime = currentElapsed;
+          if (a) {
+            try { a.currentTime = currentElapsed; } catch (e) {}
+          }
         }
       } else if (name === 'seek_to') {
         currentElapsed = Math.max(0, Math.min(durationSeconds, payload.position || 0));
@@ -1620,8 +1622,18 @@ HTML_INDEX = """<!DOCTYPE html>
         updateMediaSession();
         if (liveStreamActive) {
           const a = document.getElementById('liveAudio');
-          if (a) a.currentTime = currentElapsed;
+          if (a) {
+            try { a.currentTime = currentElapsed; } catch (e) {}
+          }
         }
+      } else if (name === 'set_eq') {
+        const effectName = payload.effect || 'none';
+        if (currentState) {
+          currentState.effect = effectName;
+        }
+        const eqBadge = document.getElementById('eqBadge');
+        if (eqBadge) eqBadge.innerText = effectName.toUpperCase();
+        applyLiveEQ(effectName);
       } else if (name === 'skip') {
         showToast('Skipping track…');
         const nextTrack = (currentQueueData.requested && currentQueueData.requested.length > 0)
@@ -1667,6 +1679,151 @@ HTML_INDEX = """<!DOCTYPE html>
 
     let liveStreamActive = false;
     let currentLiveTrackId = null;
+    let audioCtx = null;
+    let audioSourceNode = null;
+    let bassFilterNode = null;
+    let subFilterNode = null;
+    let stereoPannerNode = null;
+    let delayNode = null;
+    let delayFeedbackNode = null;
+    let delayGainNode = null;
+    let masterGainNode = null;
+    let pannerAnimFrame = null;
+    let pannerAngle = 0;
+
+    function initWebAudio() {
+      if (audioCtx) {
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {});
+        }
+        return;
+      }
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        audioCtx = new AudioContextClass();
+        const audio = document.getElementById('liveAudio');
+        if (!audio) return;
+        audioSourceNode = audioCtx.createMediaElementSource(audio);
+
+        // 1. Bass filter (lowshelf at 110Hz)
+        bassFilterNode = audioCtx.createBiquadFilter();
+        bassFilterNode.type = 'lowshelf';
+        bassFilterNode.frequency.value = 110;
+        bassFilterNode.gain.value = 0;
+
+        // 2. Sub-bass filter (peaking at 55Hz)
+        subFilterNode = audioCtx.createBiquadFilter();
+        subFilterNode.type = 'peaking';
+        subFilterNode.frequency.value = 55;
+        subFilterNode.Q.value = 1.0;
+        subFilterNode.gain.value = 0;
+
+        // 3. Stereo Panner Node (for 8D spatial audio)
+        if (audioCtx.createStereoPanner) {
+          stereoPannerNode = audioCtx.createStereoPanner();
+        }
+
+        // 4. Delay / Echo Node
+        delayNode = audioCtx.createDelay(1.0);
+        delayNode.delayTime.value = 0.25;
+        delayFeedbackNode = audioCtx.createGain();
+        delayFeedbackNode.gain.value = 0.35;
+        delayGainNode = audioCtx.createGain();
+        delayGainNode.gain.value = 0;
+
+        // Feedback loop
+        delayNode.connect(delayFeedbackNode);
+        delayFeedbackNode.connect(delayNode);
+        delayNode.connect(delayGainNode);
+
+        // 5. Master Gain Node (for accurate hardware volume control)
+        masterGainNode = audioCtx.createGain();
+        const curVol = parseFloat(document.getElementById('liveVolumeSlider')?.value || 1);
+        masterGainNode.gain.value = curVol;
+
+        // Audio graph routing:
+        // audioSourceNode -> bassFilterNode -> subFilterNode -> (stereoPanner or direct) -> masterGainNode -> destination
+        let lastNode = audioSourceNode;
+        lastNode.connect(bassFilterNode);
+        lastNode = bassFilterNode;
+        lastNode.connect(subFilterNode);
+        lastNode = subFilterNode;
+
+        if (stereoPannerNode) {
+          lastNode.connect(stereoPannerNode);
+          lastNode = stereoPannerNode;
+        }
+
+        lastNode.connect(masterGainNode);
+        lastNode.connect(delayNode);
+        delayGainNode.connect(masterGainNode);
+
+        masterGainNode.connect(audioCtx.destination);
+      } catch (err) {
+        console.warn('Web Audio API initialization failed:', err);
+      }
+    }
+
+    function applyLiveEQ(effect) {
+      const eff = String(effect || (currentState && currentState.effect) || 'none').toLowerCase().replace(/[-_]/g, ' ').trim();
+      const audio = document.getElementById('liveAudio');
+      if (!audio) return;
+
+      initWebAudio();
+
+      // Reset speed & pitch
+      audio.playbackRate = 1.0;
+      if ('preservesPitch' in audio) audio.preservesPitch = true;
+      if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = true;
+      if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = true;
+
+      if (pannerAnimFrame) {
+        cancelAnimationFrame(pannerAnimFrame);
+        pannerAnimFrame = null;
+      }
+      if (stereoPannerNode) {
+        stereoPannerNode.pan.value = 0;
+      }
+
+      if (bassFilterNode) bassFilterNode.gain.value = 0;
+      if (subFilterNode) subFilterNode.gain.value = 0;
+      if (delayGainNode) delayGainNode.gain.value = 0;
+
+      if (eff.includes('night')) {
+        audio.preservesPitch = false;
+        audio.mozPreservesPitch = false;
+        audio.webkitPreservesPitch = false;
+        audio.playbackRate = 1.22;
+      } else if (eff.includes('slow')) {
+        audio.preservesPitch = false;
+        audio.mozPreservesPitch = false;
+        audio.webkitPreservesPitch = false;
+        audio.playbackRate = 0.86;
+      } else if (eff.includes('virtual') || eff.includes('sub')) {
+        if (bassFilterNode) bassFilterNode.gain.value = 16;
+        if (subFilterNode) subFilterNode.gain.value = 10;
+      } else if (eff.includes('8d')) {
+        if (bassFilterNode) bassFilterNode.gain.value = 4;
+        if (stereoPannerNode) {
+          const run8D = () => {
+            if (!liveStreamActive) return;
+            pannerAngle += 0.025;
+            stereoPannerNode.pan.value = Math.sin(pannerAngle) * 0.95;
+            pannerAnimFrame = requestAnimationFrame(run8D);
+          };
+          run8D();
+        }
+      } else if (eff.includes('echo') || eff.includes('reverb')) {
+        if (delayGainNode) delayGainNode.gain.value = 0.45;
+      } else if (eff.includes('wide') || eff.includes('stereo')) {
+        if (bassFilterNode) bassFilterNode.gain.value = 3;
+        if (delayGainNode) delayGainNode.gain.value = 0.18;
+      } else if (eff.includes('bass')) {
+        if (bassFilterNode) bassFilterNode.gain.value = 11;
+        if (subFilterNode) subFilterNode.gain.value = 4;
+      }
+    }
 
     function armBackgroundMediaSession() {
       setupMediaSession();
@@ -1708,6 +1865,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const title = document.getElementById('liveStatusTitle');
 
       if (liveStreamActive) {
+        initWebAudio();
         const silent = document.getElementById('silentAudio');
         if (silent) silent.pause();
         btn.classList.add('active');
@@ -1718,6 +1876,10 @@ HTML_INDEX = """<!DOCTYPE html>
         setupMediaSession();
         showToast('Live audio connected');
       } else {
+        if (pannerAnimFrame) {
+          cancelAnimationFrame(pannerAnimFrame);
+          pannerAnimFrame = null;
+        }
         audio.pause();
         audio.removeAttribute('src');
         btn.classList.remove('active');
@@ -1733,10 +1895,12 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     function updateLiveVolume(val) {
+      const v = parseFloat(val);
       const audio = document.getElementById('liveAudio');
-      audio.volume = parseFloat(val);
+      if (audio) audio.volume = v;
+      if (masterGainNode) masterGainNode.gain.value = v;
       const pctEl = document.getElementById('liveVolPercent');
-      if (pctEl) pctEl.innerText = `${Math.round(val * 100)}%`;
+      if (pctEl) pctEl.innerText = `${Math.round(v * 100)}%`;
     }
 
     function syncLiveAudio(force = false) {
@@ -1753,18 +1917,40 @@ HTML_INDEX = """<!DOCTYPE html>
 
       if (force || currentLiveTrackId !== trackKey) {
         currentLiveTrackId = trackKey;
-        const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&t=${encodeURIComponent(trackKey)}`;
+        const gid = (currentState && currentState.guild && currentState.guild.id) ? currentState.guild.id : '';
+        const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&guild_id=${encodeURIComponent(gid)}&t=${encodeURIComponent(trackKey)}`;
+        
+        const targetPos = Math.max(0, currentElapsed);
         audio.src = streamUrl;
-        audio.currentTime = Math.max(0, currentElapsed);
-        if (currentState.is_playing) {
-          audio.play().catch(e => console.log('Live playback interaction required:', e));
+        audio.load();
+
+        const onMetadata = () => {
+          if (targetPos > 0.5) {
+            try { audio.currentTime = targetPos; } catch (e) {}
+          }
+          applyLiveEQ(currentState.effect);
+          if (currentState && currentState.is_playing) {
+            audio.play().catch(e => console.log('Live playback play error:', e));
+          }
+        };
+        audio.addEventListener('loadedmetadata', onMetadata, { once: true });
+
+        if (currentState && currentState.is_playing) {
+          audio.play().then(() => {
+            applyLiveEQ(currentState.effect);
+          }).catch(e => {
+            console.log('Interaction or metadata wait required:', e);
+          });
         }
       } else {
-        if (Math.abs(audio.currentTime - currentElapsed) > 2.5) {
-          audio.currentTime = currentElapsed;
-        }
-        if (currentState.is_playing && audio.paused) {
-          audio.play().catch(() => {});
+        applyLiveEQ(currentState.effect);
+        if (currentState.is_playing) {
+          if (audio.paused) {
+            audio.play().catch(() => {});
+          }
+          if (Math.abs(audio.currentTime - currentElapsed) > 2.0) {
+            try { audio.currentTime = currentElapsed; } catch (e) {}
+          }
         } else if (!currentState.is_playing && !audio.paused) {
           audio.pause();
         }
@@ -1916,6 +2102,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
       updateMediaSession();
       syncLiveAudio();
+      applyLiveEQ(state.effect);
       const qTab = document.getElementById('tab-queue');
       const actionSheet = document.getElementById('trackActionSheet');
       const isModalOpen = actionSheet && actionSheet.classList.contains('active');
@@ -1950,16 +2137,16 @@ HTML_INDEX = """<!DOCTYPE html>
         if (liveStreamActive) {
           const audio = document.getElementById('liveAudio');
           if (audio && !audio.paused && audio.currentTime > 0) {
-            if (Math.abs(audio.currentTime - currentElapsed) < 3.0) {
-              currentElapsed = audio.currentTime;
-            } else {
-              currentElapsed = Math.min(durationSeconds, currentElapsed + dt);
-            }
+            currentElapsed = audio.currentTime;
           } else {
-            currentElapsed = Math.min(durationSeconds, currentElapsed + dt);
+            const eff = String(currentState.effect || '').toLowerCase();
+            const speed = eff.includes('night') ? 1.22 : (eff.includes('slow') ? 0.86 : 1.0);
+            currentElapsed = Math.min(durationSeconds, currentElapsed + dt * speed);
           }
         } else {
-          currentElapsed = Math.min(durationSeconds, currentElapsed + dt);
+          const eff = String(currentState.effect || '').toLowerCase();
+          const speed = eff.includes('night') ? 1.22 : (eff.includes('slow') ? 0.86 : 1.0);
+          currentElapsed = Math.min(durationSeconds, currentElapsed + dt * speed);
         }
         updateScrubberUI();
       }
