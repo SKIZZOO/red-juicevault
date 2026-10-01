@@ -76,11 +76,20 @@ class JuiceVaultWebRemote:
         return self.bot.get_cog("JuiceVaultUI")
 
     async def initialize(self):
-        """Ensure persistent auth token is set, then start the web server if enabled."""
+        """Ensure persistent auth token is set, then start the web server if enabled.
+        Also clears any stale Cloudflare tunnel URL left over from a previous run."""
         token = await self.config.token()
         if not token:
             token = secrets.token_urlsafe(12)
             await self.config.token.set(token)
+
+        # If the saved custom_url is a trycloudflare.com URL, it's stale —
+        # the tunnel process died when the cog was last unloaded/reloaded.
+        # Clear it so we don't hand out a dead link.
+        custom = await self.config.custom_url()
+        if custom and "trycloudflare.com" in custom:
+            print("[JuiceVault Web Remote] Clearing stale Cloudflare tunnel URL from config.")
+            await self.config.custom_url.set(None)
 
         enabled = await self.config.enabled()
         if enabled:
@@ -113,8 +122,19 @@ class JuiceVaultWebRemote:
         token_param = f"?token={quote(token)}" if token else ""
 
         if custom:
-            base = custom.rstrip("/")
-            return f"{base}/{token_param}"
+            # If it's a trycloudflare.com URL and the tunnel process is dead,
+            # don't serve a stale link — fall through to public/local IP.
+            tunnel_alive = (
+                self._tunnel_proc is not None
+                and self._tunnel_proc.returncode is None
+            )
+            if "trycloudflare.com" not in custom or tunnel_alive:
+                base = custom.rstrip("/")
+                return f"{base}/{token_param}"
+            # Tunnel is dead — clean up config so it's not served again
+            await self.config.custom_url.set(None)
+            self._tunnel_url = None
+            self._tunnel_proc = None
 
         host = await self.config.host()
         port = await self.config.port()
@@ -373,12 +393,32 @@ class JuiceVaultWebRemote:
         if tunnel_url:
             self._tunnel_url = tunnel_url
             await self.config.custom_url.set(tunnel_url)
-            async def drain_stderr():
+            async def drain_and_monitor():
                 while proc.returncode is None:
                     line = await proc.stderr.readline()
                     if not line:
                         break
-            asyncio.create_task(drain_stderr())
+                # Process died — clear stale URL and try auto-restart once
+                if self._tunnel_proc is proc:
+                    print("[JuiceVault Web Remote] Cloudflare tunnel process exited. Clearing URL and attempting restart...")
+                    self._tunnel_proc = None
+                    self._tunnel_url = None
+                    await self.config.custom_url.set(None)
+                    # Broadcast updated state so the remote page stops trying the dead URL
+                    try:
+                        await asyncio.sleep(2)
+                        new_url = await self.start_cloudflare_tunnel()
+                        print(f"[JuiceVault Web Remote] Tunnel restarted: {new_url}")
+                        # Notify all WebSocket clients of the new URL
+                        msg = json.dumps({"type": "tunnel_url", "url": new_url})
+                        for ws in list(self.ws_clients):
+                            try:
+                                await ws.send_str(msg)
+                            except Exception:
+                                pass
+                    except Exception as exc:
+                        print(f"[JuiceVault Web Remote] Tunnel auto-restart failed: {exc}")
+            asyncio.create_task(drain_and_monitor())
             return tunnel_url
         raise RuntimeError("Cloudflare Quick Tunnel timed out generating public URL.")
 
@@ -1459,6 +1499,9 @@ def patch_web_remote(JuiceVault, JuiceVaultUI):
 
     async def jv_cog_unload(self):
         if hasattr(self, "web_remote") and self.web_remote:
+            # Kill tunnel process and wipe URL from config so a stale link
+            # is never shown after a reload/restart.
+            await self.web_remote.stop_cloudflare_tunnel()
             await self.web_remote.stop_server()
         await original_cog_unload(self)
 
