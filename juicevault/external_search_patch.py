@@ -1,7 +1,9 @@
 import asyncio
 import os
+import re
 import shutil
 import tempfile
+import urllib.parse
 
 import discord
 
@@ -52,15 +54,30 @@ def _parse_entry(entry, default_source="Web", info_context=None):
         entry.get("webpage_url")
         or entry.get("original_url")
         or entry.get("permalink_url")
-        or (entry.get("url") if str(entry.get("url", "")).startswith("http") else None)
     )
+    if not url:
+        raw_url = entry.get("url")
+        if raw_url and str(raw_url).startswith("http"):
+            url = str(raw_url)
+
     if not url and entry_id:
         if "youtube" in source.casefold() or "youtu" in str(info_context.get("webpage_url", "")).casefold():
             url = f"https://www.youtube.com/watch?v={entry_id}"
         elif "soundcloud" in source.casefold():
-            url = entry.get("url") or str(entry_id)
+            url = str(entry.get("url") or entry_id)
         else:
-            url = entry.get("url") or f"https://www.youtube.com/watch?v={entry_id}"
+            url = f"https://www.youtube.com/watch?v={entry_id}"
+    elif not url and entry.get("url"):
+        val = str(entry.get("url"))
+        if not val.startswith("http"):
+            url = f"https://www.youtube.com/watch?v={val}"
+        else:
+            url = val
+
+    if not entry_id and url:
+        m = re.search(r"[?&]v=([a-zA-Z0-9_-]{11})", url) or re.search(r"youtu\.be/([a-zA-Z0-9_-]{11})", url)
+        if m:
+            entry_id = m.group(1)
 
     title = str(entry.get("title") or entry.get("fulltitle") or "Unknown Track").strip()
     artist = str(
@@ -75,7 +92,11 @@ def _parse_entry(entry, default_source="Web", info_context=None):
     dur = entry.get("duration_string") or _format_seconds(entry.get("duration"))
     thumb = entry.get("thumbnail")
     if not thumb and isinstance(entry.get("thumbnails"), list) and entry["thumbnails"]:
-        thumb = entry["thumbnails"][-1].get("url")
+        last_t = entry["thumbnails"][-1]
+        if isinstance(last_t, dict):
+            thumb = last_t.get("url")
+    if not thumb and entry_id and ("youtube" in source.casefold() or "web" in source.casefold()):
+        thumb = f"https://i.ytimg.com/vi/{entry_id}/hqdefault.jpg"
 
     track_id = f"external:{entry_id or abs(hash(url or title))}"
     return {
@@ -93,13 +114,33 @@ def _parse_entry(entry, default_source="Web", info_context=None):
     }
 
 
-def _extract_search(query, skip_sources=(), max_playlist_items=100):
+def _extract_search(query, skip_sources=(), max_playlist_items=250):
     if yt_dlp is None:
         raise RuntimeError("yt-dlp is not installed")
 
+    query = str(query or "").strip()
+    if not query.startswith(("http://", "https://")):
+        if re.match(r"^(?:www\.|[a-zA-Z0-9-]+\.(?:com|org|net|be|app|fm|io|co|xyz)/)", query):
+            query = f"https://{query}"
+
     is_url = query.startswith(("http://", "https://"))
+
+    # Canonicalize YouTube playlist URLs so yt-dlp uses YoutubeTab extractor
+    target_query = query
+    is_youtube = ("youtube.com" in query.lower() or "youtu.be" in query.lower())
+    if is_url and is_youtube and "list=" in query:
+        try:
+            parsed_u = urllib.parse.urlparse(query)
+            qs = urllib.parse.parse_qs(parsed_u.query)
+            list_ids = qs.get("list")
+            if list_ids and list_ids[0]:
+                list_id = list_ids[0]
+                target_query = f"https://www.youtube.com/playlist?list={list_id}"
+        except Exception:
+            pass
+
     is_playlist_candidate = is_url and any(
-        token in query.lower()
+        token in target_query.lower()
         for token in ("list=", "/playlist", "/sets/", "/album/", "/albums/")
     )
 
@@ -109,19 +150,26 @@ def _extract_search(query, skip_sources=(), max_playlist_items=100):
         "skip_download": True,
         "noplaylist": not is_playlist_candidate,
         "extract_flat": True,
+        "ignoreerrors": True,
         "default_search": "auto",
         "playlistend": max_playlist_items if is_playlist_candidate else 5,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
     }
     skipped = {str(item).casefold() for item in skip_sources}
-    targets = (
-        [("Web", query)]
-        if is_url
-        else [
+
+    if is_url:
+        targets = [("Web", target_query)]
+        if target_query != query:
+            targets.append(("Web (Direct)", query))
+    else:
+        targets = [
             ("YouTube", "ytsearch5:{query}"),
             ("SoundCloud", "scsearch5:{query}"),
             ("Bandcamp", "bcsearch5:{query}"),
         ]
-    )
 
     for source, target in targets:
         if source.casefold() in skipped:
@@ -133,16 +181,19 @@ def _extract_search(query, skip_sources=(), max_playlist_items=100):
                 continue
 
             raw_entries = info.get("entries")
-            if raw_entries is not None and not isinstance(raw_entries, list):
-                try:
-                    raw_entries = list(raw_entries)
-                except Exception:
-                    raw_entries = []
+            if raw_entries is not None:
+                if not isinstance(raw_entries, list):
+                    try:
+                        raw_entries = list(raw_entries)
+                    except Exception:
+                        raw_entries = []
+                raw_entries = [e for e in raw_entries if e and isinstance(e, dict)]
 
             # Check if this should be treated as an external playlist
-            is_playlist = is_url and (
+            is_playlist = (
                 is_playlist_candidate
-                or (info.get("_type") == "playlist" and raw_entries and len(raw_entries) > 1)
+                or info.get("_type") == "playlist"
+                or (raw_entries and len(raw_entries) > 1 and is_url)
             )
 
             if is_playlist and raw_entries:
@@ -340,11 +391,10 @@ class JuiceVaultOtherSearchModal(discord.ui.Modal, title="Search Music Online"):
             if info.get("_is_playlist"):
                 entries = info.get("entries") or []
                 if not entries:
-                    await interaction.followup.send("❌ No playable tracks found in this playlist.", ephemeral=True)
+                    await interaction.followup.send("No playable tracks found in this playlist.", ephemeral=True)
                     return
                 queue = cog.manual_queues.setdefault(self.guild_id, [])
-                for i, track in enumerate(entries):
-                    queue.insert(i, track)
+                queue.extend(entries)
 
                 pl_title = str(info.get("title") or "Playlist").strip()
                 pl_uploader = str(info.get("uploader") or info.get("artist") or "Online").strip()
@@ -352,12 +402,12 @@ class JuiceVaultOtherSearchModal(discord.ui.Modal, title="Search Music Online"):
                 count = len(entries)
 
                 embed = discord.Embed(
-                    title="🌐 External Playlist • Queued",
+                    title="External Playlist • Queued",
                     description=(
                         f"**{pl_title}**\n*{pl_uploader}*\n\n"
                         f"**Source:** `{source}`\n"
                         f"**Tracks Added:** `{count}`\n"
-                        "**Position:** `Next in Queue`\n\n"
+                        "**Position:** `Requested Queue`\n\n"
                         "Each track will be streamed/downloaded when it reaches playback."
                     ),
                     color=self.panel.PANEL_COLOR,
@@ -388,13 +438,13 @@ class JuiceVaultOtherSearchModal(discord.ui.Modal, title="Search Music Online"):
             }
             if info.get("cover_url"):
                 track["cover_url"] = info["cover_url"]
-            cog.manual_queues.setdefault(self.guild_id, []).insert(0, track)
+            cog.manual_queues.setdefault(self.guild_id, []).append(track)
             embed = discord.Embed(
-                title="🌐 External Search • Queued Next",
+                title="External Search • Queued",
                 description=(
                     f"**{title}**\n*{artist}*\n\n"
                     f"**Source:** `{source}`\n"
-                    "**Position:** `Next`\n\n"
+                    "**Position:** `Requested Queue`\n\n"
                     "The track will be downloaded when it reaches playback."
                 ),
                 color=self.panel.PANEL_COLOR,
@@ -405,7 +455,7 @@ class JuiceVaultOtherSearchModal(discord.ui.Modal, title="Search Music Online"):
             await self.panel.update_panel(self.guild_id)
         except Exception as exc:
             await interaction.followup.send(
-                f"❌ Online search failed: `{type(exc).__name__}: {exc}`",
+                f"Online search failed: `{type(exc).__name__}: {exc}`",
                 ephemeral=True,
             )
 
@@ -417,6 +467,9 @@ def patch_external_search():
     original_remove = JuiceVault._remove_file
 
     async def download_track(self, track):
+        cached = track.get("_cached_file")
+        if cached and os.path.isfile(cached) and os.path.getsize(cached) > 1024:
+            return cached
         if track.get("_external"):
             return await asyncio.to_thread(_download_external, track)
         return await original_download(self, track)
@@ -425,7 +478,7 @@ def patch_external_search():
     def remove_file(path):
         if not path:
             return
-        if "juicevault_soundboard" in path:
+        if "juicevault_soundboard" in path or "juicevault_vip" in path:
             return
         parent = os.path.dirname(path)
         try:

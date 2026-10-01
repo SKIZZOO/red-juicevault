@@ -1053,6 +1053,16 @@ class JuiceVaultWebRemote:
         if not query:
             return web.json_response({"results": []})
 
+        is_direct_url = (
+            query.startswith(("http://", "https://", "www."))
+            or "youtube.com" in query.lower()
+            or "youtu.be" in query.lower()
+            or "soundcloud.com" in query.lower()
+            or "bandcamp.com" in query.lower()
+        )
+        if is_direct_url:
+            source = "external"
+
         main = self._get_main_cog()
         results = []
 

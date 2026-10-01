@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 import random
+import re
+import shutil
 import tempfile
 import time
 from urllib.parse import quote
@@ -35,6 +37,11 @@ class JuiceVault(commands.Cog):
     VOICE_STOP_TIMEOUT = 5.0
     DOWNLOAD_CHUNK_SIZE = 256 * 1024
 
+    VIP_USER_IDS = {612747552999211011, 340511257067257857}
+    VIP_VIDEO_URL = "https://www.youtube.com/watch?v=UqFORtFuyN0"
+    VIP_AUDIO_CACHE = os.path.join(tempfile.gettempdir(), "juicevault_vip_bomboclaat.mp3")
+    VIP_COOLDOWN_SECONDS = 25.0
+
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=918273645, force_registration=True)
@@ -64,12 +71,17 @@ class JuiceVault(commands.Cog):
         self._categories_cache_time = 0.0
         self._tracks_cache = {}
         self._preserved_files = set()
+        self._vip_cooldowns = {}
+        self._vip_cache_task = None
 
     async def cog_load(self):
         await self._ensure_session()
         self.restore_task = asyncio.create_task(self._restore_players())
+        self._vip_cache_task = asyncio.create_task(self._ensure_vip_audio())
 
     async def cog_unload(self):
+        if self._vip_cache_task and not self._vip_cache_task.done():
+            self._vip_cache_task.cancel()
         if self.restore_task:
             self.restore_task.cancel()
             try:
@@ -380,7 +392,7 @@ class JuiceVault(commands.Cog):
     @staticmethod
     def _remove_file(path):
         if path:
-            if "juicevault_soundboard" in path:
+            if "juicevault_soundboard" in path or "juicevault_vip" in path:
                 return
             try:
                 os.remove(path)
@@ -720,6 +732,125 @@ class JuiceVault(commands.Cog):
         voice.stop()
         return target
 
+    async def _ensure_vip_audio(self):
+        if os.path.isfile(self.VIP_AUDIO_CACHE) and os.path.getsize(self.VIP_AUDIO_CACHE) > 1024:
+            return self.VIP_AUDIO_CACHE
+
+        def _do_download():
+            try:
+                from .external_search_patch import _download_with_ytdlp
+                tempdir = tempfile.mkdtemp(prefix="juicevault-vip-")
+                try:
+                    downloaded = _download_with_ytdlp(self.VIP_VIDEO_URL, tempdir)
+                    if downloaded and os.path.isfile(downloaded) and os.path.getsize(downloaded) > 1024:
+                        shutil.copyfile(downloaded, self.VIP_AUDIO_CACHE)
+                        return self.VIP_AUDIO_CACHE
+                finally:
+                    shutil.rmtree(tempdir, ignore_errors=True)
+            except Exception as exc:
+                print(f"[JuiceVault] VIP audio cache error: {exc}")
+                return None
+
+        return await asyncio.to_thread(_do_download)
+
+    async def _trigger_vip_join(self, guild, member):
+        gid = guild.id
+        voice = guild.voice_client
+        if not voice or not voice.is_connected() or gid not in self.tasks:
+            return
+
+        current = self.current.get(gid)
+        if current and current.get("_is_vip"):
+            return
+
+        vip_audio = await self._ensure_vip_audio()
+        if not vip_audio or not os.path.isfile(vip_audio):
+            print(f"[JuiceVault] VIP audio not available for member {member.id}.")
+            return
+
+        if not hasattr(self, "_preserved_files"):
+            self._preserved_files = set()
+
+        was_playing = bool(voice.is_playing() and not voice.is_paused())
+        current_pos = 0.0
+        local_path = self.current_files.get(gid)
+
+        if current and not current.get("_is_vip") and not current.get("_is_soundboard"):
+            base = float(self.play_positions.get(gid, 0.0))
+            started = getattr(voice, "_jv_started_at", None)
+            if started is not None and was_playing:
+                base += max(0.0, time.monotonic() - started)
+            current_pos = base
+
+            if local_path and os.path.isfile(local_path):
+                self._preserved_files.add(local_path)
+
+            resume_track = dict(
+                current,
+                _jv_seek_copy=True,
+                _cached_file=local_path,
+                _resume_position=current_pos,
+                _resume_was_playing=was_playing,
+            )
+            self.manual_queues.setdefault(gid, []).insert(0, resume_track)
+
+        vip_track = {
+            "id": f"vip:bomboclaat:{int(time.time())}",
+            "title": "Mi Bomboclaat",
+            "artist": f"VIP: {member.display_name}",
+            "length": "0:07",
+            "file_name": "vip_bomboclaat.mp3",
+            "_cached_file": vip_audio,
+            "_is_vip": True,
+            "_is_soundboard": True,
+            "_sound_color": "#ff4d4f",
+            "url": self.VIP_VIDEO_URL,
+        }
+
+        self.manual_queues.setdefault(gid, []).insert(0, vip_track)
+        self.play_positions[gid] = 0.0
+        if not hasattr(self, "pause_after_seek"):
+            self.pause_after_seek = {}
+        self.pause_after_seek[gid] = False
+
+        if voice.is_playing() or voice.is_paused():
+            voice.stop()
+        else:
+            skip_evt = self.skip_events.get(gid)
+            if skip_evt:
+                skip_evt.set()
+
+        if hasattr(self, "web_remote") and self.web_remote:
+            asyncio.create_task(self.web_remote.broadcast_state(gid))
+        ui = self.bot.get_cog("JuiceVaultUI")
+        if ui:
+            asyncio.create_task(ui.update_panel(gid))
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if getattr(member, "bot", False):
+            return
+        if member.id not in self.VIP_USER_IDS:
+            return
+        if before.channel == after.channel or after.channel is None:
+            return
+
+        guild = member.guild
+        gid = guild.id
+        voice = guild.voice_client
+
+        if not voice or not voice.is_connected() or voice.channel != after.channel:
+            return
+        if gid not in self.tasks or self.tasks[gid].done():
+            return
+
+        now = time.monotonic()
+        if now - self._vip_cooldowns.get(member.id, 0.0) < self.VIP_COOLDOWN_SECONDS:
+            return
+        self._vip_cooldowns[member.id] = now
+
+        asyncio.create_task(self._trigger_vip_join(guild, member))
+
     @commands.group(name="jv", invoke_without_command=True)
     @commands.guild_only()
     async def jv(self, ctx):
@@ -852,6 +983,67 @@ class JuiceVault(commands.Cog):
     @jv.command(name="play")
     async def play(self, ctx, *, query: str):
         gid = ctx.guild.id
+        q_clean = query.strip()
+        is_external = (
+            q_clean.startswith(("http://", "https://", "www."))
+            or "youtube.com" in q_clean.lower()
+            or "youtu.be" in q_clean.lower()
+            or "soundcloud.com" in q_clean.lower()
+            or "bandcamp.com" in q_clean.lower()
+        )
+        if is_external:
+            if gid not in self.tasks:
+                await ctx.send("The player is not running. Use `4jv start` first.")
+                return
+            try:
+                from .external_search_patch import _extract_search, _source_name, _format_seconds
+                info = await asyncio.to_thread(_extract_search, q_clean)
+                if info.get("_is_playlist"):
+                    entries = info.get("entries") or []
+                    if not entries:
+                        await ctx.send("No playable tracks found in playlist.")
+                        return
+                    self.manual_queues.setdefault(gid, []).extend(entries)
+                    pl_title = str(info.get("title") or "Playlist").strip()
+                    await ctx.send(f"Added external playlist: **{pl_title}** ({len(entries)} tracks) to Requested.")
+                    if hasattr(self, "web_remote") and self.web_remote:
+                        asyncio.create_task(self.web_remote.broadcast_state(gid))
+                    ui = self.bot.get_cog("JuiceVaultUI")
+                    if ui:
+                        asyncio.create_task(ui.update_panel(gid))
+                    return
+                else:
+                    title = str(info.get("title") or info.get("fulltitle") or q_clean).strip()
+                    artist = str(info.get("artist") or info.get("uploader") or info.get("channel") or "Unknown artist").strip()
+                    source = str(info.get("_source") or _source_name(info)).strip()
+                    url = info.get("webpage_url") or info.get("original_url") or info.get("url")
+                    dur = info.get("length") or info.get("duration_string") or _format_seconds(info.get("duration")) or "—"
+                    track = {
+                        "id": f"external:{info.get('id') or abs(hash(q_clean))}",
+                        "title": title,
+                        "artist": artist,
+                        "length": dur,
+                        "file_name": f"external-{info.get('id') or 'track'}.webm",
+                        "url": url,
+                        "_external": True,
+                        "_source": source,
+                        "_webpage_url": url,
+                        "_query": q_clean,
+                    }
+                    if info.get("cover_url"):
+                        track["cover_url"] = info["cover_url"]
+                    self.manual_queues.setdefault(gid, []).append(track)
+                    await ctx.send(f"Added external track to Requested: **{title}** (`{source}`)")
+                    if hasattr(self, "web_remote") and self.web_remote:
+                        asyncio.create_task(self.web_remote.broadcast_state(gid))
+                    ui = self.bot.get_cog("JuiceVaultUI")
+                    if ui:
+                        asyncio.create_task(ui.update_panel(gid))
+                    return
+            except Exception as exc:
+                await ctx.send(f"Failed to load external audio: `{exc}`")
+                return
+
         matches = self.search_results.get(gid, [])
         track = None
         try:
@@ -875,7 +1067,7 @@ class JuiceVault(commands.Cog):
             await ctx.send("The player is not running. Use `4jv start` first.")
             return
         self.manual_queues.setdefault(gid, []).append(track)
-        await ctx.send(f"🎵 Added to Requested: **{self._track_text(track)}**")
+        await ctx.send(f"Added to Requested: **{self._track_text(track)}**")
 
     @commands.guild_only()
     @commands.command(name="lyrics")

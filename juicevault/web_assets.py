@@ -2515,6 +2515,10 @@ HTML_INDEX = """<!DOCTYPE html>
     async function executeSearch() {
       const q = document.getElementById('searchInput').value.trim();
       if (!q) return;
+      const isUrl = q.startsWith('http://') || q.startsWith('https://') || q.startsWith('www.') || q.includes('youtube.com') || q.includes('youtu.be') || q.includes('soundcloud.com') || q.includes('bandcamp.com');
+      if (isUrl && searchMode === 'vault') {
+        setSearchMode('external');
+      }
       const resContainer = document.getElementById('searchResults');
       resContainer.innerHTML = `<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Searching ${searchMode === 'external' ? 'online (YouTube / SoundCloud)…' : 'archive…'}</div>`;
       try {
