@@ -1443,20 +1443,19 @@ class JuiceVaultWebRemote:
         if not main:
             return web.Response(status=503, text="JuiceVault cog unavailable")
         gid = guild.id
-        current_file = getattr(main, "current_files", {}).get(gid)
+        current_file = None
 
-        # If a track is switching, seeked, or downloading, wait briefly for the file
-        if not current_file or not os.path.isfile(current_file):
-            for _ in range(12):
-                await asyncio.sleep(0.15)
-                current_file = getattr(main, "current_files", {}).get(gid)
-                if current_file and os.path.isfile(current_file):
-                    break
-
-        if not current_file or not os.path.isfile(current_file):
+        # If a track is switching, seeked, or downloading, wait up to 8 seconds for the audio file to become ready
+        for _ in range(40):
+            cf = getattr(main, "current_files", {}).get(gid)
+            if cf and os.path.isfile(cf):
+                current_file = cf
+                break
             cur = getattr(main, "current", {}).get(gid)
             if cur and cur.get("_cached_file") and os.path.isfile(cur["_cached_file"]):
                 current_file = cur["_cached_file"]
+                break
+            await asyncio.sleep(0.2)
 
         if not current_file or not os.path.isfile(current_file):
             return web.Response(status=404, text="No track currently playing or audio not ready")

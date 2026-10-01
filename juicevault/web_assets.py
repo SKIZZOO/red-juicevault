@@ -1171,9 +1171,6 @@ HTML_INDEX = """<!DOCTYPE html>
                 </div>
               </div>
               <div style="display:flex; gap:6px; align-items:center;">
-                <button class="btn-kinetic btn-badge active" id="btnLockScreen" onclick="toggleLockScreenControls()" title="Lock Screen Remote Controls">
-                  <span id="lockScreenBtnLabel">Lock: ON</span>
-                </button>
                 <button class="btn-kinetic btn-badge" id="btnListenLive" onclick="toggleLiveAudio()" title="Stream synchronized audio directly on this phone">
                   <span id="liveBtnLabel">Listen Together</span>
                 </button>
@@ -1639,6 +1636,13 @@ HTML_INDEX = """<!DOCTYPE html>
     let isScrubbing = false;
     let currentTrackKey = '';
     let lastTickTime = performance.now();
+    let isAudioLoading = false;
+    let audioRetryTimer = null;
+
+    function getTrackKey(t) {
+      if (!t) return '';
+      return String(t.id || t.title || 'track');
+    }
 
     function escapeHtml(str) {
       return String(str || '').replace(/[&<>"']/g, function(m) {
@@ -1841,6 +1845,10 @@ HTML_INDEX = """<!DOCTYPE html>
         applyLiveEQ(effectName);
       } else if (name === 'skip') {
         showToast('Skipping track…');
+        if (liveStreamActive) {
+          const a = document.getElementById('liveAudio');
+          if (a && !a.paused) a.pause();
+        }
         const nextTrack = (currentQueueData.requested && currentQueueData.requested.length > 0)
           ? currentQueueData.requested[0]
           : (currentQueueData.upcoming && currentQueueData.upcoming.length > 0 ? currentQueueData.upcoming[0] : null);
@@ -1854,6 +1862,10 @@ HTML_INDEX = """<!DOCTYPE html>
         updateScrubberUI();
       } else if (name === 'previous') {
         showToast('Playing previous track…');
+        if (liveStreamActive) {
+          const a = document.getElementById('liveAudio');
+          if (a && !a.paused) a.pause();
+        }
         document.getElementById('trackTitle').innerText = 'Loading previous track…';
         currentElapsed = 0;
         updateScrubberUI();
@@ -2105,6 +2117,11 @@ HTML_INDEX = """<!DOCTYPE html>
         title.innerText = 'Listen Together';
         if (badge) badge.innerText = '1:1 Sync';
         currentLiveTrackId = null;
+        isAudioLoading = false;
+        if (audioRetryTimer) {
+          clearTimeout(audioRetryTimer);
+          audioRetryTimer = null;
+        }
         if (lockScreenControlsEnabled) {
           armBackgroundMediaSession();
         }
@@ -2124,6 +2141,7 @@ HTML_INDEX = """<!DOCTYPE html>
     function syncLiveAudio(force = false) {
       if (!liveStreamActive || !currentState) return;
       const audio = document.getElementById('liveAudio');
+      if (!audio) return;
       const t = currentState.track;
 
       if (!t || !currentState.is_running) {
@@ -2133,34 +2151,50 @@ HTML_INDEX = """<!DOCTYPE html>
 
       const eff = String(currentState.effect || '').toLowerCase();
       const speed = (t && t.effect_speed) || (eff.includes('night') ? 1.22 : (eff.includes('slow') ? 0.86 : 1.0));
-      const trackKey = (t.id || t.title || 'track') + '_' + (t.duration_seconds || 0);
+      const trackKey = getTrackKey(t);
 
       if (force || currentLiveTrackId !== trackKey) {
         currentLiveTrackId = trackKey;
+        isAudioLoading = true;
+        if (audioRetryTimer) {
+          clearTimeout(audioRetryTimer);
+          audioRetryTimer = null;
+        }
+
         const gid = (currentState && currentState.guild && currentState.guild.id) ? currentState.guild.id : '';
         const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&guild_id=${encodeURIComponent(gid)}&t=${encodeURIComponent(trackKey)}`;
         
         audio.src = streamUrl;
         audio.load();
 
-        const onMetadata = () => {
-          try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
+        audio.onerror = () => {
+          if (!liveStreamActive || !currentState || !currentState.is_playing) return;
+          console.warn('Live audio stream error, auto-retrying in 1s...');
+          if (audioRetryTimer) clearTimeout(audioRetryTimer);
+          audioRetryTimer = setTimeout(() => {
+            if (liveStreamActive && currentState && currentState.is_playing) {
+              syncLiveAudio(true);
+            }
+          }, 1000);
+        };
+
+        const onCanPlay = () => {
+          isAudioLoading = false;
+          try {
+            if (currentElapsed > 0.05) {
+              audio.currentTime = currentElapsed;
+            }
+          } catch (e) {}
           applyLiveEQ(currentState.effect);
           if (currentState && currentState.is_playing) {
             audio.play().catch(e => console.log('Live playback play error:', e));
           }
         };
-        audio.addEventListener('loadedmetadata', onMetadata, { once: true });
-
-        if (currentState && currentState.is_playing) {
-          audio.play().then(() => {
-            applyLiveEQ(currentState.effect);
-          }).catch(e => {
-            console.log('Interaction or metadata wait required:', e);
-          });
-        }
+        audio.addEventListener('canplay', onCanPlay, { once: true });
         return;
       }
+
+      if (isAudioLoading) return;
 
       applyLiveEQ(currentState.effect);
 
@@ -2170,7 +2204,11 @@ HTML_INDEX = """<!DOCTYPE html>
       }
 
       if (audio.paused && currentState.is_playing) {
-        try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
+        try {
+          if (Math.abs(audio.currentTime - currentElapsed) > 0.3) {
+            audio.currentTime = Math.max(0, currentElapsed);
+          }
+        } catch (e) {}
         audio.play().catch(() => {});
       }
 
@@ -2187,17 +2225,18 @@ HTML_INDEX = """<!DOCTYPE html>
           // Large drift (>350ms) -> Hard seek directly to Discord master position
           try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
           audio.playbackRate = speed;
-        } else if (Math.abs(drift) > 0.03) {
-          // Micro-drift (30ms - 350ms): Smooth rate adjustment without audio clicks
+        } else if (Math.abs(drift) > 0.02) {
+          // Micro-drift (20ms - 350ms): Proportional rate steering for ultra-smooth, click-free sync
+          const steer = Math.min(0.08, Math.max(0.015, Math.abs(drift) * 0.25));
           if (drift < 0) {
-            // Audio lagging behind Discord -> accelerate by 5%
-            audio.playbackRate = speed * 1.05;
+            // Audio lagging behind Discord -> accelerate proportionally
+            audio.playbackRate = speed * (1 + steer);
           } else {
-            // Audio ahead of Discord -> decelerate by 5%
-            audio.playbackRate = speed * 0.95;
+            // Audio ahead of Discord -> decelerate proportionally
+            audio.playbackRate = speed * (1 - steer);
           }
         } else {
-          // Locked in exact 1:1 sync (within 30ms)
+          // Locked in exact 1:1 sync (within ±20ms)
           audio.playbackRate = speed;
         }
       }
@@ -2320,7 +2359,7 @@ HTML_INDEX = """<!DOCTYPE html>
           if (stopBtn) stopBtn.style.display = 'none';
         }
 
-        const trackKey = (t.id || t.title || 'track') + '_' + (t.length || t.duration_seconds || '');
+        const trackKey = getTrackKey(t);
         durationSeconds = t.duration_seconds || 0;
         const serverPos = typeof t.position_seconds === 'number' ? t.position_seconds : 0;
         const nowSec = Date.now() / 1000;
