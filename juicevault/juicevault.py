@@ -35,11 +35,13 @@ class JuiceVault(commands.Cog):
     FAILURE_BACKOFF_SECONDS = 8
     MAX_CONSECUTIVE_FAILURES = 3
     VOICE_STOP_TIMEOUT = 5.0
-    DOWNLOAD_CHUNK_SIZE = 256 * 1024
-
     VIP_USER_IDS = {612747552999211011, 340511257067257857}
-    VIP_VIDEO_URL = "https://www.youtube.com/watch?v=UqFORtFuyN0"
-    VIP_AUDIO_CACHE = os.path.join(tempfile.gettempdir(), "juicevault_vip_bomboclaat.mp3")
+    VIP_VIDEO_URL = "https://www.youtube.com/watch?v=7uNd46F3Ubs"
+    VIP_START_OFFSET = 4.0
+    VIP_PLAY_DURATION = 6.0
+    VIP_DELAY_SECONDS = 3.0
+    VIP_AUDIO_SLICED = os.path.join(tempfile.gettempdir(), "juicevault_vip_sliced_6s.mp3")
+    VIP_AUDIO_RAW = os.path.join(tempfile.gettempdir(), "juicevault_vip_raw.mp3")
     VIP_COOLDOWN_SECONDS = 25.0
 
     def __init__(self, bot):
@@ -576,10 +578,15 @@ class JuiceVault(commands.Cog):
                             print(f"[JuiceVault] playback worker error: {type(error).__name__}: {error}")
                         self.bot.loop.call_soon_threadsafe(finished.set)
                     before = "-nostdin -probesize 32k -analyzeduration 0"
+                    clip_start = track.get("_clip_start")
+                    if clip_start is not None and not track.get("_is_pre_sliced", False):
+                        start_offset = max(0.0, float(clip_start))
                     if start_offset > 0.05:
                         before = f"-nostdin -ss {start_offset:.3f} -probesize 32k -analyzeduration 0"
                     effect = self.effects.get(gid, "none")
                     options = f"-vn -af {self._effect_filter(effect)}"
+                    if track.get("_clip_duration"):
+                        options += f" -t {float(track['_clip_duration']):.3f}"
                     source = discord.FFmpegPCMAudio(local_path, executable=self._ffmpeg_executable(), before_options=before, options=options, stderr=log_file)
                     voice.play(source, after=after)
                     voice._jv_started_at = time.monotonic()
@@ -733,8 +740,10 @@ class JuiceVault(commands.Cog):
         return target
 
     async def _ensure_vip_audio(self):
-        if os.path.isfile(self.VIP_AUDIO_CACHE) and os.path.getsize(self.VIP_AUDIO_CACHE) > 1024:
-            return self.VIP_AUDIO_CACHE
+        if os.path.isfile(self.VIP_AUDIO_SLICED) and os.path.getsize(self.VIP_AUDIO_SLICED) > 1024:
+            return self.VIP_AUDIO_SLICED, True
+        if os.path.isfile(self.VIP_AUDIO_RAW) and os.path.getsize(self.VIP_AUDIO_RAW) > 1024:
+            return self.VIP_AUDIO_RAW, False
 
         def _do_download():
             try:
@@ -743,27 +752,65 @@ class JuiceVault(commands.Cog):
                 try:
                     downloaded = _download_with_ytdlp(self.VIP_VIDEO_URL, tempdir)
                     if downloaded and os.path.isfile(downloaded) and os.path.getsize(downloaded) > 1024:
-                        shutil.copyfile(downloaded, self.VIP_AUDIO_CACHE)
-                        return self.VIP_AUDIO_CACHE
+                        ffmpeg_bin = self._ffmpeg_executable()
+                        sliced_target = os.path.join(tempdir, "vip_sliced.mp3")
+                        slice_cmd = [
+                            ffmpeg_bin,
+                            "-y",
+                            "-ss", str(self.VIP_START_OFFSET),
+                            "-t", str(self.VIP_PLAY_DURATION),
+                            "-i", downloaded,
+                            "-vn",
+                            "-acodec", "libmp3lame",
+                            "-b:a", "192k",
+                            sliced_target,
+                        ]
+                        try:
+                            import subprocess
+                            sub_res = subprocess.run(
+                                slice_cmd,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                timeout=15,
+                            )
+                            if sub_res.returncode == 0 and os.path.isfile(sliced_target) and os.path.getsize(sliced_target) > 512:
+                                shutil.copyfile(sliced_target, self.VIP_AUDIO_SLICED)
+                                return self.VIP_AUDIO_SLICED, True
+                        except Exception as slice_err:
+                            print(f"[JuiceVault] VIP ffmpeg slice notice: {slice_err}")
+
+                        shutil.copyfile(downloaded, self.VIP_AUDIO_RAW)
+                        return self.VIP_AUDIO_RAW, False
                 finally:
                     shutil.rmtree(tempdir, ignore_errors=True)
             except Exception as exc:
                 print(f"[JuiceVault] VIP audio cache error: {exc}")
-                return None
+                return None, False
 
         return await asyncio.to_thread(_do_download)
 
-    async def _trigger_vip_join(self, guild, member):
+    async def _trigger_vip_join(self, guild, member, target_channel_id):
+        # 3-second delay from when VIP joins
+        await asyncio.sleep(self.VIP_DELAY_SECONDS)
+
         gid = guild.id
         voice = guild.voice_client
         if not voice or not voice.is_connected() or gid not in self.tasks:
+            return
+
+        # Check if member is still connected to the voice channel where bot is playing
+        current_ch = getattr(getattr(member, "voice", None), "channel", None)
+        if not current_ch or current_ch.id != voice.channel.id or current_ch.id != target_channel_id:
             return
 
         current = self.current.get(gid)
         if current and current.get("_is_vip"):
             return
 
-        vip_audio = await self._ensure_vip_audio()
+        vip_audio_res = await self._ensure_vip_audio()
+        vip_audio = vip_audio_res[0] if isinstance(vip_audio_res, tuple) else vip_audio_res
+        is_pre_sliced = vip_audio_res[1] if isinstance(vip_audio_res, tuple) else False
+
         if not vip_audio or not os.path.isfile(vip_audio):
             print(f"[JuiceVault] VIP audio not available for member {member.id}.")
             return
@@ -795,15 +842,18 @@ class JuiceVault(commands.Cog):
             self.manual_queues.setdefault(gid, []).insert(0, resume_track)
 
         vip_track = {
-            "id": f"vip:bomboclaat:{int(time.time())}",
-            "title": "Mi Bomboclaat",
+            "id": f"vip:clip:{int(time.time())}",
+            "title": "VIP Greeting",
             "artist": f"VIP: {member.display_name}",
-            "length": "0:07",
-            "file_name": "vip_bomboclaat.mp3",
+            "length": "0:06",
+            "file_name": "vip_clip.mp3",
             "_cached_file": vip_audio,
             "_is_vip": True,
             "_is_soundboard": True,
             "_sound_color": "#ff4d4f",
+            "_clip_start": self.VIP_START_OFFSET,
+            "_clip_duration": self.VIP_PLAY_DURATION,
+            "_is_pre_sliced": is_pre_sliced,
             "url": self.VIP_VIDEO_URL,
         }
 
@@ -849,7 +899,8 @@ class JuiceVault(commands.Cog):
             return
         self._vip_cooldowns[member.id] = now
 
-        asyncio.create_task(self._trigger_vip_join(guild, member))
+        target_channel_id = after.channel.id
+        asyncio.create_task(self._trigger_vip_join(guild, member, target_channel_id))
 
     @commands.group(name="jv", invoke_without_command=True)
     @commands.guild_only()
