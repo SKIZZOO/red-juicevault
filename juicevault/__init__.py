@@ -1,3 +1,25 @@
+import importlib
+import sys
+
+_submodules = [
+    "juicevault",
+    "juicevault_ui",
+    "api_sources",
+    "ui_patch",
+    "eq_ui_patch",
+    "voice_patch",
+    "external_search_patch",
+    "web_remote",
+    "web_assets",
+]
+for _mod in _submodules:
+    _full = f"{__package__}.{_mod}" if __package__ else _mod
+    if _full in sys.modules:
+        try:
+            importlib.reload(sys.modules[_full])
+        except Exception:
+            pass
+
 from .juicevault import JuiceVault
 from .juicevault_ui import JuiceVaultUI
 from .api_sources import patch_juicevault_class
