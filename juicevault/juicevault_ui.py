@@ -339,6 +339,7 @@ class JuiceVaultUI(commands.Cog):
                                 if previous_track: history = self.history.setdefault(guild_id, []); history.append(previous_track); del history[:-50]
                             self.last_seen_current[guild_id] = track_id; self.last_track_snapshot[guild_id] = dict(track); self.last_track_object[guild_id] = track_object
                             if self.repeat_enabled.get(guild_id): self.repeat_queued[guild_id] = True; main.manual_queues.setdefault(guild_id, []).insert(0, dict(track, _jv_repeat_copy=True))
+                            asyncio.create_task(self.update_panel(guild_id))
                         guild = self.bot.get_guild(guild_id); voice = guild.voice_client if guild else None
                         if self.repeat_enabled.get(guild_id) and track and voice and voice.is_connected() and not voice.is_playing() and not voice.is_paused() and not self.repeat_queued.get(guild_id):
                             main.manual_queues.setdefault(guild_id, []).insert(0, dict(track, _jv_repeat_copy=True)); self.repeat_queued[guild_id] = True

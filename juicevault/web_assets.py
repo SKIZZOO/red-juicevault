@@ -592,6 +592,11 @@ HTML_INDEX = """<!DOCTYPE html>
     .btn-badge:active {
       transform: scale(0.94);
     }
+    .btn-badge.active {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
     /* Search Bar */
     .search-input-group {
       display: flex;
@@ -1024,17 +1029,22 @@ HTML_INDEX = """<!DOCTYPE html>
 
           <!-- Live Browser Audio & Lock Screen Banner -->
           <div class="banner-box" id="liveAudioBanner" style="flex-direction:column; align-items:stretch; gap:10px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
               <div style="display:flex; align-items:center; gap:8px;">
-                <svg class="icon-svg" style="color:var(--accent); width:18px; height:18px;" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                <svg class="icon-svg" style="color:var(--accent); width:18px; height:18px; flex-shrink:0;" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
                 <div>
-                  <div style="font-weight:700; font-size:0.84rem; color:#fff;" id="liveStatusTitle">Listen on Phone / Browser</div>
-                  <div style="font-size:0.72rem; color:var(--text-sub);">Stream live audio & enable lock screen media</div>
+                  <div style="font-weight:700; font-size:0.84rem; color:#fff;" id="liveStatusTitle">Phone & Lock Screen Audio</div>
+                  <div style="font-size:0.72rem; color:var(--text-sub);" id="liveStatusSub">Active lock screen media & background remote controls</div>
                 </div>
               </div>
-              <button class="btn-kinetic btn-badge" id="btnListenLive" onclick="toggleLiveAudio()">
-                <span id="liveBtnLabel">Listen Live</span>
-              </button>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <button class="btn-kinetic btn-badge active" id="btnLockScreen" onclick="toggleLockScreenControls()" title="Lock Screen Remote Controls">
+                  <span id="lockScreenBtnLabel">Lock Controls: ON</span>
+                </button>
+                <button class="btn-kinetic btn-badge" id="btnListenLive" onclick="toggleLiveAudio()" title="Listen to stream on this device">
+                  <span id="liveBtnLabel">Listen Live</span>
+                </button>
+              </div>
             </div>
             <div id="liveAudioControls" style="display:none; align-items:center; gap:10px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06);">
               <svg class="icon-svg" style="width:14px; height:14px; color:var(--text-sub);" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
@@ -1398,8 +1408,15 @@ HTML_INDEX = """<!DOCTYPE html>
   </div>
 
   <audio id="liveAudio" preload="auto" playsinline style="display:none;"></audio>
+  <audio id="silentAudio" preload="auto" playsinline loop style="display:none;"></audio>
 
   <script>
+    // Silent carrier audio for mobile lock screen background playback controls
+    const SILENT_AUDIO_URI = 'data:audio/wav;base64,UklGRiwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQgAAACAgICAgICAgA==';
+    let lockScreenControlsEnabled = true;
+    let mediaSessionConfigured = false;
+    let wsReconnectTimer = null;
+
     // State management
     const urlParams = new URLSearchParams(window.location.search);
     let token = urlParams.get('token') || localStorage.getItem('jv_token') || '';
@@ -1543,6 +1560,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
     async function action(name, payload = {}) {
       if (navigator.vibrate) navigator.vibrate(10);
+      armBackgroundMediaSession();
 
       // Instant optimistic UI updates for sub-millisecond perceived responsiveness
       if (name === 'toggle') {
@@ -1561,11 +1579,37 @@ HTML_INDEX = """<!DOCTYPE html>
             if (soundwave) soundwave.classList.remove('playing');
           }
           syncLiveAudio();
+          updateMediaSession();
+        }
+      } else if (name === 'play') {
+        if (currentState) {
+          currentState.is_playing = true;
+          const playIcon = document.getElementById('playIconSvg');
+          const coverImg = document.getElementById('coverImg');
+          const soundwave = document.getElementById('soundwaveBox');
+          if (playIcon) playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+          if (coverImg) coverImg.classList.add('playing');
+          if (soundwave) soundwave.classList.add('playing');
+          syncLiveAudio();
+          updateMediaSession();
+        }
+      } else if (name === 'pause') {
+        if (currentState) {
+          currentState.is_playing = false;
+          const playIcon = document.getElementById('playIconSvg');
+          const coverImg = document.getElementById('coverImg');
+          const soundwave = document.getElementById('soundwaveBox');
+          if (playIcon) playIcon.innerHTML = '<polygon points="6 3 20 12 6 21 6 3"/>';
+          if (coverImg) coverImg.classList.remove('playing');
+          if (soundwave) soundwave.classList.remove('playing');
+          syncLiveAudio();
+          updateMediaSession();
         }
       } else if (name === 'seek') {
         const delta = payload.delta || 0;
         currentElapsed = Math.max(0, Math.min(durationSeconds, currentElapsed + delta));
         updateScrubberUI();
+        updateMediaSession();
         if (liveStreamActive) {
           const a = document.getElementById('liveAudio');
           if (a) a.currentTime = currentElapsed;
@@ -1573,14 +1617,29 @@ HTML_INDEX = """<!DOCTYPE html>
       } else if (name === 'seek_to') {
         currentElapsed = Math.max(0, Math.min(durationSeconds, payload.position || 0));
         updateScrubberUI();
+        updateMediaSession();
         if (liveStreamActive) {
           const a = document.getElementById('liveAudio');
           if (a) a.currentTime = currentElapsed;
         }
       } else if (name === 'skip') {
         showToast('Skipping track…');
+        const nextTrack = (currentQueueData.requested && currentQueueData.requested.length > 0)
+          ? currentQueueData.requested[0]
+          : (currentQueueData.upcoming && currentQueueData.upcoming.length > 0 ? currentQueueData.upcoming[0] : null);
+        if (nextTrack) {
+          document.getElementById('trackTitle').innerText = nextTrack.title || 'Buffering archive…';
+          document.getElementById('trackArtist').innerText = nextTrack.artist || 'Juice WRLD';
+        } else {
+          document.getElementById('trackTitle').innerText = 'Buffering next track…';
+        }
+        currentElapsed = 0;
+        updateScrubberUI();
       } else if (name === 'previous') {
         showToast('Playing previous track…');
+        document.getElementById('trackTitle').innerText = 'Loading previous track…';
+        currentElapsed = 0;
+        updateScrubberUI();
       } else if (name === 'shuffle') {
         showToast('Queue shuffled');
       } else if (name === 'repeat') {
@@ -1609,6 +1668,38 @@ HTML_INDEX = """<!DOCTYPE html>
     let liveStreamActive = false;
     let currentLiveTrackId = null;
 
+    function armBackgroundMediaSession() {
+      setupMediaSession();
+      if (!lockScreenControlsEnabled || liveStreamActive) return;
+      const silent = document.getElementById('silentAudio');
+      if (silent) {
+        if (!silent.src || !silent.src.startsWith('data:audio')) {
+          silent.src = SILENT_AUDIO_URI;
+        }
+        if (currentState && currentState.is_playing && silent.paused) {
+          silent.play().catch(() => {});
+        }
+      }
+    }
+
+    function toggleLockScreenControls() {
+      lockScreenControlsEnabled = !lockScreenControlsEnabled;
+      const btn = document.getElementById('btnLockScreen');
+      const label = document.getElementById('lockScreenBtnLabel');
+      if (lockScreenControlsEnabled) {
+        if (btn) btn.classList.add('active');
+        if (label) label.innerText = 'Lock Controls: ON';
+        armBackgroundMediaSession();
+        showToast('Lock screen media controls enabled');
+      } else {
+        if (btn) btn.classList.remove('active');
+        if (label) label.innerText = 'Lock Controls: OFF';
+        const silent = document.getElementById('silentAudio');
+        if (silent) silent.pause();
+        showToast('Lock screen controls disabled');
+      }
+    }
+
     function toggleLiveAudio() {
       const audio = document.getElementById('liveAudio');
       liveStreamActive = !liveStreamActive;
@@ -1617,6 +1708,8 @@ HTML_INDEX = """<!DOCTYPE html>
       const title = document.getElementById('liveStatusTitle');
 
       if (liveStreamActive) {
+        const silent = document.getElementById('silentAudio');
+        if (silent) silent.pause();
         btn.classList.add('active');
         btn.innerHTML = '<span>Stop Listening</span>';
         controls.style.display = 'flex';
@@ -1630,8 +1723,11 @@ HTML_INDEX = """<!DOCTYPE html>
         btn.classList.remove('active');
         btn.innerHTML = '<span>Listen Live</span>';
         controls.style.display = 'none';
-        title.innerText = 'Listen on Phone / Browser';
+        title.innerText = 'Phone & Lock Screen Audio';
         currentLiveTrackId = null;
+        if (lockScreenControlsEnabled) {
+          armBackgroundMediaSession();
+        }
         showToast('Live audio disconnected');
       }
     }
@@ -1676,13 +1772,29 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     function setupMediaSession() {
-      if (!('mediaSession' in navigator)) return;
-      navigator.mediaSession.setActionHandler('play', () => { action('play'); });
-      navigator.mediaSession.setActionHandler('pause', () => { action('pause'); });
-      navigator.mediaSession.setActionHandler('previoustrack', () => { action('previous'); });
-      navigator.mediaSession.setActionHandler('nexttrack', () => { action('skip'); });
-      navigator.mediaSession.setActionHandler('seekbackward', () => { action('seek', { delta: -10 }); });
-      navigator.mediaSession.setActionHandler('seekforward', () => { action('seek', { delta: 10 }); });
+      if (!('mediaSession' in navigator) || mediaSessionConfigured) return;
+      mediaSessionConfigured = true;
+
+      const handlers = [
+        ['play', () => action('play')],
+        ['pause', () => action('pause')],
+        ['previoustrack', () => action('previous')],
+        ['nexttrack', () => action('skip')],
+        ['seekbackward', (details) => action('seek', { delta: -(details.seekOffset || 10) })],
+        ['seekforward', (details) => action('seek', { delta: (details.seekOffset || 10) })],
+        ['seekto', (details) => {
+          if (details.seekTime != null) {
+            action('seek_to', { position: details.seekTime });
+          }
+        }],
+        ['stop', () => action('pause')]
+      ];
+
+      for (const [actionName, handler] of handlers) {
+        try {
+          navigator.mediaSession.setActionHandler(actionName, handler);
+        } catch (e) {}
+      }
     }
 
     function updateMediaSession() {
@@ -1691,14 +1803,48 @@ HTML_INDEX = """<!DOCTYPE html>
       navigator.mediaSession.metadata = new MediaMetadata({
         title: t.title || 'Juice WRLD Track',
         artist: t.artist || 'Juice WRLD',
-        album: 'JuiceVault • ' + (t.category || 'Archive'),
-        artwork: [{ src: t.cover_url || 'https://api.juicevault.xyz/favicon.ico', sizes: '512x512', type: 'image/png' }]
+        album: 'JuiceVault • ' + (currentState.category_label || currentState.category || 'Archive'),
+        artwork: [
+          { src: t.cover_url || 'https://api.juicevault.xyz/favicon.ico', sizes: '512x512', type: 'image/png' },
+          { src: t.cover_url || 'https://api.juicevault.xyz/favicon.ico', sizes: '192x192', type: 'image/png' }
+        ]
       });
       navigator.mediaSession.playbackState = currentState.is_playing ? 'playing' : 'paused';
+
+      // Keep silent audio loop in sync with playback state for Discord remote lock screen
+      if (lockScreenControlsEnabled && !liveStreamActive) {
+        const silent = document.getElementById('silentAudio');
+        if (silent) {
+          if (!silent.src || !silent.src.startsWith('data:audio')) {
+            silent.src = SILENT_AUDIO_URI;
+          }
+          if (currentState.is_playing && silent.paused) {
+            silent.play().catch(() => {});
+          } else if (!currentState.is_playing && !silent.paused) {
+            silent.pause();
+          }
+        }
+      }
+
+      // Update lock screen scrubber position
+      if ('setPositionState' in navigator.mediaSession && durationSeconds > 0) {
+        try {
+          const pos = Math.max(0, Math.min(durationSeconds, currentElapsed));
+          navigator.mediaSession.setPositionState({
+            duration: durationSeconds,
+            playbackRate: currentState.is_playing ? 1.0 : 0.0,
+            position: pos
+          });
+        } catch (e) {}
+      }
     }
 
     function applyState(state) {
+      if (!state) return;
       currentState = state;
+      try {
+        localStorage.setItem('jv_state_cache', JSON.stringify(state));
+      } catch (e) {}
       document.getElementById('connDot').classList.remove('offline');
       document.getElementById('connLabel').innerText = 'Live';
 
@@ -1821,9 +1967,16 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     requestAnimationFrame(progressLoop);
 
-    // WebSocket auto-detect protocol
+    // WebSocket auto-detect protocol & resilient reconnection
     function connectWS() {
+      if (wsReconnectTimer) {
+        clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = null;
+      }
       if (!token) return;
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
       const wsProto = isHttps ? 'wss:' : 'ws:';
       const wsUrl = `${wsProto}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
       try {
@@ -1850,14 +2003,28 @@ HTML_INDEX = """<!DOCTYPE html>
         ws.onclose = () => {
           document.getElementById('connDot').classList.add('offline');
           document.getElementById('connLabel').innerText = 'Offline';
-          setTimeout(connectWS, 3000);
+          if (!wsReconnectTimer) {
+            wsReconnectTimer = setTimeout(() => {
+              wsReconnectTimer = null;
+              connectWS();
+            }, 1800);
+          }
         };
 
-        ws.onerror = () => ws.close();
+        ws.onerror = () => {
+          try { ws.close(); } catch (e) {}
+        };
       } catch (err) {
         console.error('WS init error:', err);
       }
     }
+
+    // Keep WebSocket connection active and prevent mobile timeouts
+    setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try { ws.send(JSON.stringify({ action: 'ping' })); } catch (e) {}
+      }
+    }, 12000);
 
     // Fetch Status
     async function fetchStatus() {
@@ -2524,6 +2691,47 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function copyShortcut(url) {
       navigator.clipboard.writeText(url).then(() => showToast('Shortcut URL copied'));
+    }
+
+    // Lifecycle listeners for instant mobile reconnect on unlock / tab focus
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          connectWS();
+        } else {
+          try { ws.send(JSON.stringify({ action: 'ping' })); } catch (e) {}
+        }
+        fetchStatus();
+        armBackgroundMediaSession();
+      }
+    });
+
+    window.addEventListener('pageshow', () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        connectWS();
+      }
+      fetchStatus();
+      armBackgroundMediaSession();
+    });
+
+    window.addEventListener('focus', () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        connectWS();
+      }
+      fetchStatus();
+    });
+
+    window.addEventListener('pointerdown', () => { armBackgroundMediaSession(); }, { passive: true });
+    window.addEventListener('touchstart', () => { armBackgroundMediaSession(); }, { passive: true });
+
+    // Instant paint from local cache (0ms perceived startup)
+    try {
+      const cachedState = localStorage.getItem('jv_state_cache');
+      if (cachedState) {
+        applyState(JSON.parse(cachedState));
+      }
+    } catch (e) {
+      console.error('State cache load failed:', e);
     }
 
     // Startup

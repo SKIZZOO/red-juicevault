@@ -259,14 +259,16 @@ class JuiceVault(commands.Cog):
         if session_count:
             counts["session edits"] = session_count
 
-        for name, url in self.CATEGORY_URLS.items():
-            if name != "cut":
-                try:
-                    dedicated = await self._fetch_tracks_from_url(url)
-                    if dedicated:
-                        counts[name] = len(dedicated)
-                except Exception as exc:
-                    pass
+        missing = [name for name, url in self.CATEGORY_URLS.items() if name != "cut" and counts.get(name, 0) == 0]
+        if missing:
+            tasks = [self._fetch_tracks_from_url(self.CATEGORY_URLS[name]) for name in missing]
+            try:
+                results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=2.5)
+                for name, res in zip(missing, results):
+                    if isinstance(res, list) and res:
+                        counts[name] = len(res)
+            except Exception:
+                pass
         if "cuts" in counts:
             counts["cut"] = counts.pop("cuts")
         if "stem" in counts and "stems" not in counts:
@@ -563,6 +565,11 @@ class JuiceVault(commands.Cog):
                     if self.pause_after_seek.pop(gid, False) and voice.is_playing():
                         voice.pause()
                     self._trigger_next_prefetch(gid)
+                    if hasattr(self, "web_remote") and self.web_remote:
+                        asyncio.create_task(self.web_remote.broadcast_state(gid))
+                    ui = self.bot.get_cog("JuiceVaultUI")
+                    if ui:
+                        asyncio.create_task(ui.update_panel(gid))
                 except Exception as exc:
                     self.last_error[gid] = f"Playback: {type(exc).__name__}: {exc}"
                     if log_file:

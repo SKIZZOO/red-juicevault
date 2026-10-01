@@ -507,12 +507,10 @@ class JuiceVaultWebRemote:
                 "source": str(track.get("_source") or "JuiceVault Archive"),
             }
 
-        # Categories list
-        categories_dict = {}
-        try:
-            categories_dict = await main.categories()
-        except Exception:
-            pass
+        # Categories list - non-blocking instant access
+        categories_dict = getattr(main, "_categories_cache", None) or {}
+        if not categories_dict:
+            asyncio.create_task(main.get_categories())
 
         return {
             "guild": {"id": str(guild.id), "name": guild.name},
@@ -575,7 +573,7 @@ class JuiceVaultWebRemote:
         if not await self._authenticate(request):
             return web.Response(status=401, text="Unauthorized")
 
-        ws = web.WebSocketResponse()
+        ws = web.WebSocketResponse(heartbeat=15.0)
         await ws.prepare(request)
         self.ws_clients.add(ws)
 
@@ -589,6 +587,9 @@ class JuiceVaultWebRemote:
                 if msg.type == web.WSMsgType.TEXT:
                     try:
                         data = json.loads(msg.data)
+                        if data.get("action") == "ping" or data.get("type") == "ping":
+                            await ws.send_str(json.dumps({"type": "pong", "time": time.time()}))
+                            continue
                         action_name = data.get("action")
                         await self._dispatch_ws_action(ws, guild, action_name, data)
                     except Exception as err:
@@ -716,6 +717,12 @@ class JuiceVaultWebRemote:
         await self.broadcast_state(gid)
         if ui:
             asyncio.create_task(ui.update_panel(gid))
+
+        if action_name in ("skip", "previous", "play_category", "set_eq", "toggle"):
+            async def delayed_broadcast():
+                await asyncio.sleep(0.35)
+                await self.broadcast_state(gid)
+            asyncio.create_task(delayed_broadcast())
 
     # REST API Handlers
     async def _api_status(self, request):
