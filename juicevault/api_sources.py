@@ -1,6 +1,9 @@
 import asyncio
 import json
+import os
 import random
+import tempfile
+import time
 from urllib.parse import quote
 
 API_BASE = "https://api.juicevault.xyz"
@@ -35,6 +38,47 @@ ALIASES = {
     "stems": "stems",
 }
 
+# ── Disk cache ──────────────────────────────────────────────────────────────
+_CACHE_DIR = os.path.join(tempfile.gettempdir(), "juicevault_track_cache")
+os.makedirs(_CACHE_DIR, exist_ok=True)
+
+
+def _cache_path(category: str) -> str:
+    safe = category.replace(" ", "_").replace("/", "_")
+    return os.path.join(_CACHE_DIR, f"tracks_{safe}.json")
+
+
+def _write_disk_cache(category: str, tracks: list) -> None:
+    try:
+        path = _cache_path(category)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"saved_at": time.time(), "tracks": tracks}, f)
+        os.replace(tmp, path)
+    except Exception as exc:
+        print(f"[JuiceVault] cache write failed ({category}): {exc}")
+
+
+def _read_disk_cache(category: str):
+    """Return cached tracks list or None."""
+    try:
+        path = _cache_path(category)
+        if not os.path.isfile(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        tracks = data.get("tracks")
+        if isinstance(tracks, list) and tracks:
+            age_h = (time.time() - float(data.get("saved_at", 0))) / 3600
+            print(f"[JuiceVault] Using offline cache for '{category}' "
+                  f"({len(tracks)} tracks, cached {age_h:.1f}h ago).")
+            return tracks
+    except Exception as exc:
+        print(f"[JuiceVault] cache read failed ({category}): {exc}")
+    return None
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
 
 def normalize_category(value):
     value = str(value or "all").strip().casefold()
@@ -69,25 +113,65 @@ def normalize_tracks(payload):
     return tracks
 
 
+def _is_api_error_status(status: int) -> bool:
+    """Return True for statuses that indicate a server/proxy outage."""
+    return status >= 500 or status in (408, 429)
+
+
+# ── fetch_collection with offline fallback ───────────────────────────────────
+
 async def fetch_collection(session, category):
     category = normalize_category(category)
     endpoint = COLLECTION_ENDPOINTS.get(category, COLLECTION_ENDPOINTS["all"])
     url = f"{API_BASE}{endpoint}"
-    async with session.get(url) as response:
-        text = await response.text(errors="ignore")
-    if response.status != 200:
+
+    # ── Try live API ──
+    try:
+        async with session.get(url) as response:
+            text = await response.text(errors="ignore")
+            status = response.status
+    except Exception as exc:
+        # Network-level failure (timeout, DNS, connection reset, etc.)
+        print(f"[JuiceVault] Network error fetching '{category}': {type(exc).__name__}: {exc}")
+        cached = _read_disk_cache(category)
+        if cached is not None:
+            return cached
+        raise RuntimeError(
+            f"JuiceVault API is unreachable and no offline cache exists for '{category}'. "
+            "Please wait for the API server to come back online."
+        ) from exc
+
+    if status != 200:
+        if _is_api_error_status(status):
+            # Server-side / Cloudflare outage — try cache before raising
+            print(f"[JuiceVault] API returned HTTP {status} for '{category}', trying offline cache.")
+            cached = _read_disk_cache(category)
+            if cached is not None:
+                return cached
+            raise RuntimeError(
+                f"JuiceVault API is temporarily down (HTTP {status}). "
+                "No offline cache is available yet — please wait for the server to recover."
+            )
+        # 4xx client errors — surface a clean message (no raw HTML)
         try:
             payload = json.loads(text)
-            detail = payload.get("error", text[:200]) if isinstance(payload, dict) else text[:200]
+            detail = payload.get("error", text[:300]) if isinstance(payload, dict) else text[:300]
         except json.JSONDecodeError:
-            detail = text[:200]
-        raise RuntimeError(f"JuiceVault API HTTP {response.status}: {detail}")
+            detail = text[:300]
+        # Strip HTML tags from Cloudflare error pages
+        if "<html" in detail.lower():
+            detail = f"HTTP {status} (Cloudflare/proxy error)"
+        raise RuntimeError(f"JuiceVault API HTTP {status}: {detail}")
+
+    # ── Parse JSON ──
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
         raise RuntimeError("JuiceVault API returned invalid JSON") from exc
 
     tracks = normalize_tracks(payload)
+
+    # Category-specific filtering
     if category == "unreleased":
         tracks = [
             t for t in tracks
@@ -98,8 +182,15 @@ async def fetch_collection(session, category):
         tracks = [t for t in tracks if normalize_category(t.get("category")) == "main"]
     elif category == "session edits":
         tracks = [t for t in tracks if bool(t.get("is_session_edit"))]
+
+    # ── Persist to disk cache on every successful fetch ──
+    if tracks:
+        _write_disk_cache(category, tracks)
+
     return tracks
 
+
+# ── Category counts ──────────────────────────────────────────────────────────
 
 async def get_category_counts(session):
     tracks = await fetch_collection(session, "all")
@@ -130,8 +221,10 @@ async def get_category_counts(session):
     return counts
 
 
+# ── Class patcher ────────────────────────────────────────────────────────────
+
 def patch_juicevault_class(JuiceVault):
-    """Use documented collection endpoints with safe session recovery."""
+    """Use documented collection endpoints with safe session recovery and offline caching."""
     if getattr(JuiceVault, "_jv_api_sources_patched", False):
         return
 
@@ -145,7 +238,7 @@ def patch_juicevault_class(JuiceVault):
         self._jv_task_guilds = {}
 
     async def collection(self, category):
-        """Fetch a collection and recreate a stale aiohttp session once."""
+        """Fetch a collection with session recovery and offline cache fallback."""
         for attempt in range(2):
             session = await self._ensure_session()
             try:
@@ -153,8 +246,7 @@ def patch_juicevault_class(JuiceVault):
             except RuntimeError as exc:
                 if "session is closed" not in str(exc).casefold() or attempt:
                     raise
-                # The previous cog instance may have closed its session during
-                # a reload. Drop the stale object and create a fresh one.
+                # Previous cog instance closed its session during reload.
                 self.session = None
                 await asyncio.sleep(0.05)
         raise RuntimeError("JuiceVault API session is closed")

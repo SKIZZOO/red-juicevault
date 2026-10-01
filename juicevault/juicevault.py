@@ -205,17 +205,79 @@ class JuiceVault(commands.Cog):
         wanted = self._category_key(category)
         return [track for track in tracks if self._category_key(track.get("category")) == wanted]
 
+    @staticmethod
+    def _jv_cache_path(url: str) -> str:
+        import hashlib, tempfile as _tmp
+        safe = hashlib.md5(url.encode()).hexdigest()
+        return os.path.join(_tmp.gettempdir(), "juicevault_track_cache", f"tracks_{safe}.json")
+
+    def _jv_write_cache(self, url: str, tracks: list) -> None:
+        try:
+            import time as _time
+            path = self._jv_cache_path(url)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"saved_at": _time.time(), "url": url, "tracks": tracks}, f)
+            os.replace(tmp, path)
+        except Exception as exc:
+            print(f"[JuiceVault] cache write failed: {exc}")
+
+    def _jv_read_cache(self, url: str):
+        import time as _time
+        try:
+            path = self._jv_cache_path(url)
+            if not os.path.isfile(path):
+                return None
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            tracks = data.get("tracks")
+            if isinstance(tracks, list) and tracks:
+                age_h = (_time.time() - float(data.get("saved_at", 0))) / 3600
+                print(f"[JuiceVault] Offline cache: {len(tracks)} tracks for {url} (cached {age_h:.1f}h ago)")
+                return tracks
+        except Exception as exc:
+            print(f"[JuiceVault] cache read failed: {exc}")
+        return None
+
     async def _fetch_tracks_from_url(self, url):
         await self._ensure_session()
-        async with self.session.get(url) as response:
-            text = await response.text(errors="ignore")
-        if response.status != 200:
+        # ── Try live API ──
+        try:
+            async with self.session.get(url) as response:
+                text = await response.text(errors="ignore")
+                status = response.status
+        except Exception as exc:
+            print(f"[JuiceVault] Network error fetching {url}: {type(exc).__name__}: {exc}")
+            cached = self._jv_read_cache(url)
+            if cached is not None:
+                return cached
+            raise RuntimeError(
+                "JuiceVault API is unreachable and no offline cache is available. "
+                "Please wait for the server to come back online."
+            ) from exc
+
+        if status != 200:
+            if status >= 500 or status in (408, 429):
+                # Server outage / Cloudflare tunnel down — try disk cache
+                print(f"[JuiceVault] API returned HTTP {status} for {url}, trying offline cache.")
+                cached = self._jv_read_cache(url)
+                if cached is not None:
+                    return cached
+                raise RuntimeError(
+                    f"JuiceVault API is temporarily down (HTTP {status}). "
+                    "No offline cache is available yet — please wait for the server to recover."
+                )
+            # 4xx — surface a clean message (strip raw HTML)
             try:
                 payload = json.loads(text)
-                detail = payload.get("error", text[:200]) if isinstance(payload, dict) else text[:200]
+                detail = payload.get("error", text[:300]) if isinstance(payload, dict) else text[:300]
             except json.JSONDecodeError:
-                detail = text[:200]
-            raise RuntimeError(f"JuiceVault API HTTP {response.status}: {detail}")
+                detail = text[:300]
+            if "<html" in detail.lower():
+                detail = f"HTTP {status} (Cloudflare/proxy error)"
+            raise RuntimeError(f"JuiceVault API HTTP {status}: {detail}")
+
         try:
             payload = json.loads(text)
         except json.JSONDecodeError as exc:
@@ -239,6 +301,9 @@ class JuiceVault(commands.Cog):
             track["id"] = song_id
             track["url"] = self._stream_url(song_id)
             tracks.append(track)
+        # ── Persist to disk on every successful fetch ──
+        if tracks:
+            self._jv_write_cache(url, tracks)
         return tracks
 
     async def fetch_tracks(self, category=None):
