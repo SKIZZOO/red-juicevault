@@ -1495,12 +1495,17 @@ class JuiceVaultWebRemote:
         public_ip = await self.get_public_ip()
 
         token_param = f"?token={quote(token)}" if token else ""
-        local_url = f"{proto}://{local_ip}:{port}/{token_param}"
-        public_url = f"{proto}://{public_ip}:{port}/{token_param}" if public_ip else None
-        custom_url = f"{custom.rstrip('/')}/{token_param}" if custom else None
+        if custom:
+            base = custom.rstrip("/")
+            primary_url = f"{base}/?token={quote(token)}" if token else base
+        elif public_ip:
+            base = f"{proto}://{public_ip}:{port}"
+            primary_url = f"{base}/?token={quote(token)}" if token else base
+        else:
+            base = f"{proto}://{local_ip}:{port}"
+            primary_url = f"{base}/?token={quote(token)}" if token else base
 
-        primary_url = custom_url or public_url or local_url
-        qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&format=png&data={quote(primary_url)}"
+        qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=14&ecc=M&format=png&data={quote(primary_url, safe='')}&t={int(time.time())}"
 
         vc = ctx.guild.voice_client if ctx.guild else None
         vc_name = vc.channel.name if vc and vc.channel else "Not connected"
@@ -1575,7 +1580,7 @@ def patch_web_remote(JuiceVault, JuiceVaultUI):
         remote = cog.web_remote
         url = await remote.get_remote_url(with_token=True)
         token = await remote.config.token()
-        qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&format=png&data={quote(url)}"
+        qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=14&ecc=M&format=png&data={quote(url, safe='')}&t={int(time.time())}"
 
         embed = discord.Embed(
             title="📱 JuiceVault Mobile Web Remote",
