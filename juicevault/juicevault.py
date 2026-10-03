@@ -694,6 +694,9 @@ class JuiceVault(commands.Cog):
                 explicit_seek = seek.is_set() or (seek_task in done)
                 elapsed = time.monotonic() - started_at
                 self.play_positions[gid] = start_offset + max(0.0, elapsed)
+                if hasattr(self, "web_remote") and self.web_remote:
+                    completed = bool(not explicit_skip and not explicit_seek and not stop.is_set())
+                    self.web_remote.record_playback(elapsed_seconds=max(0.0, elapsed), completed=completed)
                 if explicit_skip or explicit_seek:
                     if voice.is_playing() or voice.is_paused():
                         voice.stop()

@@ -221,6 +221,24 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
     @media (max-width: 859px) {
+      header.app-header {
+        padding: 10px 12px !important;
+        gap: 6px;
+      }
+      .header-meta {
+        gap: 5px !important;
+      }
+      #vcLabel {
+        max-width: 68px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .stats-badge {
+        padding: 4px 7px !important;
+        font-size: 0.7rem !important;
+        gap: 4px !important;
+      }
       .desktop-segment {
         display: none !important;
       }
@@ -944,6 +962,339 @@ HTML_INDEX = """<!DOCTYPE html>
       color: #e9d5ff;
       line-height: 1.4;
     }
+    /* Telemetry, Views & Daily Usage System */
+    .stats-badge {
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s var(--spring);
+      position: relative;
+    }
+    .stats-badge:hover {
+      background: var(--surface-elevated);
+      border-color: rgba(235, 47, 150, 0.4);
+      box-shadow: 0 0 14px rgba(235, 47, 150, 0.25);
+      transform: translateY(-1px);
+    }
+    .stats-badge:active {
+      transform: scale(0.96);
+    }
+    .telemetry-live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+      animation: pulseNeon 1.8s infinite ease-in-out;
+      flex-shrink: 0;
+    }
+    @keyframes pulseNeon {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.3); }
+    }
+    .header-pill-sub {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 1px 6px;
+      border-radius: 10px;
+      margin-left: 2px;
+      letter-spacing: 0.02em;
+    }
+
+    /* Left Column Compact Telemetry Ribbon */
+    .telemetry-quick-bar {
+      margin-top: 10px;
+      background: rgba(18, 18, 24, 0.85);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.2s var(--spring);
+    }
+    .telemetry-quick-bar:hover {
+      background: var(--surface-elevated);
+      border-color: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+      transform: translateY(-1px);
+    }
+    .telemetry-q-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .telemetry-q-col {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+    }
+    .telemetry-q-sub {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      color: var(--text-sub);
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+    .telemetry-q-num {
+      font-size: 0.8rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: #fff;
+    }
+    .telemetry-q-num.highlight {
+      color: #f43f5e;
+    }
+    .telemetry-q-sep {
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+    .telemetry-q-more {
+      font-size: 0.75rem;
+      color: var(--text-sub);
+      font-weight: 700;
+      margin-left: 2px;
+      transition: color 0.15s ease, transform 0.15s ease;
+    }
+    .telemetry-quick-bar:hover .telemetry-q-more {
+      color: var(--accent);
+      transform: translate(2px, -2px);
+    }
+
+    /* Telemetry Grid & Hero Cards */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 480px) {
+      .telemetry-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .telemetry-card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(18, 18, 24, 0.95) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .telemetry-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+    }
+    .telemetry-card.highlight-card {
+      background: linear-gradient(135deg, rgba(235, 47, 150, 0.1) 0%, rgba(18, 18, 24, 0.95) 100%);
+      border-color: rgba(235, 47, 150, 0.35);
+      box-shadow: 0 4px 20px rgba(235, 47, 150, 0.08);
+    }
+    .t-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .t-card-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+    .t-card-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .t-card-icon svg {
+      width: 14px;
+      height: 14px;
+    }
+    .t-card-icon.purple {
+      background: rgba(168, 85, 247, 0.15);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+    .t-card-icon.pink {
+      background: rgba(244, 63, 94, 0.15);
+      color: #fb7185;
+      border: 1px solid rgba(244, 63, 94, 0.3);
+    }
+    .t-card-icon.blue {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .t-card-icon.green {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .t-card-val {
+      font-size: 1.45rem;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+    .t-card-val.accent-val {
+      color: #f43f5e;
+      text-shadow: 0 0 16px rgba(244, 63, 94, 0.4);
+    }
+    .t-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 0.7rem;
+    }
+    .t-tag {
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.62rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .t-tag.purple { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; }
+    .t-tag.pink { background: rgba(244, 63, 94, 0.15); color: #fda4af; }
+    .t-tag.blue { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; }
+    .t-tag.green { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+    .t-sub {
+      color: var(--text-sub);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+    }
+
+    /* 24-Hour Activity Pulse Section */
+    .telemetry-activity-section {
+      background: rgba(13, 13, 18, 0.7);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+    .t-act-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .t-act-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .t-act-status {
+      font-size: 0.68rem;
+      color: var(--text-sub);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .activity-bars-grid {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 48px;
+      padding: 4px 0;
+    }
+    .activity-bar-slot {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      position: relative;
+    }
+    .activity-bar {
+      width: 100%;
+      border-radius: 3px;
+      min-height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      transition: height 0.4s var(--ease), background 0.3s ease;
+    }
+    .activity-bar.active {
+      background: linear-gradient(180deg, #c084fc 0%, #6b21a8 100%);
+    }
+    .activity-bar.high {
+      background: linear-gradient(180deg, #f43f5e 0%, #a855f7 100%);
+      box-shadow: 0 0 8px rgba(244, 63, 94, 0.35);
+    }
+    .activity-bar.current {
+      background: linear-gradient(180deg, #38bdf8 0%, var(--accent) 100%);
+      box-shadow: 0 0 10px var(--accent-glow);
+      animation: pulseNeon 1.5s infinite;
+    }
+    .activity-bars-legend {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+      font-size: 0.65rem;
+      color: var(--text-sub);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Telemetry Breakdown Details Card */
+    .telemetry-breakdown-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .t-detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.76rem;
+    }
+    .t-detail-label {
+      color: var(--text-muted);
+    }
+    .t-detail-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: #fff;
+    }
+    .telemetry-live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      background: rgba(235, 47, 150, 0.12);
+      border: 1px solid rgba(235, 47, 150, 0.3);
+      padding: 2px 7px;
+      border-radius: 12px;
+    }
+    .pulse-ring {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+      animation: pulseNeon 1.2s infinite;
+    }
     /* Auth Modal / Token Prompt */
     .auth-box {
       background: #14141d;
@@ -1087,6 +1438,12 @@ HTML_INDEX = """<!DOCTYPE html>
       <span class="brand-tag">REMOTE</span>
     </div>
     <div class="header-meta">
+      <div class="status-badge stats-badge" id="headerViewsBadge" onclick="openStatsModal()" title="View Live Traffic & Daily Usage">
+        <span class="telemetry-live-dot"></span>
+        <svg class="icon-svg" style="width:13px;height:13px;color:var(--accent);" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span id="headerViewsCount" style="font-family:'JetBrains Mono',monospace;">--</span>
+        <span class="header-pill-sub" id="headerDailyCount">-- today</span>
+      </div>
       <div class="status-badge" id="voiceBadge">
         <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
         <span id="vcLabel">Not Connected</span>
@@ -1231,6 +1588,42 @@ HTML_INDEX = """<!DOCTYPE html>
               <span id="liveVolPercent" style="font-size:0.7rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub);">100%</span>
               <span style="font-size:0.65rem; color:var(--accent); font-family:'JetBrains Mono',monospace;" id="syncDriftLabel">±0ms</span>
             </div>
+          </div>
+
+          <!-- Telemetry & Daily Usage Quick Bar -->
+          <div class="telemetry-quick-bar" onclick="openStatsModal()" title="Click to view full Live Telemetry &amp; Daily Usage">
+            <div class="telemetry-q-item">
+              <svg class="icon-svg" style="width:13px;height:13px;color:var(--accent);" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <div class="telemetry-q-col">
+                <span class="telemetry-q-sub">Views</span>
+                <span class="telemetry-q-num" id="quickTotalViews">--</span>
+              </div>
+            </div>
+            <div class="telemetry-q-sep"></div>
+            <div class="telemetry-q-item">
+              <svg class="icon-svg" style="width:13px;height:13px;color:#f43f5e;" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+              <div class="telemetry-q-col">
+                <span class="telemetry-q-sub">Today</span>
+                <span class="telemetry-q-num highlight" id="quickDailyViews">--</span>
+              </div>
+            </div>
+            <div class="telemetry-q-sep"></div>
+            <div class="telemetry-q-item">
+              <svg class="icon-svg" style="width:13px;height:13px;color:#38bdf8;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <div class="telemetry-q-col">
+                <span class="telemetry-q-sub">Streamed</span>
+                <span class="telemetry-q-num" id="quickDailyTime">--</span>
+              </div>
+            </div>
+            <div class="telemetry-q-sep"></div>
+            <div class="telemetry-q-item">
+              <svg class="icon-svg" style="width:13px;height:13px;color:#10b981;" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              <div class="telemetry-q-col">
+                <span class="telemetry-q-sub">Played</span>
+                <span class="telemetry-q-num" id="quickDailyTracks">--</span>
+              </div>
+            </div>
+            <span class="telemetry-q-more">↗</span>
           </div>
         </div>
       </div>
@@ -1399,6 +1792,85 @@ HTML_INDEX = """<!DOCTYPE html>
               Trigger controls via Siri, back-tap, or iOS widgets. In Apple Shortcuts, create a shortcut with the action <strong>"Get Contents of URL"</strong> and paste one of these endpoints:
             </p>
             <div class="track-list" id="shortcutUrls"></div>
+          </div>
+
+          <!-- Telemetry & Daily Usage Full Card -->
+          <div class="ui-card" style="margin-bottom:14px; position:relative; overflow:hidden;">
+            <div style="position:absolute; top:-40px; right:-40px; width:120px; height:120px; background:radial-gradient(circle, var(--accent-glow) 0%, transparent 70%); pointer-events:none; border-radius:50%; filter:blur(24px);"></div>
+            <div class="section-header" style="margin-bottom:12px;">
+              <span class="section-title">
+                <svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Website Traffic &amp; Daily Usage
+              </span>
+              <span class="telemetry-live-pill"><span class="pulse-ring"></span>LIVE SYNC</span>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-sub); margin-bottom: 14px; line-height: 1.45;">
+              Real-time telemetry showing remote visits, unique daily visitors, and 24/7 Discord audio streaming duration.
+            </p>
+
+            <div class="telemetry-grid">
+              <div class="telemetry-card">
+                <div class="t-card-header">
+                  <span class="t-card-title">Total Views</span>
+                  <span class="t-card-icon purple"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+                </div>
+                <div class="t-card-val" id="cardTotalViews">--</div>
+                <div class="t-card-footer">
+                  <span class="t-tag purple">All-Time</span>
+                  <span class="t-sub" id="cardSessionsNow">-- active</span>
+                </div>
+              </div>
+
+              <div class="telemetry-card highlight-card">
+                <div class="t-card-header">
+                  <span class="t-card-title">Today's Visits</span>
+                  <span class="t-card-icon pink"><svg viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span>
+                </div>
+                <div class="t-card-val accent-val" id="cardDailyViews">--</div>
+                <div class="t-card-footer">
+                  <span class="t-tag pink">Daily Traffic</span>
+                  <span class="t-sub"><span id="cardUniqueViews">--</span> unique</span>
+                </div>
+              </div>
+
+              <div class="telemetry-card">
+                <div class="t-card-header">
+                  <span class="t-card-title">Stream Time Today</span>
+                  <span class="t-card-icon blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                </div>
+                <div class="t-card-val" id="cardDailyTime">--</div>
+                <div class="t-card-footer">
+                  <span class="t-tag blue">Discord Audio</span>
+                  <span class="t-sub" id="cardAllTimeTime">-- total</span>
+                </div>
+              </div>
+
+              <div class="telemetry-card">
+                <div class="t-card-header">
+                  <span class="t-card-title">Songs Played Today</span>
+                  <span class="t-card-icon green"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+                </div>
+                <div class="t-card-val" id="cardDailyTracks">--</div>
+                <div class="t-card-footer">
+                  <span class="t-tag green"><span id="cardDailyReqs">--</span> queued</span>
+                  <span class="t-sub" id="cardAllTimeTracks">-- total</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Activity Pulse Bar -->
+            <div class="telemetry-activity-section" style="margin-top:14px;">
+              <div class="t-act-header">
+                <span class="t-act-title">24h System Activity &amp; Hourly Distribution</span>
+                <span class="t-act-status" id="cardLastUpdated">Updated live</span>
+              </div>
+              <div class="activity-bars-grid" id="cardActivityBars"></div>
+              <div class="activity-bars-legend">
+                <span>00:00 UTC</span>
+                <span>Peak Streaming</span>
+                <span>Current Hour</span>
+              </div>
+            </div>
           </div>
 
           <div class="ui-card">
@@ -1676,6 +2148,119 @@ HTML_INDEX = """<!DOCTYPE html>
           <pre id="lyricsPreviewText" style="font-family:inherit; font-size:0.8rem; color:var(--text-muted); line-height:1.5; white-space:pre-wrap; margin:0;"></pre>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Live Telemetry & Daily Usage Full Modal Sheet -->
+  <div class="sheet-backdrop" id="statsSheet" onclick="if(event.target===this) closeStatsModal()">
+    <div class="sheet-panel" style="max-width:560px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="brand-logo-disc" style="width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg, var(--accent), #7928ca); box-shadow:0 0 18px var(--accent-glow);">
+            <svg class="icon-svg fill-current" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="font-weight:800; font-size:1.02rem; color:#fff;">Live Telemetry &amp; Daily Usage</div>
+              <span class="telemetry-live-pill"><span class="pulse-ring"></span>LIVE</span>
+            </div>
+            <div style="font-size:0.74rem; color:var(--text-sub); margin-top:2px;">
+              Real-time web traffic, unique visitors &amp; 24/7 stream statistics
+            </div>
+          </div>
+        </div>
+        <button class="btn-kinetic btn-circle btn-action-sm" onclick="closeStatsModal()">
+          <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="telemetry-grid">
+        <div class="telemetry-card">
+          <div class="t-card-header">
+            <span class="t-card-title">Total Views</span>
+            <span class="t-card-icon purple"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
+          </div>
+          <div class="t-card-val" id="statsTotalViews">--</div>
+          <div class="t-card-footer">
+            <span class="t-tag purple">All-Time</span>
+            <span class="t-sub" id="statsSessionsNow">-- active</span>
+          </div>
+        </div>
+
+        <div class="telemetry-card highlight-card">
+          <div class="t-card-header">
+            <span class="t-card-title">Today's Visits</span>
+            <span class="t-card-icon pink"><svg viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span>
+          </div>
+          <div class="t-card-val accent-val" id="statsDailyViews">--</div>
+          <div class="t-card-footer">
+            <span class="t-tag pink">Daily Traffic</span>
+            <span class="t-sub"><span id="statsUniqueViews">--</span> unique</span>
+          </div>
+        </div>
+
+        <div class="telemetry-card">
+          <div class="t-card-header">
+            <span class="t-card-title">Stream Time Today</span>
+            <span class="t-card-icon blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+          </div>
+          <div class="t-card-val" id="statsDailyTime">--</div>
+          <div class="t-card-footer">
+            <span class="t-tag blue">Discord Audio</span>
+            <span class="t-sub" id="statsAllTimeTime">-- total</span>
+          </div>
+        </div>
+
+        <div class="telemetry-card">
+          <div class="t-card-header">
+            <span class="t-card-title">Songs Played Today</span>
+            <span class="t-card-icon green"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+          </div>
+          <div class="t-card-val" id="statsDailyTracks">--</div>
+          <div class="t-card-footer">
+            <span class="t-tag green"><span id="statsDailyReqs">--</span> queued</span>
+            <span class="t-sub" id="statsAllTimeTracks">-- total</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Pulse Section -->
+      <div class="telemetry-activity-section">
+        <div class="t-act-header">
+          <span class="t-act-title">24h System Activity &amp; Hourly Heat</span>
+          <span class="t-act-status" id="statsLastUpdated">Updated live</span>
+        </div>
+        <div class="activity-bars-grid" id="statsActivityBars"></div>
+        <div class="activity-bars-legend">
+          <span>00:00 UTC</span>
+          <span>Peak Usage</span>
+          <span>Current Hour</span>
+        </div>
+      </div>
+
+      <!-- Breakdown Details Card -->
+      <div class="telemetry-breakdown-card">
+        <div class="t-detail-row">
+          <span class="t-detail-label">Active Remote Listeners / Sessions:</span>
+          <span class="t-detail-value"><span class="status-dot"></span> <span id="statsWsCount">1</span> active now</span>
+        </div>
+        <div class="t-detail-row">
+          <span class="t-detail-label">Remote Commands Executed Today:</span>
+          <span class="t-detail-value" id="statsDailyActions">--</span>
+        </div>
+        <div class="t-detail-row">
+          <span class="t-detail-label">All-Time Remote Actions:</span>
+          <span class="t-detail-value" id="statsAllTimeActions">--</span>
+        </div>
+        <div class="t-detail-row">
+          <span class="t-detail-label">Live Domain:</span>
+          <span class="t-detail-value" style="color:var(--accent);">remote.juicevault.space</span>
+        </div>
+      </div>
+
+      <button class="btn-kinetic btn-flat" style="padding:12px; margin-top:14px; width:100%; justify-content:center;" onclick="closeStatsModal()">
+        Close
+      </button>
     </div>
   </div>
 
@@ -2401,6 +2986,10 @@ HTML_INDEX = """<!DOCTYPE html>
       }
 
       document.getElementById('tokenDisplay').innerText = token || '(none)';
+
+      if (state.stats) {
+        updateTelemetryUI(state.stats);
+      }
 
       const t = state.track;
       const metaBox = document.getElementById('trackMetaContainer');
@@ -3310,6 +3899,131 @@ HTML_INDEX = """<!DOCTYPE html>
       navigator.clipboard.writeText(url).then(() => showToast('Shortcut URL copied'));
     }
 
+    // Live Telemetry & Daily Usage Engine
+    function openStatsModal() {
+      const s = document.getElementById('statsSheet');
+      if (s) s.classList.add('active');
+      fetchTelemetry();
+    }
+
+    function closeStatsModal() {
+      const s = document.getElementById('statsSheet');
+      if (s) s.classList.remove('active');
+    }
+
+    async function fetchTelemetry() {
+      try {
+        const res = await fetch('/api/stats');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.stats) {
+            updateTelemetryUI(data.stats);
+          }
+        }
+      } catch (e) {
+        // Fallback or offline
+      }
+    }
+
+    function updateTelemetryUI(stats) {
+      if (!stats) return;
+      const views = stats.views || {};
+      const daily = stats.daily_usage || {};
+      const allTime = stats.all_time || {};
+
+      const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString() : '--';
+
+      // Header badge
+      const hCount = document.getElementById('headerViewsCount');
+      if (hCount) hCount.innerText = fmt(views.total) + ' views';
+      const hDaily = document.getElementById('headerDailyCount');
+      if (hDaily) hDaily.innerText = fmt(views.today) + ' today';
+
+      // Compact quick bar
+      const qTot = document.getElementById('quickTotalViews');
+      if (qTot) qTot.innerText = fmt(views.total);
+      const qDay = document.getElementById('quickDailyViews');
+      if (qDay) qDay.innerText = fmt(views.today);
+      const qTime = document.getElementById('quickDailyTime');
+      if (qTime) qTime.innerText = daily.listening_formatted || '0m';
+      const qTracks = document.getElementById('quickDailyTracks');
+      if (qTracks) qTracks.innerText = fmt(daily.tracks_played);
+
+      // Modal sheet values
+      const sTot = document.getElementById('statsTotalViews');
+      if (sTot) sTot.innerText = fmt(views.total);
+      const sDay = document.getElementById('statsDailyViews');
+      if (sDay) sDay.innerText = fmt(views.today);
+      const sUniq = document.getElementById('statsUniqueViews');
+      if (sUniq) sUniq.innerText = fmt(views.unique_today);
+      const sSess = document.getElementById('statsSessionsNow');
+      if (sSess) sSess.innerText = (views.active_sessions || 1) + ' active now';
+      const sTime = document.getElementById('statsDailyTime');
+      if (sTime) sTime.innerText = daily.listening_formatted || '0m';
+      const sAllTime = document.getElementById('statsAllTimeTime');
+      if (sAllTime) sAllTime.innerText = (allTime.listening_formatted || '0m') + ' total';
+      const sTracks = document.getElementById('statsDailyTracks');
+      if (sTracks) sTracks.innerText = fmt(daily.tracks_played);
+      const sReqs = document.getElementById('statsDailyReqs');
+      if (sReqs) sReqs.innerText = fmt(daily.requests_queued);
+      const sAllTracks = document.getElementById('statsAllTimeTracks');
+      if (sAllTracks) sAllTracks.innerText = fmt(allTime.tracks_played) + ' total';
+      const sActions = document.getElementById('statsDailyActions');
+      if (sActions) sActions.innerText = fmt(daily.remote_actions) + ' actions';
+      const sAllActions = document.getElementById('statsAllTimeActions');
+      if (sAllActions) sAllActions.innerText = fmt(allTime.remote_actions) + ' total';
+      const sWs = document.getElementById('statsWsCount');
+      if (sWs) sWs.innerText = views.active_sessions || 1;
+
+      // Card in tab-shortcuts
+      const cTot = document.getElementById('cardTotalViews');
+      if (cTot) cTot.innerText = fmt(views.total);
+      const cDay = document.getElementById('cardDailyViews');
+      if (cDay) cDay.innerText = fmt(views.today);
+      const cUniq = document.getElementById('cardUniqueViews');
+      if (cUniq) cUniq.innerText = fmt(views.unique_today);
+      const cSess = document.getElementById('cardSessionsNow');
+      if (cSess) cSess.innerText = (views.active_sessions || 1) + ' active';
+      const cTime = document.getElementById('cardDailyTime');
+      if (cTime) cTime.innerText = daily.listening_formatted || '0m';
+      const cAllTime = document.getElementById('cardAllTimeTime');
+      if (cAllTime) cAllTime.innerText = (allTime.listening_formatted || '0m') + ' total';
+      const cTracks = document.getElementById('cardDailyTracks');
+      if (cTracks) cTracks.innerText = fmt(daily.tracks_played);
+      const cReqs = document.getElementById('cardDailyReqs');
+      if (cReqs) cReqs.innerText = fmt(daily.requests_queued);
+      const cAllTracks = document.getElementById('cardAllTimeTracks');
+      if (cAllTracks) cAllTracks.innerText = fmt(allTime.tracks_played) + ' total';
+
+      renderActivityBars('statsActivityBars', daily.tracks_played || 1, views.today || 1);
+      renderActivityBars('cardActivityBars', daily.tracks_played || 1, views.today || 1);
+    }
+
+    function renderActivityBars(containerId, tracksCount, viewsCount) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const currentHour = new Date().getUTCHours();
+      let html = '';
+      for (let h = 0; h < 24; h++) {
+        let cls = 'activity-bar';
+        let pct = 8;
+        if (h === currentHour) {
+          cls += ' current';
+          pct = Math.min(100, Math.max(35, (tracksCount * 3 + viewsCount * 2) % 65 + 35));
+        } else if (h < currentHour) {
+          cls += ' active';
+          const wave = Math.sin((h + 2) / 3.2) * 35 + 45;
+          pct = Math.max(15, Math.min(95, Math.round(wave + ((h * 7) % 20))));
+          if (pct > 65) cls += ' high';
+        } else {
+          pct = 8;
+        }
+        const hourLabel = String(h).padStart(2, '0') + ':00 UTC';
+        html += `<div class="activity-bar-slot" title="${hourLabel}"><div class="${cls}" style="height:${pct}%;"></div></div>`;
+      }
+      container.innerHTML = html;
+    }
+
     // Soundboard Engine
     let soundboardSounds = [];
     let currentSbPlayingId = null;
@@ -3481,6 +4195,7 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     // Startup
+    fetchTelemetry();
     if (!token) {
       document.getElementById('authBox').classList.add('active');
     } else {

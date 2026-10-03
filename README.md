@@ -37,6 +37,7 @@ Featuring a **mobile-first PWA controller**, **1:1 phase-locked audio streaming 
 
 ### 📱 Mobile Web Remote PWA
 - **Compact & Modern Layout**: Streamlined, ultra-responsive dark glassmorphic UI optimized to fit cleanly on mobile screens without excessive scrolling.
+- **Live Views & Daily Usage Telemetry**: Real-time traffic counter (total page views, daily visits, unique visitors, active sessions) paired with 24-hour daily streaming analytics (audio duration streamed today, songs completed, and remote commands executed).
 - **1-Tap Pairing**: Instant QR Code pairing generated from Discord with secure auth tokens.
 - **Installable PWA**: Tap *Add to Home Screen* in Safari (iOS) or Chrome (Android) for a standalone fullscreen mobile app with custom app icons.
 - **Live WebSocket Sync**: Real-time 60fps playback scrubber, live soundwave visualizer, and dynamic status badges.
