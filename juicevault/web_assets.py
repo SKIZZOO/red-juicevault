@@ -1082,16 +1082,9 @@ HTML_INDEX = """<!DOCTYPE html>
         <svg class="icon-svg fill-current" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="#09090d"/></svg>
       </div>
       <div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <div class="brand-title">JuiceVault</div>
-          <span class="brand-tag">REMOTE</span>
-        </div>
-        <div style="font-size:0.62rem; color:var(--text-sub); display:flex; gap:4px; align-items:center; margin-top:2px;">
-          <span>by <a href="https://sosocial.lol/ski" target="_blank" rel="noopener" class="credit-author">SKIZZOO</a></span>
-          <span>•</span>
-          <span>domain by <a href="https://sosocial.lol/spinti" target="_blank" rel="noopener" class="credit-partner">Spinti</a></span>
-        </div>
+        <div class="brand-title">JuiceVault</div>
       </div>
+      <span class="brand-tag">REMOTE</span>
     </div>
     <div class="header-meta">
       <div class="status-badge" id="voiceBadge">
