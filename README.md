@@ -3,7 +3,8 @@
 [![Red-DiscordBot](https://img.shields.io/badge/Red--DiscordBot-V3-red.svg)](https://github.com/Cog-Creators/Red-DiscordBot)
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Creator](https://img.shields.io/badge/Made%20by-SKIZZOO-purple.svg)](https://guns.lol/skizzoo)
+[![Creator](https://img.shields.io/badge/Made%20by-SKIZZOO-purple.svg)](https://sosocial.lol/ski)
+[![Domain](https://img.shields.io/badge/Domain%20by-Spinti-38bdf8.svg)](https://sosocial.lol/spinti)
 
 A high-performance, polished 24/7 JuiceVault music player and companion Mobile Web Remote for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot).
 
@@ -141,11 +142,14 @@ Scan the QR code with your smartphone camera to launch the controller!
 
 ---
 
-## 👤 Credits
+## 👤 Credits & Contributors
 
-**Made by SKIZZOO**
-- GitHub: [@SKIZZOO](https://github.com/SKIZZOO)
-- Website: [guns.lol/skizzoo](https://guns.lol/skizzoo)
+- **Bot Developer**: **SKIZZOO**
+  - Website: [sosocial.lol/ski](https://sosocial.lol/ski)
+  - GitHub: [@SKIZZOO](https://github.com/SKIZZOO)
+- **Domain & Infrastructure**: **Spinti**
+  - Website: [sosocial.lol/spinti](https://sosocial.lol/spinti)
+  - Generously provided the `juicevault.space` custom domain and network hosting.
 
 Special thanks to the **JuiceVault** team, **Red-DiscordBot** contributors, and the **discord.py** community.
 

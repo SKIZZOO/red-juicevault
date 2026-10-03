@@ -20,8 +20,10 @@ HTML_INDEX = """<!DOCTYPE html>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="JuiceVault">
   <meta name="theme-color" content="#09090d">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22discGrad%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23c084fc%22%2F%3E%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%23a855f7%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%236b21a8%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url(%23discGrad)%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2222%22%20fill%3D%22none%22%20stroke%3D%22rgba(255%2C255%2C255%2C0.3)%22%20stroke-width%3D%221.6%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2216%22%20fill%3D%22none%22%20stroke%3D%22rgba(255%2C255%2C255%2C0.22)%22%20stroke-width%3D%221.2%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2210%22%20fill%3D%22%2309090d%22%20stroke%3D%22%23a855f7%22%20stroke-width%3D%221.8%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%223.5%22%20fill%3D%22%23c084fc%22%2F%3E%3C%2Fsvg%3E">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="icon" href="https://api.juicevault.xyz/favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -1021,6 +1023,53 @@ HTML_INDEX = """<!DOCTYPE html>
       overflow: hidden;
       min-height: 1.9em;
     }
+    .credit-author {
+      color: var(--accent);
+      font-weight: 600;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+    .credit-author:hover {
+      color: #c084fc;
+      text-decoration: underline;
+    }
+    .credit-partner {
+      color: #38bdf8;
+      font-weight: 600;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+    .credit-partner:hover {
+      color: #7dd3fc;
+      text-decoration: underline;
+    }
+    .app-footer {
+      margin-top: 24px;
+      padding: 16px 8px 12px;
+      text-align: center;
+      font-size: 0.74rem;
+      color: var(--text-sub);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .footer-credit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .footer-sep {
+      color: var(--border);
+    }
+    .footer-sub {
+      font-size: 0.67rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
   </style>
 </head>
 <body>
@@ -1033,9 +1082,16 @@ HTML_INDEX = """<!DOCTYPE html>
         <svg class="icon-svg fill-current" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="#09090d"/></svg>
       </div>
       <div>
-        <div class="brand-title">JuiceVault</div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div class="brand-title">JuiceVault</div>
+          <span class="brand-tag">REMOTE</span>
+        </div>
+        <div style="font-size:0.62rem; color:var(--text-sub); display:flex; gap:4px; align-items:center; margin-top:2px;">
+          <span>by <a href="https://sosocial.lol/ski" target="_blank" rel="noopener" class="credit-author">SKIZZOO</a></span>
+          <span>•</span>
+          <span>domain by <a href="https://sosocial.lol/spinti" target="_blank" rel="noopener" class="credit-partner">Spinti</a></span>
+        </div>
       </div>
-      <span class="brand-tag">REMOTE</span>
     </div>
     <div class="header-meta">
       <div class="status-badge" id="voiceBadge">
@@ -1356,7 +1412,7 @@ HTML_INDEX = """<!DOCTYPE html>
             <div class="section-header">
               <span class="section-title">
                 <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                Host Connection
+                Host Connection & Credits
               </span>
             </div>
             <div style="font-size: 0.78rem; font-family:'JetBrains Mono',monospace; color: var(--text-muted); display:flex; flex-direction:column; gap:6px;">
@@ -1364,6 +1420,16 @@ HTML_INDEX = """<!DOCTYPE html>
               <div>Voice: <span id="vcName" style="color:#fff;">--</span></div>
               <div>Protocol: <span id="protocolName" style="color:var(--accent);">--</span></div>
               <div>Auth Token: <code id="tokenDisplay" style="color:var(--accent);">--</code></div>
+            </div>
+            <div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06); font-size:0.75rem; color:var(--text-sub); display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Bot Developer:</span>
+                <a href="https://sosocial.lol/ski" target="_blank" rel="noopener" class="credit-author">SKIZZOO ↗</a>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Domain Provider:</span>
+                <a href="https://sosocial.lol/spinti" target="_blank" rel="noopener" class="credit-partner">Spinti ↗</a>
+              </div>
             </div>
           </div>
         </div>
@@ -1431,6 +1497,18 @@ HTML_INDEX = """<!DOCTYPE html>
         </div>
       </div>
     </div>
+
+    <!-- Footer Credits -->
+    <footer class="app-footer">
+      <div class="footer-credit">
+        <span>Bot crafted by <a href="https://sosocial.lol/ski" target="_blank" rel="noopener" class="credit-author">SKIZZOO</a></span>
+        <span class="footer-sep">•</span>
+        <span>Domain provided by <a href="https://sosocial.lol/spinti" target="_blank" rel="noopener" class="credit-partner">Spinti</a></span>
+      </div>
+      <div class="footer-sub">
+        JuiceVault 24/7 Music Player &amp; Mobile Web Remote
+      </div>
+    </footer>
   </div>
 
   <!-- Mobile Bottom Navigation Bar -->
@@ -3430,8 +3508,25 @@ MANIFEST_JSON = """{
   "theme_color": "#a855f7",
   "icons": [
     {
-      "src": "https://api.juicevault.xyz/favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32",
       "type": "image/x-icon"
     }
   ]
@@ -3451,3 +3546,36 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
 });
 """
+
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="discGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#6b21a8"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#discGrad)"/>
+  <circle cx="32" cy="32" r="22" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.6"/>
+  <circle cx="32" cy="32" r="16" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.2"/>
+  <circle cx="32" cy="32" r="10" fill="#09090d" stroke="#a855f7" stroke-width="1.8"/>
+  <circle cx="32" cy="32" r="3.5" fill="#c084fc"/>
+</svg>"""
+
+import os
+
+_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
+
+def _read_asset(filename: str) -> bytes:
+    p = os.path.join(_ASSETS_DIR, filename)
+    if os.path.isfile(p):
+        try:
+            with open(p, "rb") as f:
+                return f.read()
+        except Exception:
+            pass
+    return b""
+
+FAVICON_ICO_BYTES = _read_asset("favicon.ico")
+ICON_192_PNG_BYTES = _read_asset("icon-192.png")
+ICON_512_PNG_BYTES = _read_asset("icon-512.png")

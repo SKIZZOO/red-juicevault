@@ -53,7 +53,7 @@ async def polished_make_embed(self, guild_id):
 
         plays = track.get("play_count")
         if track.get("_external"):
-            footer_line = f"[JuiceVault Archive](https://juicevault.xyz/) • 24/7 • [made by SKIZZOO](https://guns.lol/skizzoo)"
+            footer_line = f"[JuiceVault Archive](https://juicevault.xyz/) • 24/7 • [made by SKIZZOO](https://sosocial.lol/ski)"
         else:
             if plays is not None:
                 try:
@@ -62,14 +62,14 @@ async def polished_make_embed(self, guild_id):
                     plays_text = "plays"
             else:
                 plays_text = "plays"
-            footer_line = f"[JuiceVault Archive](https://juicevault.xyz/) • {plays_text} • 24/7 • [made by SKIZZOO](https://guns.lol/skizzoo)"
+            footer_line = f"[JuiceVault Archive](https://juicevault.xyz/) • {plays_text} • 24/7 • [made by SKIZZOO](https://sosocial.lol/ski)"
         embed.add_field(name="‎", value=footer_line, inline=False)
     else:
         embed.title = "Loading Next Track…"
         embed.description = "Preparing the next track from the archive."
         embed.add_field(name="📚 LIBRARY", value=f"**{category_label(category)}**", inline=True)
         embed.add_field(name="🎶 QUEUE", value=f"`{queue_size}`", inline=True)
-        embed.add_field(name="‎", value="[JuiceVault Archive](https://juicevault.xyz/) • 24/7 • [made by SKIZZOO](https://guns.lol/skizzoo)", inline=False)
+        embed.add_field(name="‎", value="[JuiceVault Archive](https://juicevault.xyz/) • 24/7 • [made by SKIZZOO](https://sosocial.lol/ski)", inline=False)
     if voice and voice.is_connected():
         embed.add_field(name="🔊 VOICE", value=f"`{voice.channel.name}`", inline=False)
     return embed

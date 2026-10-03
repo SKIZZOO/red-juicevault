@@ -25,7 +25,15 @@ import discord
 from redbot.core import Config, commands
 from redbot.core.data_manager import cog_data_path
 
-from .web_assets import HTML_INDEX, MANIFEST_JSON, SERVICE_WORKER_JS
+from .web_assets import (
+    HTML_INDEX,
+    MANIFEST_JSON,
+    SERVICE_WORKER_JS,
+    FAVICON_SVG,
+    FAVICON_ICO_BYTES,
+    ICON_192_PNG_BYTES,
+    ICON_512_PNG_BYTES,
+)
 from .juicevault_ui import category_label, JuiceVaultPanelView
 from .eq_ui_patch import EQ_OPTIONS
 
@@ -169,6 +177,12 @@ class JuiceVaultWebRemote:
             app.router.add_get("/manifest.json", self._handle_manifest)
             app.router.add_get("/sw.js", self._handle_service_worker)
             app.router.add_get("/ws", self._handle_ws)
+
+            # Favicon & App Icons
+            app.router.add_get("/favicon.ico", self._handle_favicon)
+            app.router.add_get("/favicon.svg", self._handle_favicon_svg)
+            app.router.add_get("/icon-192.png", self._handle_icon_192)
+            app.router.add_get("/icon-512.png", self._handle_icon_512)
 
             # REST API routes (supports both GET and POST for iOS Shortcuts ease of use)
             app.router.add_get("/api/status", self._api_status)
@@ -669,6 +683,30 @@ class JuiceVaultWebRemote:
 
     async def _handle_service_worker(self, request):
         return web.Response(text=SERVICE_WORKER_JS, content_type="application/javascript")
+
+    async def _handle_favicon(self, request):
+        path = os.path.join(os.path.dirname(__file__), "assets", "favicon.ico")
+        if os.path.isfile(path):
+            return web.FileResponse(path, headers={"Content-Type": "image/x-icon", "Cache-Control": "public, max-age=86400"})
+        return web.Response(body=FAVICON_ICO_BYTES, content_type="image/x-icon", headers={"Cache-Control": "public, max-age=86400"})
+
+    async def _handle_favicon_svg(self, request):
+        path = os.path.join(os.path.dirname(__file__), "assets", "favicon.svg")
+        if os.path.isfile(path):
+            return web.FileResponse(path, headers={"Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=86400"})
+        return web.Response(text=FAVICON_SVG, content_type="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
+
+    async def _handle_icon_192(self, request):
+        path = os.path.join(os.path.dirname(__file__), "assets", "icon-192.png")
+        if os.path.isfile(path):
+            return web.FileResponse(path, headers={"Content-Type": "image/png", "Cache-Control": "public, max-age=86400"})
+        return web.Response(body=ICON_192_PNG_BYTES, content_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+    async def _handle_icon_512(self, request):
+        path = os.path.join(os.path.dirname(__file__), "assets", "icon-512.png")
+        if os.path.isfile(path):
+            return web.FileResponse(path, headers={"Content-Type": "image/png", "Cache-Control": "public, max-age=86400"})
+        return web.Response(body=ICON_512_PNG_BYTES, content_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
     async def _handle_ws(self, request):
         if not await self._authenticate(request):
@@ -1537,7 +1575,7 @@ class JuiceVaultWebRemote:
             ),
             inline=False,
         )
-        embed.set_footer(text="JuiceVault 24/7 • made by SKIZZOO", icon_url="https://api.juicevault.xyz/favicon.ico")
+        embed.set_footer(text="JuiceVault 24/7 • made by SKIZZOO (sosocial.lol/ski) • domain by Spinti (sosocial.lol/spinti)", icon_url="https://api.juicevault.xyz/favicon.ico")
 
         await ctx.send(embed=embed)
 
