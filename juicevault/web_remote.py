@@ -73,6 +73,7 @@ class JuiceVaultWebRemote:
             total_views=1240,
             all_time_stats={"tracks_played": 348, "listening_seconds": 126400, "remote_actions": 680},
             daily_history={},
+            guild_stats={},
         )
         self.runner = None
         self.site = None
@@ -84,6 +85,7 @@ class JuiceVaultWebRemote:
         self._total_views = 0
         self._all_time_stats = {}
         self._daily_history = {}
+        self._guild_stats = {}
         self._today_ips = set()
         self._recent_view_ips = {}
         self._current_day = None
@@ -131,6 +133,8 @@ class JuiceVaultWebRemote:
             self._total_views = int(total_views or 1240)
             self._all_time_stats = dict(all_time_stats or {})
             self._daily_history = dict(daily_history or {})
+            guild_stats = await self.config.guild_stats()
+            self._guild_stats = dict(guild_stats or {})
             if today not in self._daily_history:
                 self._daily_history[today] = {
                     "views": 0,
@@ -144,6 +148,7 @@ class JuiceVaultWebRemote:
             self._total_views = 1240
             self._all_time_stats = {"tracks_played": 348, "listening_seconds": 126400, "remote_actions": 680}
             self._daily_history = {today: {"views": 84, "tracks": 42, "seconds": 15840, "actions": 96, "requests": 14}}
+            self._guild_stats = {}
 
         if self._saver_task is None or self._saver_task.done():
             self._saver_task = asyncio.create_task(self._stats_saver_loop())
@@ -374,7 +379,7 @@ class JuiceVaultWebRemote:
             }
         return today
 
-    def record_view(self, ip_address=None):
+    def record_view(self, ip_address=None, guild_id=None):
         """Record a website view with IP throttling (5 seconds) to avoid refresh spam."""
         today = self._ensure_today()
         now = time.monotonic()
@@ -388,9 +393,21 @@ class JuiceVaultWebRemote:
         self._total_views += 1
         day_stats = self._daily_history.setdefault(today, {"views": 0, "tracks": 0, "seconds": 0, "actions": 0, "requests": 0})
         day_stats["views"] = day_stats.get("views", 0) + 1
+
+        if guild_id:
+            gid_str = str(guild_id)
+            g_entry = self._guild_stats.setdefault(gid_str, {
+                "total_views": 0,
+                "all_time": {"tracks_played": 0, "listening_seconds": 0, "remote_actions": 0},
+                "daily_history": {},
+            })
+            g_entry["total_views"] = g_entry.get("total_views", 0) + 1
+            g_daily = g_entry.setdefault("daily_history", {}).setdefault(today, {"views": 0, "tracks": 0, "seconds": 0, "actions": 0, "requests": 0})
+            g_daily["views"] = g_daily.get("views", 0) + 1
+
         self._stats_dirty = True
 
-    def record_action(self, action_name):
+    def record_action(self, action_name, guild_id=None):
         """Record a remote control interaction or command."""
         today = self._ensure_today()
         day_stats = self._daily_history.setdefault(today, {"views": 0, "tracks": 0, "seconds": 0, "actions": 0, "requests": 0})
@@ -398,9 +415,24 @@ class JuiceVaultWebRemote:
         if action_name in ("queue_add", "play_category"):
             day_stats["requests"] = day_stats.get("requests", 0) + 1
         self._all_time_stats["remote_actions"] = self._all_time_stats.get("remote_actions", 0) + 1
+
+        if guild_id:
+            gid_str = str(guild_id)
+            g_entry = self._guild_stats.setdefault(gid_str, {
+                "total_views": 0,
+                "all_time": {"tracks_played": 0, "listening_seconds": 0, "remote_actions": 0},
+                "daily_history": {},
+            })
+            g_daily = g_entry.setdefault("daily_history", {}).setdefault(today, {"views": 0, "tracks": 0, "seconds": 0, "actions": 0, "requests": 0})
+            g_daily["actions"] = g_daily.get("actions", 0) + 1
+            if action_name in ("queue_add", "play_category"):
+                g_daily["requests"] = g_daily.get("requests", 0) + 1
+            g_all = g_entry.setdefault("all_time", {"tracks_played": 0, "listening_seconds": 0, "remote_actions": 0})
+            g_all["remote_actions"] = g_all.get("remote_actions", 0) + 1
+
         self._stats_dirty = True
 
-    def record_playback(self, elapsed_seconds=0.0, completed=False):
+    def record_playback(self, elapsed_seconds=0.0, completed=False, guild_id=None):
         """Record streamed audio playback duration and completed track count."""
         today = self._ensure_today()
         sec = max(0.0, float(elapsed_seconds))
@@ -410,10 +442,26 @@ class JuiceVaultWebRemote:
         if completed:
             day_stats["tracks"] = day_stats.get("tracks", 0) + 1
             self._all_time_stats["tracks_played"] = self._all_time_stats.get("tracks_played", 0) + 1
+
+        if guild_id:
+            gid_str = str(guild_id)
+            g_entry = self._guild_stats.setdefault(gid_str, {
+                "total_views": 0,
+                "all_time": {"tracks_played": 0, "listening_seconds": 0, "remote_actions": 0},
+                "daily_history": {},
+            })
+            g_daily = g_entry.setdefault("daily_history", {}).setdefault(today, {"views": 0, "tracks": 0, "seconds": 0, "actions": 0, "requests": 0})
+            g_daily["seconds"] = g_daily.get("seconds", 0) + int(sec)
+            g_all = g_entry.setdefault("all_time", {"tracks_played": 0, "listening_seconds": 0, "remote_actions": 0})
+            g_all["listening_seconds"] = g_all.get("listening_seconds", 0) + int(sec)
+            if completed:
+                g_daily["tracks"] = g_daily.get("tracks", 0) + 1
+                g_all["tracks_played"] = g_all.get("tracks_played", 0) + 1
+
         self._stats_dirty = True
 
-    def get_telemetry_stats(self):
-        """Return a structured dictionary with live views, today's usage, and all-time totals."""
+    def get_telemetry_stats(self, guild_id=None):
+        """Return a structured dictionary with live views, today's usage, and all-time totals for both the individual guild and global network."""
         today = self._ensure_today()
         day_stats = self._daily_history.get(today, {})
         today_views = day_stats.get("views", 0)
@@ -435,7 +483,7 @@ class JuiceVaultWebRemote:
             m = (s % 3600) // 60
             return f"{h}h {m:02d}m"
 
-        return {
+        global_stats = {
             "views": {
                 "total": self._total_views,
                 "today": today_views,
@@ -458,6 +506,65 @@ class JuiceVaultWebRemote:
             },
         }
 
+        server_stats = None
+        if guild_id:
+            gid_str = str(guild_id)
+            guild_obj = None
+            try:
+                guild_obj = self.bot.get_guild(int(guild_id))
+            except Exception:
+                pass
+            g_name = guild_obj.name if guild_obj else f"Server {gid_str}"
+            g_entry = self._guild_stats.get(gid_str, {})
+            g_views = g_entry.get("total_views", 0)
+            g_daily = g_entry.get("daily_history", {}).get(today, {})
+            g_today_views = g_daily.get("views", 0)
+            g_today_sec = g_daily.get("seconds", 0)
+            g_today_tracks = g_daily.get("tracks", 0)
+            g_today_actions = g_daily.get("actions", 0)
+            g_today_reqs = g_daily.get("requests", 0)
+
+            g_all = g_entry.get("all_time", {})
+            g_all_sec = g_all.get("listening_seconds", 0)
+            g_all_tracks = g_all.get("tracks_played", 0)
+            g_all_actions = g_all.get("remote_actions", 0)
+
+            # Count WebSocket clients actively viewing this guild
+            g_active = sum(1 for ws in self.ws_clients if str(getattr(ws, "_guild_id", "")) == gid_str)
+
+            server_stats = {
+                "guild": {
+                    "id": gid_str,
+                    "name": g_name,
+                },
+                "views": {
+                    "total": g_views,
+                    "today": g_today_views,
+                    "unique_today": max(1 if g_today_views > 0 else 0, g_today_views),
+                    "active_sessions": g_active,
+                },
+                "daily_usage": {
+                    "date": today,
+                    "listening_seconds": g_today_sec,
+                    "listening_formatted": _fmt_time(g_today_sec),
+                    "tracks_played": g_today_tracks,
+                    "requests_queued": g_today_reqs,
+                    "remote_actions": g_today_actions,
+                },
+                "all_time": {
+                    "tracks_played": g_all_tracks,
+                    "listening_seconds": g_all_sec,
+                    "listening_formatted": _fmt_time(g_all_sec),
+                    "remote_actions": g_all_actions,
+                },
+            }
+
+        result = dict(global_stats)
+        result["global"] = global_stats
+        result["server"] = server_stats
+        result["guild"] = server_stats["guild"] if server_stats else None
+        return result
+
     async def _stats_saver_loop(self):
         """Background loop saving dirty telemetry data every 45s."""
         try:
@@ -476,6 +583,7 @@ class JuiceVaultWebRemote:
             await self.config.total_views.set(self._total_views)
             await self.config.all_time_stats.set(self._all_time_stats)
             await self.config.daily_history.set(self._daily_history)
+            await self.config.guild_stats.set(self._guild_stats)
             self._stats_dirty = False
         except Exception as exc:
             print(f"[JuiceVault Web Remote] Warning saving telemetry stats: {exc}")
@@ -873,7 +981,7 @@ class JuiceVaultWebRemote:
             ],
             "repeat": bool(ui and ui.repeat_enabled.get(gid, False)),
             "has_history": bool(ui and ui.history.get(gid)),
-            "stats": self.get_telemetry_stats(),
+            "stats": self.get_telemetry_stats(guild_id=guild.id),
         }
 
     async def broadcast_state(self, guild_id=None):
@@ -914,7 +1022,8 @@ class JuiceVaultWebRemote:
     # Web App Route Handlers
     async def _handle_index(self, request):
         ip = self._get_client_ip(request)
-        self.record_view(ip)
+        guild = self._resolve_guild(request)
+        self.record_view(ip, guild_id=guild.id if guild else None)
         return web.Response(text=HTML_INDEX, content_type="text/html", charset="utf-8")
 
     async def _handle_manifest(self, request):
@@ -979,6 +1088,7 @@ class JuiceVaultWebRemote:
                             if target_guild:
                                 guild = target_guild
                                 ws._guild_id = target_guild.id
+                                self.record_view(self._get_client_ip(request), guild_id=target_guild.id)
                                 state = await self._get_player_state(target_guild)
                                 await ws.send_str(json.dumps({"type": "state_update", "data": state}))
                             continue
@@ -1007,8 +1117,8 @@ class JuiceVaultWebRemote:
         if not main or not guild:
             return
 
-        self.record_action(action_name)
         gid = guild.id
+        self.record_action(action_name, guild_id=gid)
         voice = guild.voice_client
 
         if action_name == "toggle":
@@ -1156,7 +1266,8 @@ class JuiceVaultWebRemote:
         return web.json_response({"success": True, "state": state})
 
     async def _api_stats(self, request):
-        stats = self.get_telemetry_stats()
+        guild = self._resolve_guild(request)
+        stats = self.get_telemetry_stats(guild_id=guild.id if guild else None)
         return web.json_response({"success": True, "stats": stats})
 
     async def _api_guilds(self, request):
@@ -1610,6 +1721,7 @@ class JuiceVaultWebRemote:
                 main.manual_queues.setdefault(gid, []).append(track)
                 msg = f"Added '{track.get('title')}' to Requested queue!"
 
+        self.record_action("queue_add", guild_id=gid)
         ui = self._get_ui_cog()
         if ui:
             await ui.update_panel(gid)
@@ -1741,6 +1853,7 @@ class JuiceVaultWebRemote:
         if not success:
             return web.json_response({"error": msg}, status=400)
 
+        self.record_action("soundboard_play", guild_id=guild.id)
         await self.broadcast_state(guild.id)
         return web.json_response({"success": True, "message": msg})
 
@@ -1765,6 +1878,7 @@ class JuiceVaultWebRemote:
         if not success:
             return web.json_response({"error": msg}, status=400)
 
+        self.record_action("soundboard_stop", guild_id=guild.id)
         await self.broadcast_state(guild.id)
         return web.json_response({"success": True, "message": msg})
 

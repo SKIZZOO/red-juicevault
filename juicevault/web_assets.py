@@ -1067,6 +1067,62 @@ HTML_INDEX = """<!DOCTYPE html>
       transform: translate(2px, -2px);
     }
 
+    /* Telemetry Scope Switcher (Server Individual vs Network Global) */
+    .telemetry-scope-selector {
+      display: flex;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.45);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      margin-bottom: 14px;
+    }
+    .telemetry-scope-btn {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-sub);
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    .telemetry-scope-btn.active {
+      background: rgba(255, 0, 85, 0.16);
+      color: #fff;
+      border-color: rgba(255, 0, 85, 0.45);
+      box-shadow: 0 0 12px rgba(255, 0, 85, 0.2);
+    }
+    .telemetry-scope-btn:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+    .telemetry-scope-pill {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: rgba(255, 0, 85, 0.16);
+      border: 1px solid rgba(255, 0, 85, 0.35);
+      color: var(--accent);
+      margin-left: auto;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+    .telemetry-scope-pill:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+
     /* Telemetry Grid & Hero Cards */
     .telemetry-grid {
       display: grid;
@@ -1628,6 +1684,7 @@ HTML_INDEX = """<!DOCTYPE html>
                 <span class="telemetry-q-num" id="quickDailyTracks">--</span>
               </div>
             </div>
+            <span class="telemetry-scope-pill" id="quickScopePill" onclick="toggleQuickStatsScope(event)" title="Click to toggle Server / Global stats">Server</span>
             <span class="telemetry-q-more">↗</span>
           </div>
         </div>
@@ -2200,13 +2257,25 @@ HTML_INDEX = """<!DOCTYPE html>
               <div style="font-weight:800; font-size:1.02rem; color:#fff;">Live Telemetry &amp; Daily Usage</div>
               <span class="telemetry-live-pill"><span class="pulse-ring"></span>LIVE</span>
             </div>
-            <div style="font-size:0.74rem; color:var(--text-sub); margin-top:2px;">
+            <div id="statsSubtitle" style="font-size:0.74rem; color:var(--text-sub); margin-top:2px;">
               Real-time web traffic, unique visitors &amp; 24/7 stream statistics
             </div>
           </div>
         </div>
         <button class="btn-kinetic btn-circle btn-action-sm" onclick="closeStatsModal()">
           <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Scope Selector: Current Server vs All Servers (Global) -->
+      <div class="telemetry-scope-selector">
+        <button id="scopeBtnServer" class="telemetry-scope-btn active" onclick="switchStatsScope('server')">
+          <svg class="icon-svg" style="width:13px;height:13px;color:var(--accent);" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span id="scopeServerLabel">Current Server</span>
+        </button>
+        <button id="scopeBtnGlobal" class="telemetry-scope-btn" onclick="switchStatsScope('global')">
+          <svg class="icon-svg" style="width:13px;height:13px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span>All Servers (Global)</span>
         </button>
       </div>
 
@@ -2276,6 +2345,10 @@ HTML_INDEX = """<!DOCTYPE html>
 
       <!-- Breakdown Details Card -->
       <div class="telemetry-breakdown-card">
+        <div class="t-detail-row">
+          <span class="t-detail-label">Active Stats Scope:</span>
+          <span class="t-detail-value" id="statsScopeBadge" style="color:var(--accent); font-weight:700;">This Server</span>
+        </div>
         <div class="t-detail-row">
           <span class="t-detail-label">Active Remote Listeners / Sessions:</span>
           <span class="t-detail-value"><span class="status-dot"></span> <span id="statsWsCount">1</span> active now</span>
@@ -4097,9 +4170,33 @@ HTML_INDEX = """<!DOCTYPE html>
 
       await fetchStatus();
       loadQueue();
+      fetchTelemetry();
     }
 
     // Live Telemetry & Daily Usage Engine
+    let cachedTelemetryData = null;
+    let currentStatsScope = localStorage.getItem('jv_stats_scope') || 'server';
+
+    function switchStatsScope(scope) {
+      currentStatsScope = scope;
+      try { localStorage.setItem('jv_stats_scope', scope); } catch (e) {}
+      const btnServer = document.getElementById('scopeBtnServer');
+      const btnGlobal = document.getElementById('scopeBtnGlobal');
+      if (btnServer) btnServer.classList.toggle('active', scope === 'server');
+      if (btnGlobal) btnGlobal.classList.toggle('active', scope === 'global');
+      const qPill = document.getElementById('quickScopePill');
+      if (qPill) qPill.innerText = (scope === 'server' ? 'Server' : 'Global');
+      if (cachedTelemetryData) {
+        updateTelemetryUI(cachedTelemetryData);
+      }
+    }
+
+    function toggleQuickStatsScope(e) {
+      if (e) e.stopPropagation();
+      switchStatsScope(currentStatsScope === 'server' ? 'global' : 'server');
+      showToast(currentStatsScope === 'server' ? 'Showing Server stats' : 'Showing Global network stats');
+    }
+
     function openStatsModal() {
       const s = document.getElementById('statsSheet');
       if (s) s.classList.add('active');
@@ -4113,7 +4210,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
     async function fetchTelemetry() {
       try {
-        const res = await fetch('/api/stats');
+        const res = await fetch(`/api/stats?${apiQuery()}`);
         if (res.ok) {
           const data = await res.json();
           if (data && data.stats) {
@@ -4127,9 +4224,36 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function updateTelemetryUI(stats) {
       if (!stats) return;
-      const views = stats.views || {};
-      const daily = stats.daily_usage || {};
-      const allTime = stats.all_time || {};
+      cachedTelemetryData = stats;
+
+      const hasServer = !!(stats.server && stats.server.guild);
+      const activeScope = (currentStatsScope === 'server' && hasServer) ? 'server' : 'global';
+      const target = (activeScope === 'server') ? stats.server : (stats.global || stats);
+      const gName = (stats.server && stats.server.guild && stats.server.guild.name)
+        ? stats.server.guild.name
+        : (currentState && currentState.guild ? currentState.guild.name : 'Server');
+
+      const sLabel = document.getElementById('scopeServerLabel');
+      if (sLabel) sLabel.innerText = `${gName} (Server)`;
+      const qPill = document.getElementById('quickScopePill');
+      if (qPill) qPill.innerText = (activeScope === 'server' ? 'Server' : 'Global');
+      const scopeBadge = document.getElementById('statsScopeBadge');
+      if (scopeBadge) scopeBadge.innerText = (activeScope === 'server' ? `${gName} (This Server)` : 'All Servers (Global)');
+      const subTitle = document.getElementById('statsSubtitle');
+      if (subTitle) {
+        subTitle.innerText = (activeScope === 'server'
+          ? `Individual server statistics for ${gName}`
+          : 'Real-time web traffic, unique visitors & 24/7 stream statistics network-wide');
+      }
+
+      const btnServer = document.getElementById('scopeBtnServer');
+      const btnGlobal = document.getElementById('scopeBtnGlobal');
+      if (btnServer) btnServer.classList.toggle('active', activeScope === 'server');
+      if (btnGlobal) btnGlobal.classList.toggle('active', activeScope === 'global');
+
+      const views = target.views || {};
+      const daily = target.daily_usage || {};
+      const allTime = target.all_time || {};
 
       const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString() : '--';
 
@@ -4137,7 +4261,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const hCount = document.getElementById('headerViewsCount');
       if (hCount) hCount.innerText = fmt(views.total) + ' views';
       const hDaily = document.getElementById('headerDailyCount');
-      if (hDaily) hDaily.innerText = fmt(views.today) + ' today';
+      if (hDaily) hDaily.innerText = fmt(views.today) + (activeScope === 'server' ? ' srv' : ' today');
 
       // Compact quick bar
       const qTot = document.getElementById('quickTotalViews');
