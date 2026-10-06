@@ -2304,8 +2304,38 @@ HTML_INDEX = """<!DOCTYPE html>
   <audio id="silentAudio" preload="auto" playsinline loop style="display:none;"></audio>
 
   <script>
-    // Silent carrier audio for mobile lock screen background playback controls
-    const SILENT_AUDIO_URI = 'data:audio/wav;base64,UklGRiwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQgAAACAgICAgICAgA==';
+    // Silent carrier audio generator for mobile lock screen background playback controls
+    function getSilentAudioSrc() {
+      try {
+        const sampleRate = 8000;
+        const numSamples = sampleRate * 30; // 30s buffer prevents rapid loop restarts
+        const buffer = new ArrayBuffer(44 + numSamples);
+        const view = new DataView(buffer);
+        view.setUint32(0, 0x52494646, false); // "RIFF"
+        view.setUint32(4, 36 + numSamples, true);
+        view.setUint32(8, 0x57415645, false); // "WAVE"
+        view.setUint32(12, 0x666d7420, false); // "fmt "
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); // PCM
+        view.setUint16(22, 1, true); // mono
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate, true);
+        view.setUint16(32, 1, true);
+        view.setUint16(34, 8, true); // 8-bit
+        view.setUint32(36, 0x64617461, false); // "data"
+        view.setUint32(40, numSamples, true);
+        new Uint8Array(buffer, 44, numSamples).fill(128);
+        return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+      } catch (e) {
+        return 'data:audio/wav;base64,UklGRiwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQgAAACAgICAgICAgA==';
+      }
+    }
+    let cachedSilentAudioUrl = null;
+    function ensureSilentAudioUrl() {
+      if (!cachedSilentAudioUrl) cachedSilentAudioUrl = getSilentAudioSrc();
+      return cachedSilentAudioUrl;
+    }
+    let lastUserSeekTimestamp = 0;
     let lockScreenControlsEnabled = true;
     let mediaSessionConfigured = false;
     let wsReconnectTimer = null;
@@ -2472,6 +2502,7 @@ HTML_INDEX = """<!DOCTYPE html>
         try { progressBar.releasePointerCapture(e.pointerId); } catch (_) {}
         const target = getScrubTarget(e);
         currentElapsed = target;
+        lastUserSeekTimestamp = Date.now();
         updateScrubberUI();
         action('seek_to', { position: target });
       }
@@ -2528,6 +2559,7 @@ HTML_INDEX = """<!DOCTYPE html>
           updateMediaSession();
         }
       } else if (name === 'seek') {
+        lastUserSeekTimestamp = Date.now();
         const delta = payload.delta || 0;
         currentElapsed = Math.max(0, Math.min(durationSeconds, currentElapsed + delta));
         updateScrubberUI();
@@ -2539,6 +2571,7 @@ HTML_INDEX = """<!DOCTYPE html>
           }
         }
       } else if (name === 'seek_to') {
+        lastUserSeekTimestamp = Date.now();
         currentElapsed = Math.max(0, Math.min(durationSeconds, payload.position || 0));
         updateScrubberUI();
         updateMediaSession();
@@ -2761,8 +2794,8 @@ HTML_INDEX = """<!DOCTYPE html>
       if (!lockScreenControlsEnabled || liveStreamActive) return;
       const silent = document.getElementById('silentAudio');
       if (silent) {
-        if (!silent.src || !silent.src.startsWith('data:audio')) {
-          silent.src = SILENT_AUDIO_URI;
+        if (!silent.src || (!silent.src.startsWith('data:audio') && !silent.src.startsWith('blob:'))) {
+          silent.src = ensureSilentAudioUrl();
         }
         if (currentState && currentState.is_playing && silent.paused) {
           silent.play().catch(() => {});
@@ -2920,7 +2953,9 @@ HTML_INDEX = """<!DOCTYPE html>
       if (audio.paused && currentState.is_playing) {
         try {
           if (Math.abs(audio.currentTime - currentElapsed) > 0.3) {
-            audio.currentTime = Math.max(0, currentElapsed);
+            if (!(currentElapsed < 0.5 && audio.currentTime > 2.0)) {
+              audio.currentTime = Math.max(0, currentElapsed);
+            }
           }
         } catch (e) {}
         audio.play().catch(() => {});
@@ -2937,7 +2972,9 @@ HTML_INDEX = """<!DOCTYPE html>
 
         if (Math.abs(drift) > 0.35) {
           // Large drift (>350ms) -> Hard seek directly to Discord master position
-          try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
+          if (!(currentElapsed < 0.5 && audio.currentTime > 2.0)) {
+            try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
+          }
           audio.playbackRate = speed;
         } else if (Math.abs(drift) > 0.02) {
           // Micro-drift (20ms - 350ms): Proportional rate steering for ultra-smooth, click-free sync
@@ -2968,7 +3005,13 @@ HTML_INDEX = """<!DOCTYPE html>
         ['seekbackward', (details) => action('seek', { delta: -(details.seekOffset || 10) })],
         ['seekforward', (details) => action('seek', { delta: (details.seekOffset || 10) })],
         ['seekto', (details) => {
-          if (details.seekTime != null) {
+          if (details && details.seekTime != null) {
+            // Guard against synthetic OS background seekto 0 while playing
+            if (details.seekTime === 0 && currentElapsed > 2.0 && !details.fastSeek) {
+              console.warn('Ignored synthetic background seekto: 0');
+              return;
+            }
+            lastUserSeekTimestamp = Date.now();
             action('seek_to', { position: details.seekTime });
           }
         }],
@@ -3000,8 +3043,8 @@ HTML_INDEX = """<!DOCTYPE html>
       if (lockScreenControlsEnabled && !liveStreamActive) {
         const silent = document.getElementById('silentAudio');
         if (silent) {
-          if (!silent.src || !silent.src.startsWith('data:audio')) {
-            silent.src = SILENT_AUDIO_URI;
+          if (!silent.src || (!silent.src.startsWith('data:audio') && !silent.src.startsWith('blob:'))) {
+            silent.src = ensureSilentAudioUrl();
           }
           if (currentState.is_playing && silent.paused) {
             silent.play().catch(() => {});
@@ -3095,7 +3138,10 @@ HTML_INDEX = """<!DOCTYPE html>
           currentTrackKey = trackKey;
           currentElapsed = liveDiscordPos;
         } else if (!isScrubbing) {
-          if (Math.abs(currentElapsed - liveDiscordPos) > 0.35) {
+          const wasRecentUserSeek = (Date.now() - lastUserSeekTimestamp) < 3000;
+          if (!wasRecentUserSeek && currentElapsed > 2.0 && liveDiscordPos < 0.6) {
+            // Protect against transient 0-drop glitch while playing the same track
+          } else if (Math.abs(currentElapsed - liveDiscordPos) > 0.35) {
             currentElapsed = liveDiscordPos;
           }
         }
@@ -3160,9 +3206,11 @@ HTML_INDEX = """<!DOCTYPE html>
       lastTickTime = now;
 
       if (!isScrubbing && currentState && currentState.is_playing && durationSeconds > 0) {
+        // Tab background sleep cap: prevent wild leaps when tab wakes from background/blur
+        const effectiveDt = Math.min(dt, 0.2);
         const eff = String(currentState.effect || '').toLowerCase();
         const speed = (currentState.track && currentState.track.effect_speed) || (eff.includes('night') ? 1.22 : (eff.includes('slow') ? 0.86 : 1.0));
-        currentElapsed = Math.min(durationSeconds, currentElapsed + dt * speed);
+        currentElapsed = Math.min(durationSeconds, currentElapsed + effectiveDt * speed);
         updateScrubberUI();
       }
       requestAnimationFrame(progressLoop);
@@ -4309,33 +4357,27 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
-    // Lifecycle listeners for instant mobile reconnect on unlock / tab focus
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          connectWS();
-        } else {
-          try { ws.send(JSON.stringify({ action: 'ping' })); } catch (e) {}
-        }
-        fetchStatus();
-        armBackgroundMediaSession();
-      }
-    });
-
-    window.addEventListener('pageshow', () => {
+    // Lifecycle listeners for instant mobile reconnect on unlock / tab focus with 1s debounce
+    let lastLifecycleSyncTime = 0;
+    function handleLifecycleSync() {
+      const now = Date.now();
+      if (now - lastLifecycleSyncTime < 1000) return;
+      lastLifecycleSyncTime = now;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         connectWS();
+      } else {
+        try { ws.send(JSON.stringify({ action: 'ping' })); } catch (e) {}
       }
       fetchStatus();
       armBackgroundMediaSession();
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') handleLifecycleSync();
     });
 
-    window.addEventListener('focus', () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        connectWS();
-      }
-      fetchStatus();
-    });
+    window.addEventListener('pageshow', handleLifecycleSync);
+    window.addEventListener('focus', handleLifecycleSync);
 
     window.addEventListener('pointerdown', () => { armBackgroundMediaSession(); }, { passive: true });
     window.addEventListener('touchstart', () => { armBackgroundMediaSession(); }, { passive: true });

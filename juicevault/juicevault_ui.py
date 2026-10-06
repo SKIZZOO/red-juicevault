@@ -138,8 +138,14 @@ class JuiceVaultPanelView(discord.ui.View):
         await interaction.response.defer(); cog = self._cog(); voice = interaction.guild.voice_client
         if cog is None or self.guild_id not in cog.tasks or voice is None:
             await interaction.followup.send("The player is not running.", ephemeral=True); return
-        if voice.is_paused(): voice.resume(); text = "▶️ Playback resumed."
-        elif voice.is_playing(): voice.pause(); text = "⏸️ Playback paused."
+        if voice.is_paused():
+            if hasattr(cog, "resume_playback"): cog.resume_playback(self.guild_id)
+            else: voice.resume()
+            text = "▶️ Playback resumed."
+        elif voice.is_playing():
+            if hasattr(cog, "pause_playback"): cog.pause_playback(self.guild_id)
+            else: voice.pause()
+            text = "⏸️ Playback paused."
         else: text = "There is no active track."
         await self.panel.update_panel(self.guild_id); await interaction.followup.send(text, ephemeral=True)
 

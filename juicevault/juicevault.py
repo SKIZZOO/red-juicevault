@@ -726,8 +726,8 @@ class JuiceVault(commands.Cog):
                     p.cancel()
                 explicit_skip = skip.is_set() or (skip_task in done)
                 explicit_seek = seek.is_set() or (seek_task in done)
-                elapsed = time.monotonic() - started_at
-                self.play_positions[gid] = start_offset + max(0.0, elapsed)
+                elapsed = self.get_position(gid)
+                self.play_positions[gid] = elapsed
                 if hasattr(self, "web_remote") and self.web_remote:
                     completed = bool(not explicit_skip and not explicit_seek and not stop.is_set())
                     self.web_remote.record_playback(elapsed_seconds=max(0.0, elapsed), completed=completed)
@@ -808,6 +808,49 @@ class JuiceVault(commands.Cog):
                 await self._disconnect(guild)
                 self.current.pop(gid, None)
 
+    def get_position(self, guild_id: int) -> float:
+        """Returns the current playback position in seconds, monotonically accurate across pause/resume."""
+        base = float(self.play_positions.get(guild_id, 0.0))
+        guild = self.bot.get_guild(guild_id)
+        voice = guild.voice_client if guild else None
+        if not voice:
+            return base
+        eff = str(self.effects.get(guild_id, "none")).lower()
+        effect_speed = 1.22 if "night" in eff else (0.86 if "slow" in eff else 1.0)
+        started = getattr(voice, "_jv_started_at", None)
+        if started is not None and voice.is_playing() and not voice.is_paused():
+            base += max(0.0, (time.monotonic() - started) * effect_speed)
+        current = self.current.get(guild_id)
+        if current:
+            duration = self._parse_duration(current.get("length"))
+            if duration is not None and duration > 0:
+                base = min(base, duration)
+        return max(0.0, base)
+
+    def pause_playback(self, guild_id: int) -> bool:
+        """Pause voice playback and freeze elapsed position accurately."""
+        guild = self.bot.get_guild(guild_id)
+        voice = guild.voice_client if guild else None
+        if not voice:
+            return False
+        if voice.is_playing():
+            self.play_positions[guild_id] = self.get_position(guild_id)
+            voice.pause()
+            return True
+        return False
+
+    def resume_playback(self, guild_id: int) -> bool:
+        """Resume voice playback without losing position tracking."""
+        guild = self.bot.get_guild(guild_id)
+        voice = guild.voice_client if guild else None
+        if not voice:
+            return False
+        if voice.is_paused():
+            voice._jv_started_at = time.monotonic()
+            voice.resume()
+            return True
+        return False
+
     async def _request_skip(self, guild_id, count=1):
         guild = self.bot.get_guild(guild_id)
         voice = guild.voice_client if guild else None
@@ -834,10 +877,7 @@ class JuiceVault(commands.Cog):
         if target_position is not None:
             target = max(0.0, float(target_position))
         else:
-            base = float(self.play_positions.get(guild_id, 0.0))
-            started = getattr(voice, "_jv_started_at", None)
-            if started is not None and voice.is_playing() and not voice.is_paused():
-                base += max(0.0, time.monotonic() - started)
+            base = self.get_position(guild_id)
             target = max(0.0, base + float(delta))
         if duration is not None:
             target = min(target, max(0.0, duration - 0.25))
@@ -934,11 +974,7 @@ class JuiceVault(commands.Cog):
         local_path = self.current_files.get(gid)
 
         if current and not current.get("_is_vip") and not current.get("_is_soundboard"):
-            base = float(self.play_positions.get(gid, 0.0))
-            started = getattr(voice, "_jv_started_at", None)
-            if started is not None and was_playing:
-                base += max(0.0, time.monotonic() - started)
-            current_pos = base
+            current_pos = self.get_position(gid)
 
             if local_path and os.path.isfile(local_path):
                 self._preserved_files.add(local_path)

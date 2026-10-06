@@ -814,6 +814,8 @@ class JuiceVaultWebRemote:
             duration_sec = main._parse_duration(track.get("length")) or 0.0
             if is_seeking:
                 base = float(main.seek_targets[gid])
+            elif hasattr(main, "get_position"):
+                base = float(main.get_position(gid))
             else:
                 base = float(main.play_positions.get(gid, 0.0))
                 started = getattr(voice, "_jv_started_at", None)
@@ -1011,9 +1013,15 @@ class JuiceVaultWebRemote:
 
         if action_name == "toggle":
             if voice and voice.is_playing():
-                voice.pause()
+                if hasattr(main, "pause_playback"):
+                    main.pause_playback(gid)
+                else:
+                    voice.pause()
             elif voice and voice.is_paused():
-                voice.resume()
+                if hasattr(main, "resume_playback"):
+                    main.resume_playback(gid)
+                else:
+                    voice.resume()
             elif gid not in main.tasks:
                 # Start if not running
                 channel_id = await main.config.guild(guild).channel_id()
@@ -1035,10 +1043,16 @@ class JuiceVaultWebRemote:
                     main.tasks[gid] = asyncio.create_task(main._player(guild, channel))
         elif action_name == "play":
             if voice and voice.is_paused():
-                voice.resume()
+                if hasattr(main, "resume_playback"):
+                    main.resume_playback(gid)
+                else:
+                    voice.resume()
         elif action_name == "pause":
             if voice and voice.is_playing():
-                voice.pause()
+                if hasattr(main, "pause_playback"):
+                    main.pause_playback(gid)
+                else:
+                    voice.pause()
         elif action_name == "skip":
             count = int(payload.get("count", 1))
             await main._request_skip(gid, count)
@@ -1164,9 +1178,13 @@ class JuiceVaultWebRemote:
         guild = self._resolve_guild(request)
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
+        main = self._get_main_cog()
         voice = guild.voice_client
         if voice and voice.is_paused():
-            voice.resume()
+            if main and hasattr(main, "resume_playback"):
+                main.resume_playback(guild.id)
+            else:
+                voice.resume()
             await self.broadcast_state(guild.id)
             return web.json_response({"success": True, "message": "Playback resumed"})
         return web.json_response({"success": True, "message": "Already playing or player idle"})
@@ -1177,9 +1195,13 @@ class JuiceVaultWebRemote:
         guild = self._resolve_guild(request)
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
+        main = self._get_main_cog()
         voice = guild.voice_client
         if voice and voice.is_playing():
-            voice.pause()
+            if main and hasattr(main, "pause_playback"):
+                main.pause_playback(guild.id)
+            else:
+                voice.pause()
             await self.broadcast_state(guild.id)
             return web.json_response({"success": True, "message": "Playback paused"})
         return web.json_response({"success": True, "message": "Already paused or not playing"})
