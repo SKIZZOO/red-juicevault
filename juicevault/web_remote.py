@@ -740,15 +740,14 @@ class JuiceVaultWebRemote:
             return True
         return False
 
-    def _resolve_guild(self, request):
+    def _resolve_guild(self, request=None, target_id=None):
         """Find the target Discord guild for player operations."""
         main = self._get_main_cog()
         if not main:
             return None
 
-        # Check query or body for guild_id
-        target_id = request.query.get("guild_id")
-        if target_id:
+        # 1. Explicit target_id argument
+        if target_id is not None:
             try:
                 guild = self.bot.get_guild(int(target_id))
                 if guild:
@@ -756,13 +755,34 @@ class JuiceVaultWebRemote:
             except (ValueError, TypeError):
                 pass
 
-        # Return first guild currently running playback
+        if request is not None:
+            # 2. Check query string
+            try:
+                query_gid = request.query.get("guild_id")
+                if query_gid:
+                    guild = self.bot.get_guild(int(query_gid))
+                    if guild:
+                        return guild
+            except (ValueError, TypeError, AttributeError):
+                pass
+
+            # 3. Check X-Guild-ID header
+            try:
+                hdr_gid = request.headers.get("X-Guild-ID")
+                if hdr_gid:
+                    guild = self.bot.get_guild(int(hdr_gid))
+                    if guild:
+                        return guild
+            except (ValueError, TypeError, AttributeError):
+                pass
+
+        # 4. Return first guild currently running playback
         for gid in main.tasks:
             g = self.bot.get_guild(gid)
             if g:
                 return g
 
-        # Fallback to any guild the bot is in
+        # 5. Fallback to any guild the bot is in
         if self.bot.guilds:
             return self.bot.guilds[0]
         return None
@@ -855,30 +875,39 @@ class JuiceVaultWebRemote:
         }
 
     async def broadcast_state(self, guild_id=None):
-        """Push real-time state to all active WebSocket clients."""
+        """Push real-time state to WebSocket clients scoped by guild."""
         if not self.ws_clients:
             return
 
-        guild = None
         if guild_id:
             guild = self.bot.get_guild(guild_id)
-        if not guild:
-            main = self._get_main_cog()
-            if main and main.tasks:
-                guild = self.bot.get_guild(next(iter(main.tasks)))
-        if not guild and self.bot.guilds:
-            guild = self.bot.guilds[0]
-
-        if not guild:
-            return
-
-        state = await self._get_player_state(guild)
-        message = json.dumps({"type": "state_update", "data": state})
-        for ws in list(self.ws_clients):
-            try:
-                await ws.send_str(message)
-            except Exception:
-                self.ws_clients.discard(ws)
+            if not guild:
+                return
+            state = await self._get_player_state(guild)
+            message = json.dumps({"type": "state_update", "data": state})
+            for ws in list(self.ws_clients):
+                client_gid = getattr(ws, "_guild_id", None)
+                if client_gid is None or client_gid == guild_id:
+                    try:
+                        await ws.send_str(message)
+                    except Exception:
+                        self.ws_clients.discard(ws)
+        else:
+            for ws in list(self.ws_clients):
+                client_gid = getattr(ws, "_guild_id", None)
+                target_g = self.bot.get_guild(client_gid) if client_gid else None
+                if not target_g:
+                    main = self._get_main_cog()
+                    if main and main.tasks:
+                        target_g = self.bot.get_guild(next(iter(main.tasks)))
+                    elif self.bot.guilds:
+                        target_g = self.bot.guilds[0]
+                if target_g:
+                    try:
+                        st = await self._get_player_state(target_g)
+                        await ws.send_str(json.dumps({"type": "state_update", "data": st}))
+                    except Exception:
+                        self.ws_clients.discard(ws)
 
     # Web App Route Handlers
     async def _handle_index(self, request):
@@ -922,9 +951,11 @@ class JuiceVaultWebRemote:
 
         ws = web.WebSocketResponse(heartbeat=15.0)
         await ws.prepare(request)
-        self.ws_clients.add(ws)
 
         guild = self._resolve_guild(request)
+        ws._guild_id = guild.id if guild else None
+        self.ws_clients.add(ws)
+
         if guild:
             state = await self._get_player_state(guild)
             await ws.send_str(json.dumps({"type": "state_update", "data": state}))
@@ -934,11 +965,31 @@ class JuiceVaultWebRemote:
                 if msg.type == web.WSMsgType.TEXT:
                     try:
                         data = json.loads(msg.data)
-                        if data.get("action") == "ping" or data.get("type") == "ping":
+                        action_name = data.get("action") or data.get("type")
+                        if action_name == "ping":
                             await ws.send_str(json.dumps({"type": "pong", "time": time.time()}))
                             continue
-                        action_name = data.get("action")
-                        await self._dispatch_ws_action(ws, guild, action_name, data)
+
+                        # Multi-server switcher dynamic action
+                        if action_name in ("set_guild", "select_guild"):
+                            req_gid = data.get("guild_id")
+                            target_guild = self._resolve_guild(request, target_id=req_gid)
+                            if target_guild:
+                                guild = target_guild
+                                ws._guild_id = target_guild.id
+                                state = await self._get_player_state(target_guild)
+                                await ws.send_str(json.dumps({"type": "state_update", "data": state}))
+                            continue
+
+                        # Determine target guild for this action
+                        action_guild = guild
+                        if data.get("guild_id"):
+                            override_guild = self._resolve_guild(request, target_id=data.get("guild_id"))
+                            if override_guild:
+                                action_guild = override_guild
+                                ws._guild_id = override_guild.id
+
+                        await self._dispatch_ws_action(ws, action_guild, action_name, data)
                     except Exception as err:
                         await ws.send_str(json.dumps({"type": "toast", "message": f"Error: {err}"}))
                 elif msg.type == web.WSMsgType.ERROR:
@@ -1012,7 +1063,7 @@ class JuiceVaultWebRemote:
                 import random
                 random.shuffle(queue)
                 if hasattr(main, "_cleanup_prefetch"):
-                    main._cleanup_prefetch()
+                    main._cleanup_prefetch(gid)
                 if hasattr(main, "_trigger_next_prefetch"):
                     main._trigger_next_prefetch(gid)
         elif action_name == "repeat":
@@ -1253,10 +1304,10 @@ class JuiceVaultWebRemote:
     async def _api_category(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        guild = self._resolve_guild(request)
+        data = await request.json()
+        guild = self._resolve_guild(request, target_id=data.get("guild_id"))
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
-        data = await request.json()
         cat = data.get("category", "all")
         await self._dispatch_ws_action(None, guild, "set_category", {"category": cat})
         return web.json_response({"success": True, "category": cat})
@@ -1305,10 +1356,10 @@ class JuiceVaultWebRemote:
     async def _api_queue_remove(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        guild = self._resolve_guild(request)
+        data = await request.json()
+        guild = self._resolve_guild(request, target_id=data.get("guild_id"))
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
-        data = await request.json()
         target_type = str(data.get("type", "requested")).lower()
         idx = int(data.get("index", 0))
         main = self._get_main_cog()
@@ -1331,10 +1382,10 @@ class JuiceVaultWebRemote:
     async def _api_queue_play_now(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        guild = self._resolve_guild(request)
+        data = await request.json()
+        guild = self._resolve_guild(request, target_id=data.get("guild_id"))
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
-        data = await request.json()
         target_type = str(data.get("type", "upcoming")).lower()
         idx = int(data.get("index", 0))
         main = self._get_main_cog()
@@ -1365,10 +1416,10 @@ class JuiceVaultWebRemote:
     async def _api_queue_move_next(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        guild = self._resolve_guild(request)
+        data = await request.json()
+        guild = self._resolve_guild(request, target_id=data.get("guild_id"))
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
-        data = await request.json()
         target_type = str(data.get("type", "upcoming")).lower()
         idx = int(data.get("index", 0))
         main = self._get_main_cog()
@@ -1494,10 +1545,10 @@ class JuiceVaultWebRemote:
     async def _api_queue_add(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        guild = self._resolve_guild(request)
+        data = await request.json()
+        guild = self._resolve_guild(request, target_id=data.get("guild_id"))
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
-        data = await request.json()
         tracks = data.get("tracks")
         track = data.get("track")
         if not tracks and not track:
@@ -1598,10 +1649,10 @@ class JuiceVaultWebRemote:
     async def _api_lyrics_send(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        guild = self._resolve_guild(request)
+        data = await request.json()
+        guild = self._resolve_guild(request, target_id=data.get("guild_id"))
         if not guild:
             return web.json_response({"error": "No active voice guild found"}, status=404)
-        data = await request.json()
         channel_id = data.get("channel_id")
         channel = guild.get_channel(int(channel_id)) if channel_id else None
         if not channel:
@@ -1645,16 +1696,20 @@ class JuiceVaultWebRemote:
     async def _api_soundboard_play(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        guild = self._resolve_guild(request)
-        if not guild:
-            return web.json_response({"error": "No guild found"}, status=404)
         sound_id = request.query.get("sound_id")
-        if not sound_id and request.can_read_body:
+        target_id = request.query.get("guild_id")
+        if request.can_read_body:
             try:
                 data = await request.json()
-                sound_id = data.get("sound_id")
+                if not sound_id:
+                    sound_id = data.get("sound_id")
+                if not target_id:
+                    target_id = data.get("guild_id")
             except Exception:
                 pass
+        guild = self._resolve_guild(request, target_id=target_id)
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
         if not sound_id:
             return web.json_response({"error": "Missing sound_id parameter"}, status=400)
 
@@ -1670,7 +1725,15 @@ class JuiceVaultWebRemote:
     async def _api_soundboard_stop(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        guild = self._resolve_guild(request)
+        target_id = request.query.get("guild_id")
+        if request.can_read_body:
+            try:
+                data = await request.json()
+                if not target_id:
+                    target_id = data.get("guild_id")
+            except Exception:
+                pass
+        guild = self._resolve_guild(request, target_id=target_id)
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
 
@@ -1744,16 +1807,25 @@ class JuiceVaultWebRemote:
         local_ip = get_local_ip() if host in ("0.0.0.0", "") else host
         public_ip = await self.get_public_ip()
 
-        token_param = f"?token={quote(token)}" if token else ""
+        guild_id_str = str(ctx.guild.id) if ctx.guild else ""
+        guild_name_str = ctx.guild.name if ctx.guild else "Discord Server"
+
+        query_parts = []
+        if token:
+            query_parts.append(f"token={quote(token)}")
+        if guild_id_str:
+            query_parts.append(f"guild_id={quote(guild_id_str)}")
+        auth_query = f"?{'&'.join(query_parts)}" if query_parts else ""
+
         if custom:
             base = custom.rstrip("/")
-            primary_url = f"{base}/?token={quote(token)}" if token else base
+            primary_url = f"{base}/{auth_query}" if auth_query else base
         elif public_ip:
             base = f"{proto}://{public_ip}:{port}"
-            primary_url = f"{base}/?token={quote(token)}" if token else base
+            primary_url = f"{base}/{auth_query}" if auth_query else base
         else:
             base = f"{proto}://{local_ip}:{port}"
-            primary_url = f"{base}/?token={quote(token)}" if token else base
+            primary_url = f"{base}/{auth_query}" if auth_query else base
 
         qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=14&ecc=M&format=png&data={quote(primary_url, safe='')}&t={int(time.time())}"
 
@@ -1764,10 +1836,6 @@ class JuiceVaultWebRemote:
             "Control playback, queues, EQ, search, and lock screen media directly from your phone!\n",
             f"🔗 **Primary Phone Link:**\n[**Open JuiceVault Remote**]({primary_url})\n",
         ]
-        if public_url and local_url != public_url and not custom_url:
-            lines.append(f"🌐 **Public IP:** `http://{public_ip}:{port}/`")
-            lines.append(f"🏠 **Local/Subnet IP:** `http://{local_ip}:{port}/`\n")
-
         lines.append("📷 **Scan the QR Code** with your phone's camera:")
 
         embed = discord.Embed(
@@ -1776,6 +1844,7 @@ class JuiceVaultWebRemote:
             color=discord.Color.from_rgb(155, 89, 182),
         )
         embed.set_image(url=qr_api_url)
+        embed.add_field(name="🏰 Server", value=f"**{guild_name_str}**", inline=True)
         embed.add_field(name="🔑 Auth Token", value=f"`{token}`", inline=True)
         embed.add_field(name="🌐 Port", value=f"`{port}`", inline=True)
         embed.add_field(name="🔊 Voice Channel", value=f"`{vc_name}`", inline=True)

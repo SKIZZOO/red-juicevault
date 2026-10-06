@@ -1438,6 +1438,11 @@ HTML_INDEX = """<!DOCTYPE html>
       <span class="brand-tag">REMOTE</span>
     </div>
     <div class="header-meta">
+      <div class="status-badge" id="guildBadge" onclick="openGuildModal()" title="Current Discord Server — Tap to Switch" style="cursor:pointer; transition:border-color 0.15s, background 0.15s;">
+        <svg class="icon-svg" style="width:13px;height:13px;color:var(--accent);" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span id="guildBadgeName" style="max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff;">Server</span>
+        <svg class="icon-svg" style="width:10px;height:10px;opacity:0.6;margin-left:-2px;" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
       <div class="status-badge stats-badge" id="headerViewsBadge" onclick="openStatsModal()" title="View Live Traffic & Daily Usage">
         <span class="telemetry-live-dot"></span>
         <svg class="icon-svg" style="width:13px;height:13px;color:var(--accent);" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -1881,7 +1886,10 @@ HTML_INDEX = """<!DOCTYPE html>
               </span>
             </div>
             <div style="font-size: 0.78rem; font-family:'JetBrains Mono',monospace; color: var(--text-muted); display:flex; flex-direction:column; gap:6px;">
-              <div>Guild: <span id="guildName" style="color:#fff;">--</span></div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>Guild: <span id="guildName" style="color:#fff;">--</span></div>
+                <button class="btn-kinetic btn-badge" style="font-size:0.68rem; padding:2px 7px;" onclick="openGuildModal()">Switch</button>
+              </div>
               <div>Voice: <span id="vcName" style="color:#fff;">--</span></div>
               <div>Protocol: <span id="protocolName" style="color:var(--accent);">--</span></div>
               <div>Auth Token: <code id="tokenDisplay" style="color:var(--accent);">--</code></div>
@@ -2151,6 +2159,34 @@ HTML_INDEX = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- Server / Guild Switcher Modal Sheet -->
+  <div class="sheet-backdrop" id="guildSheet" onclick="if(event.target===this) closeGuildModal()">
+    <div class="sheet-panel" style="max-width:440px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <div class="cat-icon-badge" style="width:36px; height:36px; border-radius:10px; background:rgba(192, 132, 252, 0.15); border:1px solid rgba(192, 132, 252, 0.35); color:#c084fc;">
+            <svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div style="min-width:0;">
+            <div style="font-weight:700; font-size:0.95rem; color:#fff;">Switch Discord Server</div>
+            <div style="font-size:0.73rem; color:var(--text-muted); margin-top:1px;">Select server to control via Web Remote</div>
+          </div>
+        </div>
+        <button class="btn-kinetic btn-circle btn-action-sm" onclick="closeGuildModal()">
+          <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="guildListContainer" style="display:flex; flex-direction:column; gap:8px; max-height:300px; overflow-y:auto; padding-right:2px;">
+        <div style="text-align:center; padding:18px; color:var(--text-sub); font-size:0.8rem;">Loading servers...</div>
+      </div>
+
+      <button class="btn-kinetic btn-flat" style="padding:12px; margin-top:14px; width:100%; justify-content:center;" onclick="closeGuildModal()">
+        Close
+      </button>
+    </div>
+  </div>
+
   <!-- Live Telemetry & Daily Usage Full Modal Sheet -->
   <div class="sheet-backdrop" id="statsSheet" onclick="if(event.target===this) closeStatsModal()">
     <div class="sheet-panel" style="max-width:560px;">
@@ -2278,6 +2314,27 @@ HTML_INDEX = """<!DOCTYPE html>
     const urlParams = new URLSearchParams(window.location.search);
     let token = urlParams.get('token') || localStorage.getItem('jv_token') || '';
     if (token) localStorage.setItem('jv_token', token);
+    let currentGuildId = urlParams.get('guild_id') || localStorage.getItem('jv_guild_id') || '';
+    if (urlParams.get('guild_id')) localStorage.setItem('jv_guild_id', currentGuildId);
+
+    function apiQuery(extra = '') {
+      let q = `token=${encodeURIComponent(token)}`;
+      if (currentGuildId) {
+        q += `&guild_id=${encodeURIComponent(currentGuildId)}`;
+      }
+      if (extra) {
+        q += (extra.startsWith('&') ? extra : `&${extra}`);
+      }
+      return q;
+    }
+
+    function apiHeaders(extraHeaders = {}) {
+      const h = { ...extraHeaders };
+      if (currentGuildId) {
+        h['X-Guild-ID'] = currentGuildId;
+      }
+      return h;
+    }
 
     let currentState = null;
     let ws = null;
@@ -2532,16 +2589,17 @@ HTML_INDEX = """<!DOCTYPE html>
         if (repeatBtn) repeatBtn.classList.toggle('active');
       }
 
+      const fullPayload = { guild_id: currentGuildId, ...payload };
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ action: name, ...payload }));
+        ws.send(JSON.stringify({ action: name, ...fullPayload }));
         return;
       }
       try {
         const endpoint = (name === 'set_eq') ? 'eq' : name;
-        const res = await fetch(`/api/playback/${endpoint}?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(`/api/playback/${endpoint}?${apiQuery()}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(fullPayload)
         });
         const data = await res.json();
         if (data.message) showToast(data.message);
@@ -2976,6 +3034,12 @@ HTML_INDEX = """<!DOCTYPE html>
       document.getElementById('connLabel').innerText = 'Live';
 
       if (state.guild) {
+        if (!currentGuildId && state.guild.id) {
+          currentGuildId = String(state.guild.id);
+          localStorage.setItem('jv_guild_id', currentGuildId);
+        }
+        const bName = document.getElementById('guildBadgeName');
+        if (bName) bName.innerText = state.guild.name || state.guild.id;
         document.getElementById('guildName').innerText = state.guild.name || state.guild.id;
       }
       if (state.voice_channel) {
@@ -3116,7 +3180,7 @@ HTML_INDEX = """<!DOCTYPE html>
         return;
       }
       const wsProto = isHttps ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProto}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
+      const wsUrl = `${wsProto}//${window.location.host}/ws?${apiQuery()}`;
       try {
         ws = new WebSocket(wsUrl);
 
@@ -3167,7 +3231,7 @@ HTML_INDEX = """<!DOCTYPE html>
     // Fetch Status
     async function fetchStatus() {
       try {
-        const res = await fetch(`/api/status?token=${encodeURIComponent(token)}`);
+        const res = await fetch(`/api/status?${apiQuery()}`, { headers: apiHeaders() });
         if (res.status === 401) {
           document.getElementById('authBox').classList.add('active');
           document.getElementById('trackTitle').innerText = 'Unauthorized';
@@ -3219,28 +3283,28 @@ HTML_INDEX = """<!DOCTYPE html>
 
       try {
         if (actionType === 'remove') {
-          const res = await fetch(`/api/queue/remove?token=${encodeURIComponent(token)}`, {
+          const res = await fetch(`/api/queue/remove?${apiQuery()}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: source, index })
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ type: source, index, guild_id: currentGuildId })
           });
           const d = await res.json();
           showToast(d.success ? 'Track removed from queue' : 'Remove failed');
           loadQueue();
         } else if (actionType === 'play_now') {
-          const res = await fetch(`/api/queue/play_now?token=${encodeURIComponent(token)}`, {
+          const res = await fetch(`/api/queue/play_now?${apiQuery()}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: source, index })
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ type: source, index, guild_id: currentGuildId })
           });
           const d = await res.json();
           showToast(d.message || `Playing now: ${title}`);
           loadQueue();
         } else if (actionType === 'move_next') {
-          const res = await fetch(`/api/queue/move_next?token=${encodeURIComponent(token)}`, {
+          const res = await fetch(`/api/queue/move_next?${apiQuery()}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: source, index })
+            headers: apiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ type: source, index, guild_id: currentGuildId })
           });
           const d = await res.json();
           showToast(d.message || `Moved to play next: ${title}`);
@@ -3254,7 +3318,7 @@ HTML_INDEX = """<!DOCTYPE html>
     // Load Queue
     async function loadQueue() {
       try {
-        const res = await fetch(`/api/queue?token=${encodeURIComponent(token)}`);
+        const res = await fetch(`/api/queue?${apiQuery()}`, { headers: apiHeaders() });
         const data = await res.json();
         currentQueueData = {
           requested: data.requested || [],
@@ -3317,7 +3381,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const resContainer = document.getElementById('searchResults');
       resContainer.innerHTML = `<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Searching ${searchMode === 'external' ? 'online (YouTube / SoundCloud)…' : 'archive…'}</div>`;
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&source=${searchMode}&token=${encodeURIComponent(token)}`);
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&source=${searchMode}&${apiQuery()}`, { headers: apiHeaders() });
         const data = await res.json();
         currentSearchResults = data.results || [];
 
@@ -3387,10 +3451,10 @@ HTML_INDEX = """<!DOCTYPE html>
 
     async function addToQueue(item, playNow = false) {
       try {
-        const res = await fetch(`/api/queue/add?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(`/api/queue/add?${apiQuery()}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ track: item, play_now: playNow })
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ track: item, play_now: playNow, guild_id: currentGuildId })
         });
         const d = await res.json();
         showToast(d.message || (playNow ? 'Playing now' : 'Added to Requested'));
@@ -3403,10 +3467,10 @@ HTML_INDEX = """<!DOCTYPE html>
       if (!currentSearchResults || !currentSearchResults.length) return;
       try {
         showToast(playNow ? 'Starting playlist playback…' : 'Adding playlist to queue…');
-        const res = await fetch(`/api/queue/add?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(`/api/queue/add?${apiQuery()}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tracks: currentSearchResults, play_now: playNow })
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ tracks: currentSearchResults, play_now: playNow, guild_id: currentGuildId })
         });
         const d = await res.json();
         showToast(d.message || (playNow ? 'Playing playlist now' : 'Added playlist to queue'));
@@ -3589,10 +3653,10 @@ HTML_INDEX = """<!DOCTYPE html>
       showToast(`Active Collection: ${category}`);
       loadCategories();
       try {
-        await fetch(`/api/category?token=${encodeURIComponent(token)}`, {
+        await fetch(`/api/category?${apiQuery()}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ category })
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ category, guild_id: currentGuildId })
         });
       } catch (e) {
         console.error('Category change error:', e);
@@ -3627,7 +3691,7 @@ HTML_INDEX = """<!DOCTYPE html>
       if (listEl) listEl.innerHTML = '<div class="track-card" style="color:var(--text-sub); font-size:0.8rem;">Loading tracks from vault…</div>';
 
       try {
-        const res = await fetch(`/api/category/tracks?category=${encodeURIComponent(category)}&limit=100&token=${encodeURIComponent(token)}`);
+        const res = await fetch(`/api/category/tracks?category=${encodeURIComponent(category)}&limit=100&${apiQuery()}`, { headers: apiHeaders() });
         if (!res.ok) {
           if (listEl) listEl.innerHTML = '<div class="track-card" style="color:var(--danger); font-size:0.8rem;">Failed to load collection tracks.</div>';
           return;
@@ -3687,10 +3751,10 @@ HTML_INDEX = """<!DOCTYPE html>
       const track = filteredCategoryTracks[idx];
       if (!track) return;
       try {
-        const res = await fetch(`/api/queue/add?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(`/api/queue/add?${apiQuery()}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ track, play_now: true })
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ track, play_now: true, guild_id: currentGuildId })
         });
         const d = await res.json();
         showToast(d.message || `Playing now: ${track.title}`);
@@ -3703,10 +3767,10 @@ HTML_INDEX = """<!DOCTYPE html>
       const track = filteredCategoryTracks[idx];
       if (!track) return;
       try {
-        const res = await fetch(`/api/queue/add?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(`/api/queue/add?${apiQuery()}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ track, play_now: false })
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ track, play_now: false, guild_id: currentGuildId })
         });
         const d = await res.json();
         showToast(d.message || `Queued: ${track.title}`);
@@ -3790,7 +3854,7 @@ HTML_INDEX = """<!DOCTYPE html>
       loadServerChannels();
 
       try {
-        const res = await fetch(`/api/lyrics?token=${encodeURIComponent(token)}`);
+        const res = await fetch(`/api/lyrics?${apiQuery()}`, { headers: apiHeaders() });
         if (res.ok) {
           const d = await res.json();
           if (d.url) cachedLyricsUrl = d.url;
@@ -3813,7 +3877,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const select = document.getElementById('lyricsChannelSelect');
       if (!select) return;
       try {
-        const res = await fetch(`/api/channels?token=${encodeURIComponent(token)}`);
+        const res = await fetch(`/api/channels?${apiQuery()}`, { headers: apiHeaders() });
         if (res.ok) {
           const d = await res.json();
           cachedServerChannels = d.channels || [];
@@ -3839,10 +3903,10 @@ HTML_INDEX = """<!DOCTYPE html>
       }
       showToast('Sending lyrics to Discord…');
       try {
-        const res = await fetch(`/api/lyrics/send?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(`/api/lyrics/send?${apiQuery()}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ channel_id: channelId })
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ channel_id: channelId, guild_id: currentGuildId })
         });
         const d = await res.json();
         if (d.success) {
@@ -3897,6 +3961,94 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function copyShortcut(url) {
       navigator.clipboard.writeText(url).then(() => showToast('Shortcut URL copied'));
+    }
+
+    // Discord Server / Guild Switcher Engine
+    async function openGuildModal() {
+      const sheet = document.getElementById('guildSheet');
+      if (sheet) sheet.classList.add('active');
+      const container = document.getElementById('guildListContainer');
+      if (!container) return;
+      container.innerHTML = '<div style="text-align:center; padding:18px; color:var(--text-sub); font-size:0.8rem;">Loading servers…</div>';
+      try {
+        const res = await fetch(`/api/guilds?${apiQuery()}`, { headers: apiHeaders() });
+        const data = await res.json();
+        const guilds = (data && data.guilds) || [];
+        if (guilds.length === 0) {
+          container.innerHTML = '<div style="text-align:center; padding:18px; color:var(--text-sub); font-size:0.8rem;">No Discord servers found.</div>';
+          return;
+        }
+        container.innerHTML = guilds.map(g => {
+          const isSelected = String(g.id) === String(currentGuildId);
+          const activeTag = g.is_active ? '<span class="status-badge" style="padding:2px 7px; font-size:0.65rem; color:#10b981; border-color:rgba(16,185,129,0.3); background:rgba(16,185,129,0.08);"><span class="status-dot" style="background:#10b981;"></span>Playing</span>' : '<span style="font-size:0.68rem; color:var(--text-sub);">Idle</span>';
+          const borderStyle = isSelected ? 'border:1px solid #c084fc; background:rgba(192, 132, 252, 0.12);' : 'border:1px solid var(--border); background:var(--surface);';
+          const escapedName = escapeHtml(g.name).replace(/'/g, "\\'");
+          return `
+            <div class="track-card btn-kinetic" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-radius:12px; ${borderStyle}" onclick="selectGuild('${g.id}', '${escapedName}')">
+              <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                <div style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                  <svg class="icon-svg" style="width:16px;height:16px;color:${isSelected ? '#c084fc' : 'var(--text-muted)'};" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <div style="min-width:0;">
+                  <div style="font-weight:600; font-size:0.86rem; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(g.name)}</div>
+                  <div style="font-size:0.68rem; color:var(--text-muted); font-family:'JetBrains Mono',monospace;">ID: ${g.id}</div>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                ${activeTag}
+                ${isSelected ? '<svg class="icon-svg" style="width:16px;height:16px;color:#c084fc;" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = `<div style="text-align:center; padding:18px; color:var(--danger); font-size:0.8rem;">Failed to load servers: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function closeGuildModal() {
+      const sheet = document.getElementById('guildSheet');
+      if (sheet) sheet.classList.remove('active');
+    }
+
+    async function selectGuild(gid, gname) {
+      if (String(currentGuildId) === String(gid)) {
+        closeGuildModal();
+        return;
+      }
+      currentGuildId = String(gid);
+      localStorage.setItem('jv_guild_id', currentGuildId);
+
+      const badge = document.getElementById('guildBadgeName');
+      if (badge) badge.innerText = gname || gid;
+      const gNameEl = document.getElementById('guildName');
+      if (gNameEl) gNameEl.innerText = gname || gid;
+
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.set('guild_id', currentGuildId);
+        window.history.replaceState({}, '', u.toString());
+      } catch (e) {}
+
+      closeGuildModal();
+      showToast(`Switched to: ${gname}`);
+
+      // Notify WebSocket of active guild
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ action: 'set_guild', guild_id: currentGuildId }));
+        } catch (e) {}
+      } else {
+        connectWS();
+      }
+
+      // If Listen Together live stream is active, resync stream to new server
+      if (liveStreamActive) {
+        syncLiveAudio(true);
+      }
+
+      await fetchStatus();
+      loadQueue();
     }
 
     // Live Telemetry & Daily Usage Engine
@@ -4038,7 +4190,7 @@ HTML_INDEX = """<!DOCTYPE html>
       }
       grid.innerHTML = '<div style="color:var(--text-sub); font-size:0.8rem; padding:12px; grid-column:1/-1;">Loading 50 meme sounds…</div>';
       try {
-        const res = await fetch(`/api/soundboard?token=${encodeURIComponent(token)}`);
+        const res = await fetch(`/api/soundboard?${apiQuery()}`, { headers: apiHeaders() });
         const data = await res.json();
         soundboardSounds = data.sounds || [];
         renderSoundboardGrid(soundboardSounds);
@@ -4121,10 +4273,10 @@ HTML_INDEX = """<!DOCTYPE html>
       showToast(`Soundboard: ${name} (music paused)`);
 
       try {
-        const res = await fetch(`/api/soundboard/play?token=${encodeURIComponent(token)}`, {
+        const res = await fetch(`/api/soundboard/play?${apiQuery()}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sound_id: soundId })
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ sound_id: soundId, guild_id: currentGuildId })
         });
         const d = await res.json();
         if (d.error) showToast('Soundboard error: ' + d.error);
@@ -4147,7 +4299,11 @@ HTML_INDEX = """<!DOCTYPE html>
 
       showToast('Resuming music…');
       try {
-        await fetch(`/api/soundboard/stop?token=${encodeURIComponent(token)}`, { method: 'POST' });
+        await fetch(`/api/soundboard/stop?${apiQuery()}`, {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ guild_id: currentGuildId })
+        });
       } catch (e) {
         showToast('Error stopping: ' + e.message);
       }

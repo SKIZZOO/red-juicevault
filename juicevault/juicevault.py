@@ -380,13 +380,47 @@ class JuiceVault(commands.Cog):
             await asyncio.sleep(0.02)
         return True
 
-    def _cleanup_prefetch(self):
-        for path in list(self._prefetched.values()):
-            self._remove_file(path)
-        self._prefetched.clear()
-        for task in list(self._prefetch_tasks.values()):
-            task.cancel()
-        self._prefetch_tasks.clear()
+    def _cleanup_prefetch(self, gid=None):
+        if gid is None:
+            for path in list(self._prefetched.values()):
+                if not any(p == path for p in self.current_files.values()):
+                    self._remove_file(path)
+            self._prefetched.clear()
+            for task in list(self._prefetch_tasks.values()):
+                task.cancel()
+            self._prefetch_tasks.clear()
+            return
+
+        # Scoped cleanup: protect tracks queued or playing in other guilds
+        other_needed_urls = set()
+        for other_gid, q in self.manual_queues.items():
+            if other_gid != gid and q:
+                for t in q[:3]:
+                    if t.get("url"):
+                        other_needed_urls.add(t["url"])
+        for other_gid, q in self.queues.items():
+            if other_gid != gid and q:
+                for t in q[:3]:
+                    if t.get("url"):
+                        other_needed_urls.add(t["url"])
+
+        guild_next_url = None
+        if self.manual_queues.get(gid):
+            guild_next_url = self.manual_queues[gid][0].get("url")
+        elif self.queues.get(gid):
+            guild_next_url = self.queues[gid][0].get("url")
+
+        for url in list(self._prefetch_tasks.keys()):
+            if url != guild_next_url and url not in other_needed_urls:
+                task = self._prefetch_tasks.pop(url, None)
+                if task:
+                    task.cancel()
+
+        for url, path in list(self._prefetched.items()):
+            if url != guild_next_url and url not in other_needed_urls:
+                if not any(p == path for p in self.current_files.values()):
+                    self._remove_file(path)
+                self._prefetched.pop(url, None)
 
     def _trigger_next_prefetch(self, gid):
         next_track = None
@@ -712,13 +746,19 @@ class JuiceVault(commands.Cog):
                 if not explicit_seek:
                     self.current_files.pop(gid, None)
                     if local_path and local_path not in getattr(self, "_preserved_files", set()):
-                        self._remove_file(local_path)
+                        other_playing = any(p == local_path for g, p in self.current_files.items() if g != gid)
+                        other_prefetched = any(p == local_path for p in self._prefetched.values())
+                        if not other_playing and not other_prefetched:
+                            self._remove_file(local_path)
                     elif local_path:
                         self._preserved_files.discard(local_path)
                 if stop.is_set() or self.tasks.get(gid) is not task:
                     if explicit_seek:
                         self.current_files.pop(gid, None)
-                        self._remove_file(local_path)
+                        other_playing = any(p == local_path for g, p in self.current_files.items() if g != gid)
+                        other_prefetched = any(p == local_path for p in self._prefetched.values())
+                        if not other_playing and not other_prefetched:
+                            self._remove_file(local_path)
                     return
                 if explicit_seek:
                     seek.clear()
@@ -1051,7 +1091,7 @@ class JuiceVault(commands.Cog):
             await ctx.send("The queue is empty.")
             return
         random.shuffle(queue)
-        self._cleanup_prefetch()
+        self._cleanup_prefetch(ctx.guild.id)
         self._trigger_next_prefetch(ctx.guild.id)
         await ctx.send(f"🔀 Queue shuffled — `{len(queue)}` tracks.")
 
