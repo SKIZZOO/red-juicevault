@@ -69,6 +69,8 @@ class JuiceVault(commands.Cog):
         self.pause_after_seek = {}
         self.play_positions = {}
         self.effects = {}
+        self.history = {}
+        self.history_pos = {}
         self.web_remote = None
         self._prefetched = {}
         self._prefetch_tasks = {}
@@ -453,6 +455,28 @@ class JuiceVault(commands.Cog):
             return cached
 
         url = track.get("url")
+        if not url:
+            track_id = track.get("id")
+            if track_id and not track.get("_external"):
+                url = self._stream_url(track_id)
+                track["url"] = url
+            else:
+                try:
+                    catalog = await self.fetch_tracks("all")
+                    t_title = str(track.get("title") or track.get("name") or "").strip().lower()
+                    for item in catalog:
+                        if t_title and t_title in str(item.get("title") or "").strip().lower():
+                            if item.get("url"):
+                                url = item["url"]
+                                track["url"] = url
+                                track.setdefault("file_name", item.get("file_name"))
+                                break
+                except Exception:
+                    pass
+
+        if not url:
+            raise RuntimeError(f"Track '{track.get('title', 'Unknown')}' has no stream URL available")
+
         skip_cache = track.get("_skip_cache", False)
         if not skip_cache and url:
             if url in self._prefetched:
@@ -476,7 +500,7 @@ class JuiceVault(commands.Cog):
         handle = tempfile.NamedTemporaryFile(mode="w+b", suffix=f".juicevault{suffix}", delete=False)
         path = handle.name
         try:
-            async with self.session.get(track["url"], timeout=timeout) as response:
+            async with self.session.get(url, timeout=timeout) as response:
                 if response.status != 200:
                     body = await response.text(errors="ignore")
                     raise RuntimeError(f"JuiceVault stream HTTP {response.status}: {body[:200]}")
@@ -604,6 +628,7 @@ class JuiceVault(commands.Cog):
         self.seek_events.pop(guild_id, None)
         self.seek_targets.pop(guild_id, None)
         self.play_positions.pop(guild_id, None)
+        self.history_pos.pop(guild_id, None)
         self.effects.pop(guild_id, None)
         guild = self.bot.get_guild(guild_id)
         if guild:
@@ -670,6 +695,14 @@ class JuiceVault(commands.Cog):
                 else:
                     track = self.queues[gid].pop(0)
                     source_type = "normal"
+                prev_track = self.current.get(gid)
+                if prev_track and not track.get("_from_history") and not track.get("_jv_seek_copy"):
+                    hist = self.history.setdefault(gid, [])
+                    if not hist or str(hist[-1].get("id")) != str(prev_track.get("id")):
+                        hist.append(dict(prev_track))
+                        del hist[:-50]
+                if not track.get("_from_history") and not track.get("_jv_seek_copy"):
+                    self.history_pos[gid] = None
                 self.current[gid] = track
                 if track.get("_resume_position") is not None:
                     start_offset = max(0.0, float(track.pop("_resume_position")))
@@ -728,11 +761,16 @@ class JuiceVault(commands.Cog):
                             pass
                     self.current_files.pop(gid, None)
                     self._remove_file(local_path)
-                    if source_type == "external":
-                        print(f"[JuiceVault] dropping unavailable external track {self._track_text(track)}: {type(exc).__name__}: {exc}")
+                    retries = track.get("_retry_count", 0) + 1
+                    track["_retry_count"] = retries
+                    if retries > 2:
+                        print(f"[JuiceVault] dropping failed track {self._track_text(track)} after {retries} attempts: {type(exc).__name__}: {exc}")
                     else:
-                        target = self.manual_queues if source_type == "manual" else self.queues
-                        target.setdefault(gid, []).insert(0, track)
+                        if source_type == "external":
+                            print(f"[JuiceVault] dropping unavailable external track {self._track_text(track)}: {type(exc).__name__}: {exc}")
+                        else:
+                            target = self.manual_queues if source_type == "manual" else self.queues
+                            target.setdefault(gid, []).insert(0, track)
                     await asyncio.sleep(self.FAILURE_BACKOFF_SECONDS)
                     continue
                 stop_task = asyncio.create_task(stop.wait())

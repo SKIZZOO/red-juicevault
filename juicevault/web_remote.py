@@ -273,9 +273,13 @@ class JuiceVaultWebRemote:
             app.router.add_get("/api/queue", self._api_queue)
             app.router.add_post("/api/queue/remove", self._api_queue_remove)
             app.router.add_post("/api/queue/play_now", self._api_queue_play_now)
+            app.router.add_post("/api/queue/replay_history", self._api_queue_replay_history)
             app.router.add_post("/api/queue/move_next", self._api_queue_move_next)
             app.router.add_get("/api/search", self._api_search)
             app.router.add_post("/api/queue/add", self._api_queue_add)
+            app.router.add_get("/api/user/profile", self._api_user_profile)
+            app.router.add_get("/api/user/likes", self._api_user_likes)
+            app.router.add_post("/api/user/favorite", self._api_user_favorite)
             app.router.add_get("/api/shortcuts", self._api_shortcuts)
             app.router.add_get("/api/stream", self._api_stream)
             app.router.add_get("/api/channels", self._api_channels)
@@ -1173,14 +1177,40 @@ class JuiceVaultWebRemote:
             count = int(payload.get("count", 1))
             await main._request_skip(gid, count)
         elif action_name == "previous":
-            if ui:
-                history = ui.history.get(gid, [])
-                if history:
-                    prev = history.pop()
-                    main.manual_queues.setdefault(gid, []).insert(0, prev)
+            hist = list(getattr(main, "history", {}).get(gid, []))
+            if not hist and ui:
+                hist = list(ui.history.get(gid, []))
+            if hist:
+                cur_pos = getattr(main, "history_pos", {}).get(gid)
+                if cur_pos is None:
+                    pos = len(hist) - 1
+                else:
+                    pos = max(0, cur_pos - 1)
+                main.history_pos[gid] = pos
+                prev = dict(hist[pos])
+                prev["_from_history"] = True
+                main.manual_queues.setdefault(gid, []).insert(0, prev)
+                if gid in main.skip_events:
+                    main.skip_events[gid].set()
+                if ui:
                     ui.repeat_queued[gid] = False
-                    if voice and (voice.is_playing() or voice.is_paused()):
-                        voice.stop()
+                if voice and (voice.is_playing() or voice.is_paused()):
+                    voice.stop()
+        elif action_name == "replay_history":
+            idx = int(payload.get("index", 0))
+            hist = list(reversed(getattr(main, "history", {}).get(gid, [])))
+            if not hist and ui:
+                hist = list(reversed(ui.history.get(gid, [])))
+            if 0 <= idx < len(hist):
+                target = dict(hist[idx])
+                target["_from_history"] = True
+                main.manual_queues.setdefault(gid, []).insert(0, target)
+                if gid in main.skip_events:
+                    main.skip_events[gid].set()
+                if ui:
+                    ui.repeat_queued[gid] = False
+                if voice and (voice.is_playing() or voice.is_paused()):
+                    voice.stop()
         elif action_name == "seek":
             delta = float(payload.get("delta", 10))
             await main._request_seek(gid, delta=delta)
@@ -1484,12 +1514,18 @@ class JuiceVaultWebRemote:
         if not guild:
             return web.json_response({"error": "No guild found"}, status=404)
         main = self._get_main_cog()
+        ui = self._get_ui_cog()
         gid = guild.id
+        raw_hist = list(getattr(main, "history", {}).get(gid, []))
+        if not raw_hist and ui:
+            raw_hist = list(ui.history.get(gid, []))
+        last_5 = list(reversed(raw_hist[-5:]))
         return web.json_response({
             "success": True,
             "current": main.current.get(gid),
             "requested": main.manual_queues.get(gid, []),
             "upcoming": main.queues.get(gid, [])[:30],
+            "history": last_5,
         })
 
     async def _api_queue_remove(self, request):
@@ -1544,6 +1580,8 @@ class JuiceVaultWebRemote:
             return web.json_response({"error": "Track not found"}, status=400)
 
         main.manual_queues.setdefault(gid, []).insert(0, track)
+        if gid in main.skip_events:
+            main.skip_events[gid].set()
         voice = guild.voice_client
         if voice and (voice.is_playing() or voice.is_paused()):
             voice.stop()
@@ -1712,11 +1750,18 @@ class JuiceVaultWebRemote:
             }
             if raw.get("cover_url"):
                 clean["cover_url"] = str(raw["cover_url"])[:500]
+            elif clean["id"] and not raw.get("_external"):
+                clean["cover_url"] = f"https://api.juicevault.xyz/cdn/music/covers/{quote(str(clean['id']), safe='')}"
+
             if raw.get("url"):
                 u = str(raw["url"])
                 # Security: Strictly allow only HTTP and HTTPS protocols
                 if u.startswith(("http://", "https://")):
                     clean["url"] = u[:1000]
+
+            if not clean.get("url") and clean["id"] and not raw.get("_external"):
+                clean["url"] = f"https://api.juicevault.xyz/music/stream/{quote(str(clean['id']), safe='')}"
+
             if raw.get("_external"):
                 clean["_external"] = True
                 if raw.get("_source"):
@@ -1735,6 +1780,8 @@ class JuiceVaultWebRemote:
             if play_now:
                 for i, t in enumerate(valid_tracks):
                     queue.insert(i, t)
+                if gid in main.skip_events:
+                    main.skip_events[gid].set()
                 voice = guild.voice_client
                 if voice and (voice.is_playing() or voice.is_paused()):
                     voice.stop()
@@ -1748,6 +1795,8 @@ class JuiceVaultWebRemote:
                 return web.json_response({"error": "Invalid track data"}, status=400)
             if play_now:
                 main.manual_queues.setdefault(gid, []).insert(0, clean_t)
+                if gid in main.skip_events:
+                    main.skip_events[gid].set()
                 voice = guild.voice_client
                 if voice and (voice.is_playing() or voice.is_paused()):
                     voice.stop()
@@ -2051,6 +2100,104 @@ class JuiceVaultWebRemote:
         embed.set_footer(text="JuiceVault 24/7 • made by SKIZZOO (sosocial.lol/ski) • domain by Spinti (sosocial.lol/spinti)", icon_url="https://api.juicevault.xyz/favicon.ico")
 
         await ctx.send(embed=embed)
+
+    async def _api_queue_replay_history(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        data = await request.json()
+        guild = self._resolve_guild(request, target_id=data.get("guild_id"))
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
+        idx = int(data.get("index", 0))
+        main = self._get_main_cog()
+        ui = self._get_ui_cog()
+        gid = guild.id
+        raw_hist = list(reversed(getattr(main, "history", {}).get(gid, [])))
+        if not raw_hist and ui:
+            raw_hist = list(reversed(ui.history.get(gid, [])))
+        if not (0 <= idx < len(raw_hist)):
+            return web.json_response({"error": "History track not found"}, status=400)
+        track = dict(raw_hist[idx])
+        track["_from_history"] = True
+        main.manual_queues.setdefault(gid, []).insert(0, track)
+        if gid in main.skip_events:
+            main.skip_events[gid].set()
+        voice = guild.voice_client
+        if voice and (voice.is_playing() or voice.is_paused()):
+            voice.stop()
+        await self.broadcast_state(gid)
+        return web.json_response({"success": True, "message": f"Replaying: {track.get('title', 'Track')}"})
+
+    async def _api_user_profile(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        username = request.query.get("username", "").strip()
+        if not username:
+            return web.json_response({"error": "Missing username"}, status=400)
+        safe_user = quote(username, safe="")
+        url = f"https://api.juicevault.xyz/user/profile/{safe_user}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return web.json_response(data)
+                    return web.json_response({"error": f"User profile not found (HTTP {resp.status})"}, status=resp.status)
+        except Exception as e:
+            return web.json_response({"error": f"Failed fetching profile: {e}"}, status=500)
+
+    async def _api_user_likes(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        username = request.query.get("username", "").strip()
+        if not username:
+            return web.json_response({"error": "Missing username"}, status=400)
+        safe_user = quote(username, safe="")
+        url = f"https://api.juicevault.xyz/user/likes/public/{safe_user}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return web.json_response(data)
+                    return web.json_response({"error": f"User likes not found (HTTP {resp.status})"}, status=resp.status)
+        except Exception as e:
+            return web.json_response({"error": f"Failed fetching likes: {e}"}, status=500)
+
+    async def _api_user_favorite(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+        username = str(data.get("username", "")).strip().lower()
+        track = data.get("track")
+        action_type = data.get("action", "toggle")
+        if not username or not track:
+            return web.json_response({"error": "Missing username or track"}, status=400)
+        if not hasattr(self, "_user_favorites"):
+            self._user_favorites = {}
+        fav_list = self._user_favorites.setdefault(username, [])
+        track_id = str(track.get("id", ""))
+        existing = next((i for i, t in enumerate(fav_list) if str(t.get("id")) == track_id), None)
+        is_fav = False
+        if action_type == "remove" or (action_type == "toggle" and existing is not None):
+            if existing is not None:
+                fav_list.pop(existing)
+            is_fav = False
+        else:
+            if existing is None:
+                fav_list.insert(0, dict(track))
+            is_fav = True
+        return web.json_response({
+            "success": True,
+            "is_favorite": is_fav,
+            "total_favorites": len(fav_list),
+            "favorites": fav_list[:100]
+        })
 
 
 def patch_web_remote(JuiceVault, JuiceVaultUI):
