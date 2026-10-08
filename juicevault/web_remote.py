@@ -2059,15 +2059,15 @@ class JuiceVaultWebRemote:
         current_file = None
         requested_t = str(request.query.get("t", "")).strip()
 
-        # Check immediately and wait up to 2 seconds for the audio file to become ready
-        for attempt in range(10):
+        # Check immediately and wait up to 2.4 seconds for the audio file to become ready
+        for attempt in range(12):
             cur = getattr(main, "current", {}).get(gid)
             cur_key = ""
             if cur:
                 cur_key = str(cur.get("id") or cur.get("title") or "").strip()
 
-            # If client requested a specific track and track is currently transitioning, wait at most 0.8s
-            if requested_t and cur_key and requested_t != cur_key and attempt < 4:
+            # If client requested a specific track and track is currently transitioning, wait
+            if requested_t and cur_key and requested_t != cur_key and attempt < 6:
                 await asyncio.sleep(0.2)
                 continue
 
@@ -2078,10 +2078,12 @@ class JuiceVaultWebRemote:
             if cur and cur.get("_cached_file") and os.path.isfile(cur["_cached_file"]) and os.path.getsize(cur["_cached_file"]) > 1024:
                 current_file = cur["_cached_file"]
                 break
-            lf = getattr(main, "_last_played_files", {}).get(gid)
-            if lf and os.path.isfile(lf) and os.path.getsize(lf) > 1024:
-                current_file = lf
-                break
+            # Only use _last_played_files if NO specific track was requested and it's a late attempt
+            if not requested_t and attempt >= 6:
+                lf = getattr(main, "_last_played_files", {}).get(gid)
+                if lf and os.path.isfile(lf) and os.path.getsize(lf) > 1024:
+                    current_file = lf
+                    break
             await asyncio.sleep(0.2)
 
         if not current_file or not os.path.isfile(current_file):
@@ -2089,17 +2091,24 @@ class JuiceVaultWebRemote:
             cur = getattr(main, "current", {}).get(gid)
             if cur and cur.get("url") and str(cur["url"]).startswith(("http://", "https://")):
                 remote_url = cur["url"]
+                req_headers = {"User-Agent": "Mozilla/5.0"}
+                if "Range" in request.headers:
+                    req_headers["Range"] = request.headers["Range"]
                 try:
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(remote_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=aiohttp.ClientTimeout(total=15)) as r_resp:
+                        async with session.get(remote_url, headers=req_headers, timeout=aiohttp.ClientTimeout(total=15)) as r_resp:
                             if r_resp.status in (200, 206):
                                 data = await r_resp.read()
                                 c_type = r_resp.headers.get("Content-Type", "audio/mpeg")
-                                return web.Response(body=data, headers={
+                                out_headers = {
                                     "Content-Type": c_type,
                                     "Accept-Ranges": "bytes",
+                                    "Cache-Control": "private, max-age=3600",
                                     **cors_headers
-                                })
+                                }
+                                if "Content-Range" in r_resp.headers:
+                                    out_headers["Content-Range"] = r_resp.headers["Content-Range"]
+                                return web.Response(body=data, status=r_resp.status, headers=out_headers)
                 except Exception:
                     pass
                 raise web.HTTPTemporaryRedirect(location=remote_url, headers=cors_headers)
@@ -2119,7 +2128,7 @@ class JuiceVaultWebRemote:
 
         resp_headers = {
             "Accept-Ranges": "bytes",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Cache-Control": "private, max-age=3600",
             "Content-Type": content_type,
             **cors_headers,
         }
