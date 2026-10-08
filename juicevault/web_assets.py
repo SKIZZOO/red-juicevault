@@ -60,6 +60,20 @@ HTML_INDEX = """<!DOCTYPE html>
       -webkit-tap-highlight-color: transparent;
       user-select: none;
     }
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent);
+    }
     html, body {
       background-color: var(--bg) !important;
       color: var(--text) !important;
@@ -324,12 +338,35 @@ HTML_INDEX = """<!DOCTYPE html>
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
     /* Now Playing Display */
+    .player-visual-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 200px;
+      margin: 0 auto 14px;
+    }
+    .player-visual-ambient {
+      position: absolute;
+      inset: -6px;
+      border-radius: var(--radius-lg);
+      background: radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 72%);
+      filter: blur(24px);
+      opacity: 0.3;
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .player-visual-ambient.playing {
+      opacity: 0.85;
+      animation: ambientBreathe 3.5s infinite alternate ease-in-out;
+    }
+    @keyframes ambientBreathe {
+      0% { opacity: 0.55; transform: scale(0.98); }
+      100% { opacity: 0.95; transform: scale(1.08); }
+    }
     .player-visual {
       position: relative;
       width: 100%;
       aspect-ratio: 1;
-      max-width: 200px;
-      margin: 0 auto 12px;
       border-radius: var(--radius-md);
       overflow: hidden;
       background: #14141a;
@@ -338,6 +375,7 @@ HTML_INDEX = """<!DOCTYPE html>
       display: flex;
       align-items: center;
       justify-content: center;
+      z-index: 1;
     }
     .player-cover {
       width: 100%;
@@ -349,6 +387,26 @@ HTML_INDEX = """<!DOCTYPE html>
     .player-cover.playing {
       transform: scale(1.035);
       filter: drop-shadow(0 0 16px var(--accent-glow));
+    }
+    /* Real-Time Spectrum Visualizer */
+    .visualizer-container {
+      width: 100%;
+      height: 38px;
+      margin: 10px 0 6px;
+      border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+    }
+    .visualizer-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
     /* Kinetic Soundwave Indicator */
     .soundwave-box {
@@ -441,6 +499,28 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .scrubber-track:hover, .scrubber-track:active {
       height: 8px;
+    }
+    .scrubber-tooltip {
+      position: absolute;
+      top: -24px;
+      left: 0;
+      transform: translateX(-50%);
+      background: #171722;
+      border: 1px solid var(--border-accent);
+      color: #fff;
+      font-size: 0.65rem;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 2px 6px;
+      border-radius: 4px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      white-space: nowrap;
+      z-index: 10;
+    }
+    .scrubber-track:hover .scrubber-tooltip {
+      opacity: 1;
     }
     .scrubber-fill {
       height: 100%;
@@ -703,6 +783,21 @@ HTML_INDEX = """<!DOCTYPE html>
     .search-field::placeholder {
       color: var(--text-sub);
     }
+    .btn-clear-search {
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 50%;
+      transition: color 0.15s ease;
+    }
+    .btn-clear-search:hover {
+      color: #fff;
+    }
     /* Category Grid & Library Collections */
     .active-col-banner {
       padding: 4px;
@@ -844,6 +939,91 @@ HTML_INDEX = """<!DOCTYPE html>
       background: #1a1a24;
       flex-shrink: 0;
       border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    /* Mobile Floating Mini-Player Bar */
+    .mobile-mini-player {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(70px + var(--safe-bottom));
+      height: 56px;
+      background: rgba(18, 18, 24, 0.94);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-accent);
+      border-radius: var(--radius-md);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6), 0 0 16px rgba(168, 85, 247, 0.15);
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      z-index: 95;
+      cursor: pointer;
+      animation: slideUpMini 0.25s var(--ease);
+      overflow: hidden;
+    }
+    .mobile-mini-player.visible {
+      display: flex;
+    }
+    @keyframes slideUpMini {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .mini-progress-line {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #a855f7, #c084fc);
+      width: 0%;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .mini-player-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1;
+    }
+    .mini-player-thumb {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: #14141a;
+      flex-shrink: 0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .mini-player-info {
+      min-width: 0;
+      flex: 1;
+    }
+    .mini-player-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mini-player-artist {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+    .mini-player-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+    .btn-mini-action {
+      width: 34px;
+      height: 34px;
     }
     /* Bottom Navigation Bar for Mobile */
     nav.mobile-nav {
@@ -1507,8 +1687,11 @@ HTML_INDEX = """<!DOCTYPE html>
       <!-- LEFT COLUMN: NOW PLAYING CARD -->
       <div class="card-player-wrap">
         <div class="ui-card">
-          <div class="player-visual" id="artContainer">
-            <img src="https://api.juicevault.xyz/favicon.ico" class="player-cover" id="coverImg" alt="Album Cover">
+          <div class="player-visual-wrap">
+            <div class="player-visual-ambient" id="artAmbient"></div>
+            <div class="player-visual" id="artContainer">
+              <img src="https://api.juicevault.xyz/favicon.ico" class="player-cover" id="coverImg" alt="Album Cover">
+            </div>
           </div>
 
           <div class="track-meta" id="trackMetaContainer">
@@ -1529,9 +1712,15 @@ HTML_INDEX = """<!DOCTYPE html>
             </div>
           </div>
 
+          <!-- Real-Time Spectrum Visualizer -->
+          <div class="visualizer-container" id="visualizerWrap" title="Real-Time Audio Spectrum Visualizer">
+            <canvas class="visualizer-canvas" id="audioVisualizer" width="320" height="38"></canvas>
+          </div>
+
           <!-- Interactive Scrubber Bar -->
           <div class="scrubber-wrap">
             <div class="scrubber-track" id="progressBar">
+              <span class="scrubber-tooltip" id="scrubberTooltip">0:00</span>
               <div class="scrubber-fill" id="progressFill">
                 <span class="scrubber-thumb"></span>
               </div>
@@ -1682,6 +1871,11 @@ HTML_INDEX = """<!DOCTYPE html>
 
         <!-- TAB: QUEUE -->
         <div class="tab-content active" id="tab-queue">
+          <div class="search-input-group" style="margin-bottom:12px;">
+            <svg class="icon-svg" style="color:var(--text-sub); width:15px; height:15px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" class="search-field" id="queueFilterInput" placeholder="Filter queued tracks…" oninput="filterQueueDisplay(this.value)">
+          </div>
+
           <div class="ui-card" style="margin-bottom:14px;">
             <div class="section-header">
               <span class="section-title">
@@ -1716,7 +1910,10 @@ HTML_INDEX = """<!DOCTYPE html>
           <div class="ui-card">
             <div class="search-input-group">
               <svg class="icon-svg" style="color:var(--text-sub);" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" class="search-field" id="searchInput" placeholder="Search song title or artist…" onkeydown="if(event.key==='Enter') executeSearch()">
+              <input type="text" class="search-field" id="searchInput" placeholder="Search song title or artist…" oninput="handleSearchInput(event)" onkeydown="if(event.key==='Enter') executeSearch()">
+              <button class="btn-clear-search" id="clearSearchBtn" onclick="clearSearchField()" title="Clear search" style="display:none;">
+                <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
               <button class="btn-kinetic btn-badge" onclick="executeSearch()">Search</button>
             </div>
 
@@ -1807,6 +2004,54 @@ HTML_INDEX = """<!DOCTYPE html>
 
         <!-- TAB: SHORTCUTS & API -->
         <div class="tab-content" id="tab-shortcuts">
+          <!-- Keyboard Hotkeys Card -->
+          <div class="ui-card" style="margin-bottom:14px;">
+            <div class="section-header">
+              <span class="section-title">
+                <svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6.01" y2="8"/><line x1="10" y1="8" x2="10.01" y2="8"/><line x1="14" y1="8" x2="14.01" y2="8"/><line x1="18" y1="8" x2="18.01" y2="8"/><line x1="8" y1="16" x2="16" y2="16"/></svg>
+                Desktop Keyboard Hotkeys
+              </span>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:8px;">
+              <div class="track-card" style="padding:8px 12px; gap:8px;">
+                <span class="btn-badge" style="font-family:'JetBrains Mono',monospace;">Space</span>
+                <span style="font-size:0.75rem; color:#fff;">Play / Pause</span>
+              </div>
+              <div class="track-card" style="padding:8px 12px; gap:8px;">
+                <span class="btn-badge" style="font-family:'JetBrains Mono',monospace;">→ / ←</span>
+                <span style="font-size:0.75rem; color:#fff;">Seek ±10s</span>
+              </div>
+              <div class="track-card" style="padding:8px 12px; gap:8px;">
+                <span class="btn-badge" style="font-family:'JetBrains Mono',monospace;">Shift+→</span>
+                <span style="font-size:0.75rem; color:#fff;">Skip Track</span>
+              </div>
+              <div class="track-card" style="padding:8px 12px; gap:8px;">
+                <span class="btn-badge" style="font-family:'JetBrains Mono',monospace;">Shift+←</span>
+                <span style="font-size:0.75rem; color:#fff;">Previous Track</span>
+              </div>
+              <div class="track-card" style="padding:8px 12px; gap:8px;">
+                <span class="btn-badge" style="font-family:'JetBrains Mono',monospace;">S</span>
+                <span style="font-size:0.75rem; color:#fff;">Shuffle Queue</span>
+              </div>
+              <div class="track-card" style="padding:8px 12px; gap:8px;">
+                <span class="btn-badge" style="font-family:'JetBrains Mono',monospace;">R</span>
+                <span style="font-size:0.75rem; color:#fff;">Repeat Track</span>
+              </div>
+              <div class="track-card" style="padding:8px 12px; gap:8px;">
+                <span class="btn-badge" style="font-family:'JetBrains Mono',monospace;">L</span>
+                <span style="font-size:0.75rem; color:#fff;">View Lyrics</span>
+              </div>
+              <div class="track-card" style="padding:8px 12px; gap:8px;">
+                <span class="btn-badge" style="font-family:'JetBrains Mono',monospace;">/</span>
+                <span style="font-size:0.75rem; color:#fff;">Focus Search</span>
+              </div>
+              <div class="track-card" style="padding:8px 12px; gap:8px;">
+                <span class="btn-badge" style="font-family:'JetBrains Mono',monospace;">Esc</span>
+                <span style="font-size:0.75rem; color:#fff;">Close Modals</span>
+              </div>
+            </div>
+          </div>
+
           <div class="ui-card" style="margin-bottom:14px;">
             <div class="section-header">
               <span class="section-title">
@@ -2003,6 +2248,26 @@ HTML_INDEX = """<!DOCTYPE html>
         JuiceVault 24/7 Music Player &amp; Mobile Web Remote
       </div>
     </footer>
+  </div>
+
+  <!-- Mobile Floating Mini-Player Bar (Visible when browsing other tabs on phones) -->
+  <div id="mobileMiniPlayer" class="mobile-mini-player" onclick="switchMobileNav('player')">
+    <div class="mini-progress-line" id="miniProgressLine"></div>
+    <div class="mini-player-left">
+      <img src="https://api.juicevault.xyz/favicon.ico" class="mini-player-thumb" id="miniThumb" alt="Cover">
+      <div class="mini-player-info">
+        <div class="mini-player-title" id="miniTitle">Connecting…</div>
+        <div class="mini-player-artist" id="miniArtist">Juice WRLD</div>
+      </div>
+    </div>
+    <div class="mini-player-actions" onclick="event.stopPropagation()">
+      <button class="btn-kinetic btn-circle btn-mini-action" onclick="action('toggle')" title="Play / Pause">
+        <svg class="icon-svg fill-current" id="miniPlayIcon" style="width:14px;height:14px;" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+      </button>
+      <button class="btn-kinetic btn-circle btn-mini-action" onclick="action('skip')" title="Skip Track">
+        <svg class="icon-svg" style="width:13px;height:13px;" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+      </button>
+    </div>
   </div>
 
   <!-- Mobile Bottom Navigation Bar -->
@@ -2476,17 +2741,23 @@ HTML_INDEX = """<!DOCTYPE html>
       const playerWrap = document.querySelector('.card-player-wrap');
       const contentWrap = document.querySelector('.card-content-wrap');
 
+      const miniPlayer = document.getElementById('mobileMiniPlayer');
       if (window.innerWidth < 860) {
         if (tabId === 'player') {
           if (playerWrap) playerWrap.style.display = 'block';
           if (contentWrap) contentWrap.style.display = 'none';
+          if (miniPlayer) miniPlayer.classList.remove('visible');
         } else {
           if (playerWrap) playerWrap.style.display = 'none';
           if (contentWrap) contentWrap.style.display = 'block';
+          if (miniPlayer && currentState && currentState.track) {
+            miniPlayer.classList.add('visible');
+          }
           if (tabId === 'queue') lastQueueChecksum = '';
           switchTab(tabId);
         }
       } else {
+        if (miniPlayer) miniPlayer.classList.remove('visible');
         if (tabId === 'queue') lastQueueChecksum = '';
         switchTab(tabId);
       }
@@ -2520,7 +2791,19 @@ HTML_INDEX = """<!DOCTYPE html>
       updateScrubberUI();
     });
 
+    const scrubberTooltip = document.getElementById('scrubberTooltip');
+
     progressBar.addEventListener('pointermove', (e) => {
+      if (durationSeconds > 0) {
+        const rect = progressBar.getBoundingClientRect();
+        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const hoverSec = ratio * durationSeconds;
+        if (scrubberTooltip) {
+          scrubberTooltip.innerText = formatTime(Math.floor(hoverSec));
+          scrubberTooltip.style.left = (ratio * 100) + '%';
+        }
+      }
       if (isScrubbing) {
         currentElapsed = getScrubTarget(e);
         updateScrubberUI();
@@ -2683,6 +2966,11 @@ HTML_INDEX = """<!DOCTYPE html>
     let delayFeedbackNode = null;
     let delayGainNode = null;
     let masterGainNode = null;
+    let analyserNode = null;
+    let dataArray = null;
+    let visualizerCanvas = null;
+    let visualizerCtx = null;
+    let simAngle = 0;
     let pannerAnimFrame = null;
     let pannerAngle = 0;
 
@@ -2737,6 +3025,12 @@ HTML_INDEX = """<!DOCTYPE html>
         const curVol = parseFloat(document.getElementById('liveVolumeSlider')?.value || 1);
         masterGainNode.gain.value = curVol;
 
+        // 6. Analyser Node (for real-time audio spectrum visualizer)
+        analyserNode = audioCtx.createAnalyser();
+        analyserNode.fftSize = 64;
+        analyserNode.smoothingTimeConstant = 0.82;
+        dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+
         // Audio graph routing:
         // audioSourceNode -> bassFilterNode -> subFilterNode -> (stereoPanner or direct) -> masterGainNode -> destination
         let lastNode = audioSourceNode;
@@ -2754,9 +3048,90 @@ HTML_INDEX = """<!DOCTYPE html>
         lastNode.connect(delayNode);
         delayGainNode.connect(masterGainNode);
 
-        masterGainNode.connect(audioCtx.destination);
+        masterGainNode.connect(analyserNode);
+        analyserNode.connect(audioCtx.destination);
       } catch (err) {
         console.warn('Web Audio API initialization failed:', err);
+      }
+    }
+
+    function initVisualizer() {
+      visualizerCanvas = document.getElementById('audioVisualizer');
+      if (!visualizerCanvas) return;
+      visualizerCtx = visualizerCanvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      visualizerCanvas.width = 320 * dpr;
+      visualizerCanvas.height = 38 * dpr;
+      visualizerCtx.scale(dpr, dpr);
+      renderVisualizerFrame();
+    }
+
+    function renderVisualizerFrame() {
+      requestAnimationFrame(renderVisualizerFrame);
+      if (!visualizerCanvas || !visualizerCtx) return;
+
+      const w = 320;
+      const h = 38;
+      visualizerCtx.clearRect(0, 0, w, h);
+
+      const isPlaying = !!(currentState && currentState.is_playing);
+      const numBars = 28;
+      const barWidth = Math.max(2, (w / numBars) - 3);
+
+      if (liveStreamActive && analyserNode && dataArray) {
+        analyserNode.getByteFrequencyData(dataArray);
+        for (let i = 0; i < numBars; i++) {
+          const freqIdx = Math.floor((i / numBars) * dataArray.length * 0.8);
+          const val = dataArray[freqIdx] || 0;
+          const barHeight = Math.max(3, (val / 255) * (h - 4));
+          const x = i * (barWidth + 3) + 2;
+          const y = h - barHeight;
+
+          const grad = visualizerCtx.createLinearGradient(0, y, 0, h);
+          grad.addColorStop(0, '#c084fc');
+          grad.addColorStop(0.5, '#a855f7');
+          grad.addColorStop(1, '#6b21a8');
+
+          visualizerCtx.fillStyle = grad;
+          if (visualizerCtx.roundRect) {
+            visualizerCtx.beginPath();
+            visualizerCtx.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]);
+            visualizerCtx.fill();
+          } else {
+            visualizerCtx.fillRect(x, y, barWidth, barHeight);
+          }
+        }
+      } else if (isPlaying) {
+        simAngle += 0.045;
+        for (let i = 0; i < numBars; i++) {
+          const wave1 = Math.sin(simAngle + i * 0.28) * 0.5 + 0.5;
+          const wave2 = Math.cos(simAngle * 0.65 + i * 0.18) * 0.5 + 0.5;
+          const combined = (wave1 * 0.6 + wave2 * 0.4);
+          const barHeight = Math.max(3, combined * (h - 6));
+          const x = i * (barWidth + 3) + 2;
+          const y = h - barHeight;
+
+          const grad = visualizerCtx.createLinearGradient(0, y, 0, h);
+          grad.addColorStop(0, '#a855f7');
+          grad.addColorStop(1, '#4c1d95');
+
+          visualizerCtx.fillStyle = grad;
+          if (visualizerCtx.roundRect) {
+            visualizerCtx.beginPath();
+            visualizerCtx.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]);
+            visualizerCtx.fill();
+          } else {
+            visualizerCtx.fillRect(x, y, barWidth, barHeight);
+          }
+        }
+      } else {
+        for (let i = 0; i < numBars; i++) {
+          const x = i * (barWidth + 3) + 2;
+          const barHeight = 2.5;
+          const y = h - barHeight - 2;
+          visualizerCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+          visualizerCtx.fillRect(x, y, barWidth, barHeight);
+        }
       }
     }
 
@@ -3230,8 +3605,11 @@ HTML_INDEX = """<!DOCTYPE html>
         document.getElementById('trackArtist').innerText = state.is_running ? 'Loading track' : 'Use Play to begin';
       }
 
-      // Play/Pause button and soundwave state
+      // Play/Pause button, ambient glow and soundwave state
       const playIcon = document.getElementById('playIconSvg');
+      const ambient = document.getElementById('artAmbient');
+      if (ambient) ambient.classList.toggle('playing', !!state.is_playing);
+
       if (state.is_playing) {
         playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
         document.getElementById('coverImg').classList.add('playing');
@@ -3241,6 +3619,26 @@ HTML_INDEX = """<!DOCTYPE html>
         document.getElementById('coverImg').classList.remove('playing');
         soundwave.classList.remove('playing');
       }
+
+      // Sync mobile mini-player bar
+      const mini = document.getElementById('mobileMiniPlayer');
+      if (mini && t) {
+        const mTitle = document.getElementById('miniTitle');
+        const mArtist = document.getElementById('miniArtist');
+        const mThumb = document.getElementById('miniThumb');
+        const mIcon = document.getElementById('miniPlayIcon');
+        if (mTitle) mTitle.innerText = t.title || 'Untitled';
+        if (mArtist) mArtist.innerText = t.artist || 'Juice WRLD';
+        if (mThumb) mThumb.src = t.cover_url || 'https://api.juicevault.xyz/favicon.ico';
+        if (mIcon) {
+          mIcon.innerHTML = state.is_playing
+            ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+            : '<polygon points="6 3 20 12 6 21 6 3"/>';
+        }
+      }
+
+      // Initialize visualizer if not already initialized
+      if (!visualizerCanvas) initVisualizer();
 
       const repeatBtn = document.getElementById('btnRepeat');
       if (state.repeat) repeatBtn.classList.add('active');
@@ -3268,12 +3666,10 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function updateScrubberUI() {
       document.getElementById('timeElapsed').innerText = formatTime(Math.floor(currentElapsed));
-      if (durationSeconds > 0) {
-        const pct = Math.min(100, Math.max(0, (currentElapsed / durationSeconds) * 100));
-        document.getElementById('progressFill').style.width = pct + '%';
-      } else {
-        document.getElementById('progressFill').style.width = '0%';
-      }
+      const pct = (durationSeconds > 0) ? Math.min(100, Math.max(0, (currentElapsed / durationSeconds) * 100)) : 0;
+      document.getElementById('progressFill').style.width = pct + '%';
+      const miniLine = document.getElementById('miniProgressLine');
+      if (miniLine) miniLine.style.width = pct + '%';
     }
 
     // High-precision 60fps liquid smooth progress ticker matching live playback
@@ -3440,6 +3836,60 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
+    let queueFilterTerm = '';
+
+    function filterQueueDisplay(term) {
+      queueFilterTerm = (term || '').trim().toLowerCase();
+      renderQueueLists();
+    }
+
+    function renderQueueLists() {
+      const filter = queueFilterTerm;
+      const reqList = document.getElementById('reqList');
+      const upList = document.getElementById('upcomingList');
+      if (!reqList || !upList) return;
+
+      const reqFiltered = filter
+        ? currentQueueData.requested.filter(t => (t.title && t.title.toLowerCase().includes(filter)) || (t.artist && t.artist.toLowerCase().includes(filter)))
+        : currentQueueData.requested;
+
+      if (reqFiltered.length > 0) {
+        reqList.innerHTML = reqFiltered.map((t, idx) => `
+          <div class="track-card" style="cursor:pointer;" onclick="openTrackModalByIndex('requested', ${idx})">
+            <div class="track-meta-col">
+              <div class="track-name">${escapeHtml(t.title || 'Untitled')}</div>
+              <div class="track-desc">${escapeHtml(t.artist || 'Juice WRLD')} • ${escapeHtml(t.length || '—')}</div>
+            </div>
+            <span class="btn-badge" style="font-size:0.68rem; padding:3px 7px;">Manage</span>
+          </div>
+        `).join('');
+      } else {
+        reqList.innerHTML = filter
+          ? '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No matching requested tracks.</div>'
+          : '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No requested tracks. Use Search to queue songs.</div>';
+      }
+
+      const upFiltered = filter
+        ? currentQueueData.upcoming.filter(t => (t.title && t.title.toLowerCase().includes(filter)) || (t.artist && t.artist.toLowerCase().includes(filter)))
+        : currentQueueData.upcoming;
+
+      if (upFiltered.length > 0) {
+        upList.innerHTML = upFiltered.slice(0, 30).map((t, idx) => `
+          <div class="track-card" style="cursor:pointer;" onclick="openTrackModalByIndex('upcoming', ${idx})">
+            <div class="track-meta-col">
+              <div class="track-name">${idx + 1}. ${escapeHtml(t.title || 'Untitled')}</div>
+              <div class="track-desc">${escapeHtml(t.artist || 'Juice WRLD')} • ${escapeHtml(t.length || '—')}</div>
+            </div>
+            <span class="btn-badge" style="font-size:0.68rem; padding:3px 7px;">Manage</span>
+          </div>
+        `).join('');
+      } else {
+        upList.innerHTML = filter
+          ? '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No matching archive tracks.</div>'
+          : '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Archive queue empty.</div>';
+      }
+    }
+
     // Load Queue
     async function loadQueue() {
       try {
@@ -3449,41 +3899,37 @@ HTML_INDEX = """<!DOCTYPE html>
           requested: data.requested || [],
           upcoming: data.upcoming || []
         };
-        const reqList = document.getElementById('reqList');
-        if (currentQueueData.requested.length > 0) {
-          reqList.innerHTML = currentQueueData.requested.map((t, idx) => `
-            <div class="track-card" style="cursor:pointer;" onclick="openTrackModalByIndex('requested', ${idx})">
-              <div class="track-meta-col">
-                <div class="track-name">${escapeHtml(t.title || 'Untitled')}</div>
-                <div class="track-desc">${escapeHtml(t.artist || 'Juice WRLD')} • ${escapeHtml(t.length || '—')}</div>
-              </div>
-              <span class="btn-badge" style="font-size:0.68rem; padding:3px 7px;">Manage</span>
-            </div>
-          `).join('');
-        } else {
-          reqList.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No requested tracks. Use Search to queue songs.</div>';
-        }
-
-        const upList = document.getElementById('upcomingList');
-        if (currentQueueData.upcoming.length > 0) {
-          upList.innerHTML = currentQueueData.upcoming.slice(0, 30).map((t, idx) => `
-            <div class="track-card" style="cursor:pointer;" onclick="openTrackModalByIndex('upcoming', ${idx})">
-              <div class="track-meta-col">
-                <div class="track-name">${idx + 1}. ${escapeHtml(t.title || 'Untitled')}</div>
-                <div class="track-desc">${escapeHtml(t.artist || 'Juice WRLD')} • ${escapeHtml(t.length || '—')}</div>
-              </div>
-              <span class="btn-badge" style="font-size:0.68rem; padding:3px 7px;">Manage</span>
-            </div>
-          `).join('');
-        } else {
-          upList.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Archive queue empty.</div>';
-        }
+        renderQueueLists();
       } catch (e) {
         console.error('Queue load error:', e);
       }
     }
 
-    // Search
+    // Search Helpers & Debouncing
+    let searchDebounceTimer = null;
+
+    function handleSearchInput(e) {
+      const q = (e.target.value || '').trim();
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
+      clearTimeout(searchDebounceTimer);
+      if (q.length >= 2) {
+        searchDebounceTimer = setTimeout(() => executeSearch(), 320);
+      }
+    }
+
+    function clearSearchField() {
+      const input = document.getElementById('searchInput');
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (clearBtn) clearBtn.style.display = 'none';
+      const resContainer = document.getElementById('searchResults');
+      if (resContainer) resContainer.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Type a query and press Search.</div>';
+    }
+
     function setSearchMode(mode) {
       searchMode = mode;
       document.getElementById('modeVault').classList.toggle('active', mode === 'vault');
@@ -4467,6 +4913,60 @@ HTML_INDEX = """<!DOCTYPE html>
 
     window.addEventListener('pointerdown', () => { armBackgroundMediaSession(); }, { passive: true });
     window.addEventListener('touchstart', () => { armBackgroundMediaSession(); }, { passive: true });
+
+    // Desktop Pro Keyboard Navigation & Hotkeys
+    window.addEventListener('keydown', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (['input', 'textarea', 'select'].includes(tag) || e.target.isContentEditable) {
+        if (e.key === 'Escape') e.target.blur();
+        return;
+      }
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        action('toggle');
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (e.shiftKey) action('skip'); else action('seek', { delta: 10 });
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (e.shiftKey) action('previous'); else action('seek', { delta: -10 });
+      } else if (e.key === 's' || e.key === 'S') {
+        action('shuffle');
+      } else if (e.key === 'r' || e.key === 'R') {
+        action('repeat');
+      } else if (e.key === 'l' || e.key === 'L') {
+        openLyrics();
+      } else if (e.key === 'q' || e.key === 'Q') {
+        switchTab('queue');
+      } else if (e.key === '/') {
+        e.preventDefault();
+        switchTab('search');
+        const sInput = document.getElementById('searchInput');
+        if (sInput) { sInput.focus(); sInput.select(); }
+      } else if (e.key === 'Escape') {
+        closeEqModal();
+        closeTrackModal();
+        closeLyricsModal();
+        closeGuildModal();
+        closeStatsModal();
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      if (visualizerCanvas && visualizerCtx) {
+        const dpr = window.devicePixelRatio || 1;
+        visualizerCanvas.width = 320 * dpr;
+        visualizerCanvas.height = 38 * dpr;
+        visualizerCtx.scale(dpr, dpr);
+      }
+      const mini = document.getElementById('mobileMiniPlayer');
+      if (window.innerWidth >= 860 && mini) {
+        mini.classList.remove('visible');
+      }
+    });
+
+    // Initialize real-time audio visualizer canvas
+    initVisualizer();
 
     // Instant paint from local cache (0ms perceived startup)
     try {
