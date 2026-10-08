@@ -1560,6 +1560,41 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
+    /* Dynamic Song Cover Art Fullscreen Background */
+    .dynamic-cover-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .dynamic-cover-bg.active {
+      opacity: 1;
+    }
+    .dynamic-cover-img {
+      position: absolute;
+      top: -10%;
+      left: -10%;
+      width: 120%;
+      height: 120%;
+      object-fit: cover;
+      filter: blur(36px) saturate(1.35);
+      transform: scale(1.04);
+      transition: filter 0.3s ease, transform 0.08s ease;
+      will-change: transform, filter;
+    }
+    .dynamic-cover-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(9, 9, 13, 0.62);
+      transition: background 0.3s ease;
+    }
+
     /* Ambient Audio-Reactive Background Canvas */
     .ambient-visualizer-canvas {
       position: fixed;
@@ -2051,6 +2086,10 @@ HTML_INDEX = """<!DOCTYPE html>
   </style>
 </head>
 <body>
+  <div id="dynamicCoverBg" class="dynamic-cover-bg">
+    <img id="dynamicCoverImg" class="dynamic-cover-img" alt="" src="">
+    <div id="dynamicCoverOverlay" class="dynamic-cover-overlay"></div>
+  </div>
   <canvas id="ambientVisualizerCanvas" class="ambient-visualizer-canvas"></canvas>
   <div class="backdrop-glow"></div>
 
@@ -3028,9 +3067,47 @@ HTML_INDEX = """<!DOCTYPE html>
         </div>
       </div>
 
-      <button class="btn-kinetic btn-flat" style="padding:10px; width:100%; justify-content:center;" onclick="closeVisualizerModal()">
-        Done
-      </button>
+      <!-- Song Cover Background Controls -->
+      <div style="font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-sub); margin-bottom:6px;">Song Cover Background</div>
+      <div style="display:flex; flex-direction:column; gap:10px; padding:12px 14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:var(--radius-sm); margin-bottom:14px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div>
+            <div style="font-size:0.78rem; font-weight:600; color:#fff;">Cover Art as Background</div>
+            <div style="font-size:0.68rem; color:var(--text-sub);">Soft blurred album art backdrop</div>
+          </div>
+          <label style="display:flex; align-items:center; cursor:pointer;">
+            <input type="checkbox" id="visCoverBgToggle" checked style="accent-color:var(--accent); width:18px; height:18px;" onchange="updateCoverBgToggle(this.checked)">
+          </label>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <span style="font-size:0.72rem; color:var(--text-muted);">Background Blur</span>
+          <input type="range" min="10" max="80" step="2" value="36" id="visCoverBlurSlider" class="lt-volume-slider" oninput="updateCoverBlur(this.value)" style="width:160px;">
+          <span id="visCoverBlurVal" style="font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub); min-width:36px;">36px</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <span style="font-size:0.72rem; color:var(--text-muted);">Background Dimming</span>
+          <input type="range" min="20" max="90" step="5" value="62" id="visCoverDimSlider" class="lt-volume-slider" oninput="updateCoverDim(this.value)" style="width:160px;">
+          <span id="visCoverDimVal" style="font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub); min-width:36px;">62%</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <div>
+            <div style="font-size:0.75rem; color:#fff;">Reactive Bass Pulse</div>
+            <div style="font-size:0.66rem; color:var(--text-sub);">Subtle breathing pulse on heavy beats</div>
+          </div>
+          <label style="display:flex; align-items:center; cursor:pointer;">
+            <input type="checkbox" id="visCoverPulseToggle" checked style="accent-color:var(--accent); width:16px; height:16px;" onchange="updateCoverPulseToggle(this.checked)">
+          </label>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        <button class="btn-kinetic btn-flat" style="padding:10px; flex:1; justify-content:center; color:var(--text-muted);" onclick="resetVisualizerSettings()">
+          Reset Defaults
+        </button>
+        <button class="btn-kinetic btn-primary" style="padding:10px; flex:2; justify-content:center;" onclick="closeVisualizerModal()">
+          Done
+        </button>
+      </div>
     </div>
   </div>
 
@@ -3800,6 +3877,40 @@ HTML_INDEX = """<!DOCTYPE html>
 
     let lastVolWheelTime = 0;
     let volWheelVelocity = 1.0;
+    let volTarget = null;
+    let volAnimFrame = null;
+
+    function animateVolumeToTarget() {
+      const slider = document.getElementById('liveVolumeSlider');
+      if (!slider || volTarget === null) return;
+      let current = parseFloat(slider.value);
+      const diff = volTarget - current;
+      if (Math.abs(diff) < 0.003) {
+        slider.value = volTarget.toFixed(2);
+        applyVolumeGain(volTarget);
+        volTarget = null;
+        volAnimFrame = null;
+        return;
+      }
+      // Smooth exponential glide towards target
+      const step = diff * 0.35;
+      current += step;
+      slider.value = current.toFixed(3);
+      applyVolumeGain(current);
+      volAnimFrame = requestAnimationFrame(animateVolumeToTarget);
+    }
+
+    function applyVolumeGain(val) {
+      const v = Math.max(0, Math.min(1, parseFloat(val)));
+      const audio = document.getElementById('liveAudio');
+      if (audio) audio.volume = v;
+      if (masterGainNode) masterGainNode.gain.value = v;
+      const pctEl = document.getElementById('liveVolPercent');
+      if (pctEl) pctEl.innerText = `${Math.round(v * 100)}%`;
+      try {
+        localStorage.setItem('jv_live_volume', String(v.toFixed(2)));
+      } catch (e) {}
+    }
 
     function handleVolumeWheel(e) {
       e.preventDefault();
@@ -3810,34 +3921,40 @@ HTML_INDEX = """<!DOCTYPE html>
       const dt = now - lastVolWheelTime;
       lastVolWheelTime = now;
 
-      // Accelerated wheel scrolling:
-      // Scrolling slowly moves by 1% (0.01).
-      // Scrolling faster ramps up velocity smoothly up to 5x.
-      if (dt < 160) {
-        volWheelVelocity = Math.min(5.0, volWheelVelocity + 0.35);
+      // Accelerated wheel velocity:
+      // Deliberate scroll (>180ms): 1% per notch (0.01)
+      // Fast flicking (<55ms): scales up to 5%, ramping gradually through 2% and 3%
+      if (dt < 55) {
+        volWheelVelocity = Math.min(5.0, volWheelVelocity + 0.85);
+      } else if (dt < 115) {
+        volWheelVelocity = Math.min(3.5, volWheelVelocity + 0.45);
+      } else if (dt < 180) {
+        volWheelVelocity = Math.min(2.0, volWheelVelocity + 0.2);
       } else {
         volWheelVelocity = 1.0;
       }
 
-      const step = 0.01 * volWheelVelocity;
+      const stepPct = Math.max(1, Math.min(5, Math.round(volWheelVelocity)));
+      const step = stepPct / 100;
       const dir = (e.deltaY < 0) ? 1 : -1;
-      let newVol = parseFloat(slider.value) + (dir * step);
-      newVol = Math.max(0, Math.min(1, Math.round(newVol * 100) / 100));
 
-      slider.value = newVol;
-      updateLiveVolume(newVol);
+      let current = volTarget !== null ? volTarget : parseFloat(slider.value);
+      let nextVol = current + (dir * step);
+      nextVol = Math.max(0, Math.min(1, Math.round(nextVol * 100) / 100));
+
+      volTarget = nextVol;
+      if (!volAnimFrame) {
+        volAnimFrame = requestAnimationFrame(animateVolumeToTarget);
+      }
     }
 
     function updateLiveVolume(val) {
-      const v = parseFloat(val);
-      const audio = document.getElementById('liveAudio');
-      if (audio) audio.volume = v;
-      if (masterGainNode) masterGainNode.gain.value = v;
-      const pctEl = document.getElementById('liveVolPercent');
-      if (pctEl) pctEl.innerText = `${Math.round(v * 100)}%`;
-      try {
-        localStorage.setItem('jv_live_volume', String(v));
-      } catch (e) {}
+      if (volAnimFrame) {
+        cancelAnimationFrame(volAnimFrame);
+        volAnimFrame = null;
+      }
+      volTarget = null;
+      applyVolumeGain(val);
     }
 
     function syncLiveAudio(force = false) {
@@ -4109,6 +4226,7 @@ HTML_INDEX = """<!DOCTYPE html>
         document.getElementById('trackTitle').innerText = t.title || 'Untitled';
         document.getElementById('trackArtist').innerText = t.artist || 'Juice WRLD';
         document.getElementById('coverImg').src = t.cover_url || 'https://api.juicevault.xyz/favicon.ico';
+        updateCoverArtBackground(t.cover_url || 'https://api.juicevault.xyz/favicon.ico');
         document.getElementById('categoryBadge').innerText = t.is_soundboard ? 'SOUNDBOARD' : ((state.category_label || state.category || 'All').toUpperCase());
         document.getElementById('sourceBadge').innerText = t.is_soundboard ? 'MEME SOUND' : (t.is_external ? (t.source || 'External') : 'JuiceVault');
         document.getElementById('eqBadge').innerText = (state.effect || 'Flat').toUpperCase();
@@ -4154,6 +4272,7 @@ HTML_INDEX = """<!DOCTYPE html>
         currentTrackKey = '';
         document.getElementById('trackTitle').innerText = state.is_running ? 'Buffering archive…' : 'Player Inactive';
         document.getElementById('trackArtist').innerText = state.is_running ? 'Loading track' : 'Use Play to begin';
+        updateCoverArtBackground(null);
       }
 
       // Play/Pause button, ambient glow and soundwave state
@@ -5502,11 +5621,21 @@ HTML_INDEX = """<!DOCTYPE html>
 
       const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString() : '--';
 
+      // Active VC session stream time priority
+      const streamTimeToday = (stats.session && stats.session.active && stats.session.seconds > 60)
+        ? stats.session.formatted
+        : (daily.listening_formatted || '0m');
+
       // Header badge
       const hCount = document.getElementById('headerViewsCount');
       if (hCount) hCount.innerText = fmt(views.total) + ' views';
       const hDaily = document.getElementById('headerDailyCount');
       if (hDaily) hDaily.innerText = fmt(views.today) + ' today';
+
+      const sSubtitle = document.getElementById('statsSubtitle');
+      if (sSubtitle && stats.session && stats.session.active && stats.session.formatted) {
+        sSubtitle.innerText = `Continuous Voice Session: ${stats.session.formatted} • Real-time Bot Telemetry`;
+      }
 
       // Compact quick bar
       const qTot = document.getElementById('quickTotalViews');
@@ -5514,7 +5643,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const qDay = document.getElementById('quickDailyViews');
       if (qDay) qDay.innerText = fmt(views.today);
       const qTime = document.getElementById('quickDailyTime');
-      if (qTime) qTime.innerText = daily.listening_formatted || '0m';
+      if (qTime) qTime.innerText = streamTimeToday;
       const qTracks = document.getElementById('quickDailyTracks');
       if (qTracks) qTracks.innerText = fmt(daily.tracks_played);
 
@@ -5528,7 +5657,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const sSess = document.getElementById('statsSessionsNow');
       if (sSess) sSess.innerText = (views.active_sessions || 1) + ' active now';
       const sTime = document.getElementById('statsDailyTime');
-      if (sTime) sTime.innerText = daily.listening_formatted || '0m';
+      if (sTime) sTime.innerText = streamTimeToday;
       const sAllTime = document.getElementById('statsAllTimeTime');
       if (sAllTime) sAllTime.innerText = (allTime.listening_formatted || '0m') + ' total';
       const sTracks = document.getElementById('statsDailyTracks');
@@ -5554,7 +5683,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const cSess = document.getElementById('cardSessionsNow');
       if (cSess) cSess.innerText = (views.active_sessions || 1) + ' active';
       const cTime = document.getElementById('cardDailyTime');
-      if (cTime) cTime.innerText = daily.listening_formatted || '0m';
+      if (cTime) cTime.innerText = streamTimeToday;
       const cAllTime = document.getElementById('cardAllTimeTime');
       if (cAllTime) cAllTime.innerText = (allTime.listening_formatted || '0m') + ' total';
       const cTracks = document.getElementById('cardDailyTracks');
@@ -5761,9 +5890,14 @@ HTML_INDEX = """<!DOCTYPE html>
     ];
 
     let visEnabled = localStorage.getItem('jv_vis_enabled') !== 'false';
-    let visPreset = localStorage.getItem('jv_vis_preset') || 'vinyl_aura';
+    let visPreset = localStorage.getItem('jv_vis_preset') || 'aurora_mesh';
     let visOpacity = parseFloat(localStorage.getItem('jv_vis_opacity') || '0.75');
     let visSensitivity = parseFloat(localStorage.getItem('jv_vis_sensitivity') || '1.0');
+    let visCoverBgEnabled = localStorage.getItem('jv_vis_cover_bg') !== 'false';
+    let visCoverBlur = parseInt(localStorage.getItem('jv_vis_cover_blur') || '36', 10);
+    let visCoverDim = parseInt(localStorage.getItem('jv_vis_cover_dim') || '62', 10);
+    let visCoverPulse = localStorage.getItem('jv_vis_cover_pulse') !== 'false';
+    let currentCoverBgUrl = '';
     let visSimTime = 0;
     let visAnimFrame = null;
     let visStars = [];
@@ -5820,7 +5954,100 @@ HTML_INDEX = """<!DOCTYPE html>
       if (sensSlider) sensSlider.value = visSensitivity;
       const sensVal = document.getElementById('visSensVal');
       if (sensVal) sensVal.innerText = `${visSensitivity.toFixed(1)}x`;
+
+      const bgToggle = document.getElementById('visCoverBgToggle');
+      if (bgToggle) bgToggle.checked = visCoverBgEnabled;
+      const blurSlider = document.getElementById('visCoverBlurSlider');
+      if (blurSlider) blurSlider.value = visCoverBlur;
+      const blurVal = document.getElementById('visCoverBlurVal');
+      if (blurVal) blurVal.innerText = `${visCoverBlur}px`;
+      const dimSlider = document.getElementById('visCoverDimSlider');
+      if (dimSlider) dimSlider.value = visCoverDim;
+      const dimVal = document.getElementById('visCoverDimVal');
+      if (dimVal) dimVal.innerText = `${visCoverDim}%`;
+      const pulseToggle = document.getElementById('visCoverPulseToggle');
+      if (pulseToggle) pulseToggle.checked = visCoverPulse;
+
       updateVisualizerMasterBtnUI();
+    }
+
+    function updateCoverArtBackground(coverUrl) {
+      currentCoverBgUrl = coverUrl || '';
+      const bgContainer = document.getElementById('dynamicCoverBg');
+      const bgImg = document.getElementById('dynamicCoverImg');
+      if (!bgContainer || !bgImg) return;
+      if (coverUrl && visCoverBgEnabled) {
+        if (bgImg.src !== coverUrl) {
+          bgImg.src = coverUrl;
+        }
+        bgContainer.classList.add('active');
+      } else {
+        bgContainer.classList.remove('active');
+      }
+    }
+
+    function updateCoverBgToggle(enabled) {
+      visCoverBgEnabled = !!enabled;
+      try { localStorage.setItem('jv_vis_cover_bg', visCoverBgEnabled ? 'true' : 'false'); } catch (e) {}
+      const bgContainer = document.getElementById('dynamicCoverBg');
+      if (bgContainer) {
+        if (visCoverBgEnabled && currentCoverBgUrl) bgContainer.classList.add('active');
+        else bgContainer.classList.remove('active');
+      }
+    }
+
+    function updateCoverBlur(val) {
+      visCoverBlur = parseInt(val, 10);
+      try { localStorage.setItem('jv_vis_cover_blur', String(visCoverBlur)); } catch (e) {}
+      const bgImg = document.getElementById('dynamicCoverImg');
+      if (bgImg) bgImg.style.filter = `blur(${visCoverBlur}px) saturate(1.35)`;
+      const lbl = document.getElementById('visCoverBlurVal');
+      if (lbl) lbl.innerText = `${visCoverBlur}px`;
+    }
+
+    function updateCoverDim(val) {
+      visCoverDim = parseInt(val, 10);
+      try { localStorage.setItem('jv_vis_cover_dim', String(visCoverDim)); } catch (e) {}
+      const overlay = document.getElementById('dynamicCoverOverlay');
+      if (overlay) overlay.style.background = `rgba(9, 9, 13, ${visCoverDim / 100})`;
+      const lbl = document.getElementById('visCoverDimVal');
+      if (lbl) lbl.innerText = `${visCoverDim}%`;
+    }
+
+    function updateCoverPulseToggle(enabled) {
+      visCoverPulse = !!enabled;
+      try { localStorage.setItem('jv_vis_cover_pulse', visCoverPulse ? 'true' : 'false'); } catch (e) {}
+      if (!visCoverPulse) {
+        const bgImg = document.getElementById('dynamicCoverImg');
+        if (bgImg) bgImg.style.transform = 'scale(1.04)';
+      }
+    }
+
+    function resetVisualizerSettings() {
+      visPreset = 'aurora_mesh';
+      visOpacity = 0.75;
+      visSensitivity = 1.0;
+      visCoverBgEnabled = true;
+      visCoverBlur = 36;
+      visCoverDim = 62;
+      visCoverPulse = true;
+      try {
+        localStorage.setItem('jv_vis_preset', 'aurora_mesh');
+        localStorage.setItem('jv_vis_opacity', '0.75');
+        localStorage.setItem('jv_vis_sensitivity', '1.0');
+        localStorage.setItem('jv_vis_cover_bg', 'true');
+        localStorage.setItem('jv_vis_cover_blur', '36');
+        localStorage.setItem('jv_vis_cover_dim', '62');
+        localStorage.setItem('jv_vis_cover_pulse', 'true');
+      } catch (e) {}
+      updateVisualizerOpacity(visOpacity);
+      updateVisualizerSens(visSensitivity);
+      updateCoverBlur(visCoverBlur);
+      updateCoverDim(visCoverDim);
+      updateCoverBgToggle(true);
+      updateCoverPulseToggle(true);
+      openVisualizerModal();
+      showToast('Visualizer reset to Aurora Waves & defaults');
     }
 
     function closeVisualizerModal() {
@@ -5929,15 +6156,18 @@ HTML_INDEX = """<!DOCTYPE html>
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.0);
       const w = window.innerWidth;
       const h = window.innerHeight;
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
+      const bufW = Math.floor(w * dpr);
+      const bufH = Math.floor(h * dpr);
+      if (canvas.width !== bufW || canvas.height !== bufH) {
+        canvas.width = bufW;
+        canvas.height = bufH;
       }
 
       if (!visEnabled) {
-        ctx.clearRect(0, 0, w, h);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         const aura = document.getElementById('coverVisualizerAura');
         if (aura) aura.classList.remove('active');
         return;
@@ -5948,6 +6178,15 @@ HTML_INDEX = """<!DOCTYPE html>
       for (let i = 0; i < 8; i++) bassSum += bins[i];
       const avgBass = bassSum / 8;
       const bassRatio = Math.min(1.0, avgBass / 220);
+
+      // Reactive pulse for dynamic song cover background
+      if (visCoverBgEnabled && visCoverPulse) {
+        const bgImg = document.getElementById('dynamicCoverImg');
+        if (bgImg) {
+          const pScale = 1.04 + (bassRatio * 0.04);
+          bgImg.style.transform = `scale(${pScale.toFixed(3)})`;
+        }
+      }
 
       const coverWrap = document.getElementById('artContainer');
       const coverAura = document.getElementById('coverVisualizerAura');
@@ -5975,6 +6214,8 @@ HTML_INDEX = """<!DOCTYPE html>
         if (coverAura) coverAura.classList.remove('active');
       }
 
+      ctx.save();
+      ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, w, h);
 
       // PRESET 1: CYBER NEON BARS
@@ -6302,6 +6543,7 @@ HTML_INDEX = """<!DOCTYPE html>
           ctx.stroke();
         }
       }
+      ctx.restore();
     }
 
     document.addEventListener('visibilitychange', () => {
@@ -6462,6 +6704,13 @@ HTML_INDEX = """<!DOCTYPE html>
 
     // Restore persistent user settings
     try {
+      updateCoverBlur(visCoverBlur);
+      updateCoverDim(visCoverDim);
+      updateCoverBgToggle(visCoverBgEnabled);
+      updateCoverPulseToggle(visCoverPulse);
+      if (currentState && currentState.track && currentState.track.cover_url) {
+        updateCoverArtBackground(currentState.track.cover_url);
+      }
       const savedVol = localStorage.getItem('jv_live_volume');
       if (savedVol !== null) {
         const v = parseFloat(savedVol);

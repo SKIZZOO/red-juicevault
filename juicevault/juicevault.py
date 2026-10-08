@@ -370,8 +370,12 @@ class JuiceVault(commands.Cog):
         if voice and voice.is_connected():
             if voice.channel.id != channel.id:
                 await voice.move_to(channel)
+            if not hasattr(voice, "_jv_connected_at"):
+                voice._jv_connected_at = time.time()
             return voice
-        return await channel.connect(reconnect=True, timeout=30)
+        voice = await channel.connect(reconnect=True, timeout=30)
+        voice._jv_connected_at = time.time()
+        return voice
 
     async def _wait_for_voice_idle(self, voice):
         if not voice:
@@ -1224,6 +1228,27 @@ class JuiceVault(commands.Cog):
         lines = [f"**all** — {sum(counts.values())}"]
         lines.extend(f"**{name}** — {count}" for name, count in sorted(counts.items()))
         await ctx.send("🎚️ JuiceVault categories:\n" + "\n".join(lines[:50]))
+
+    @jv.command(name="streamtime")
+    async def set_stream_time(self, ctx, hours: float = None):
+        """View or adjust stream time telemetry hours (e.g. 4jv streamtime or 4jv streamtime 350)."""
+        web = getattr(self, "web_remote", None)
+        if not web:
+            await ctx.send("Web remote is not loaded.")
+            return
+        if hours is None:
+            stats = web.get_telemetry_stats(guild_id=ctx.guild.id)
+            today_fmt = stats.get("daily_usage", {}).get("listening_formatted", "0m")
+            all_fmt = stats.get("all_time", {}).get("listening_formatted", "0m")
+            session_fmt = stats.get("session", {}).get("formatted", "0m") if stats.get("session", {}).get("active") else "Inactive"
+            await ctx.send(f"📊 **JuiceVault Stream Time**:\n• Active VC Session: `{session_fmt}`\n• Today: `{today_fmt}`\n• All-Time: `{all_fmt}`\n\n*Tip: To update all-time baseline hours, use `4jv streamtime <hours>`.*")
+            return
+        if hours < 0:
+            await ctx.send("Stream time hours cannot be negative.")
+            return
+        total_sec = int(hours * 3600)
+        web.set_custom_stream_time(total_sec)
+        await ctx.send(f"✅ Stream time updated to **{hours:.1f} hours** ({total_sec:,} seconds).")
 
     @jv.command(name="category")
     async def category(self, ctx, *, category: str):

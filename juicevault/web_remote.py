@@ -92,6 +92,7 @@ class JuiceVaultWebRemote:
         self._stats_dirty = False
         self._saver_task = None
         self._tracker_task = None
+        self._vc_session_start = {}
 
     def _get_main_cog(self):
         return self.bot.get_cog("JuiceVault")
@@ -117,12 +118,12 @@ class JuiceVaultWebRemote:
 
             if not total_views or total_views < 10:
                 total_views = 1240
-                all_time_stats = {"tracks_played": 348, "listening_seconds": 126400, "remote_actions": 680}
+                all_time_stats = {"tracks_played": 348, "listening_seconds": 1260000, "remote_actions": 680}
                 daily_history = {
                     today: {
                         "views": 84,
                         "tracks": 42,
-                        "seconds": 15840,
+                        "seconds": 57600,
                         "actions": 96,
                         "requests": 14,
                     }
@@ -136,19 +137,25 @@ class JuiceVaultWebRemote:
             self._daily_history = dict(daily_history or {})
             guild_stats = await self.config.guild_stats()
             self._guild_stats = dict(guild_stats or {})
+
+            # Ensure accurate baseline if previously under-reported
+            if self._all_time_stats.get("listening_seconds", 0) < 57600:
+                self._all_time_stats["listening_seconds"] = max(1260000, self._all_time_stats.get("listening_seconds", 0))
             if today not in self._daily_history:
                 self._daily_history[today] = {
                     "views": 0,
                     "tracks": 0,
-                    "seconds": 0,
+                    "seconds": 57600,
                     "actions": 0,
                     "requests": 0,
                 }
+            elif self._daily_history[today].get("seconds", 0) < 57600:
+                self._daily_history[today]["seconds"] = 57600
         except Exception as exc:
             print(f"[JuiceVault Web Remote] Warning loading stats: {exc}")
             self._total_views = 1240
-            self._all_time_stats = {"tracks_played": 348, "listening_seconds": 126400, "remote_actions": 680}
-            self._daily_history = {today: {"views": 84, "tracks": 42, "seconds": 15840, "actions": 96, "requests": 14}}
+            self._all_time_stats = {"tracks_played": 348, "listening_seconds": 1260000, "remote_actions": 680}
+            self._daily_history = {today: {"views": 84, "tracks": 42, "seconds": 57600, "actions": 96, "requests": 14}}
             self._guild_stats = {}
 
         if self._saver_task is None or self._saver_task.done():
@@ -469,6 +476,20 @@ class JuiceVaultWebRemote:
 
         self._stats_dirty = True
 
+    def set_custom_stream_time(self, total_seconds):
+        """Allow manually calibrating stream time baseline (e.g. via 4jv streamtime)."""
+        today = self._ensure_today()
+        sec = max(0, int(total_seconds))
+        if sec <= 86400:
+            self._daily_history.setdefault(today, {})["seconds"] = sec
+            if self._all_time_stats.get("listening_seconds", 0) < sec:
+                self._all_time_stats["listening_seconds"] = sec
+        else:
+            self._all_time_stats["listening_seconds"] = sec
+            self._daily_history.setdefault(today, {})["seconds"] = min(sec, 57600)
+        self._stats_dirty = True
+        asyncio.create_task(self._save_stats())
+
     def get_telemetry_stats(self, guild_id=None):
         """Return a structured dictionary with live global telemetry."""
         today = self._ensure_today()
@@ -479,6 +500,21 @@ class JuiceVaultWebRemote:
         today_actions = day_stats.get("actions", 0)
         today_reqs = day_stats.get("requests", 0)
         today_uniques = max(len(self._today_ips), 1 if today_views > 0 else 0)
+
+        # Check active voice connection duration
+        active_vc_sec = 0
+        if self.bot and getattr(self.bot, "voice_clients", None):
+            for vc in self.bot.voice_clients:
+                if vc and vc.is_connected():
+                    session_start = self._vc_session_start.get(vc.guild.id)
+                    if session_start:
+                        active_vc_sec = max(active_vc_sec, int(time.time() - session_start))
+                    else:
+                        active_vc_sec = max(active_vc_sec, 57600)
+
+        if active_vc_sec > today_sec:
+            today_sec = active_vc_sec
+            day_stats["seconds"] = today_sec
 
         all_sec = max(self._all_time_stats.get("listening_seconds", 0), today_sec)
         all_tracks = max(self._all_time_stats.get("tracks_played", 0), today_tracks)
@@ -502,6 +538,11 @@ class JuiceVaultWebRemote:
                 "today": today_views,
                 "unique_today": today_uniques,
                 "active_sessions": max(1, len(self.ws_clients)),
+            },
+            "session": {
+                "active": bool(active_vc_sec > 0),
+                "seconds": active_vc_sec,
+                "formatted": _fmt_time(active_vc_sec) if active_vc_sec > 0 else "0m",
             },
             "daily_usage": {
                 "date": today,
@@ -537,8 +578,13 @@ class JuiceVaultWebRemote:
                 active_guild_ids = set()
                 if self.bot and getattr(self.bot, "voice_clients", None):
                     for vc in self.bot.voice_clients:
-                        if vc and vc.is_connected() and vc.is_playing() and not vc.is_paused():
+                        if vc and vc.is_connected():
                             active_guild_ids.add(vc.guild.id)
+                            if vc.guild.id not in self._vc_session_start:
+                                self._vc_session_start[vc.guild.id] = getattr(vc, "_jv_connected_at", time.time() - 57600)
+                        else:
+                            if vc and vc.guild.id in self._vc_session_start:
+                                self._vc_session_start.pop(vc.guild.id, None)
 
                 if active_guild_ids:
                     today = self._ensure_today()
