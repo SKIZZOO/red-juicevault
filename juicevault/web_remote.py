@@ -2407,7 +2407,9 @@ class JuiceVaultWebRemote:
                         resp_data = l_json.get("data") or {}
                         return web.json_response({
                             "success": True,
+                            "ok": True,
                             "user": resp_data.get("user"),
+                            "token": resp_data.get("accessToken"),
                             "accessToken": resp_data.get("accessToken"),
                             "refreshToken": resp_data.get("refreshToken")
                         })
@@ -2465,9 +2467,10 @@ class JuiceVaultWebRemote:
                                     "cover_url": f"https://api.juicevault.xyz/cdn/music/covers/{x.get('songId') or (x.get('song') or {}).get('id')}"
                                 } for x in likes_list]
                             })
-            return web.json_response({"success": True, "playlists": playlists})
+            likes_payload = (playlists[0].get("songs") if playlists and playlists[0].get("is_liked_playlist") else [])
+            return web.json_response({"success": True, "ok": True, "playlists": playlists, "likes": likes_payload})
         except Exception as e:
-            return web.json_response({"error": str(e), "playlists": []}, status=500)
+            return web.json_response({"error": str(e), "ok": False, "playlists": [], "likes": []}, status=500)
 
 
 

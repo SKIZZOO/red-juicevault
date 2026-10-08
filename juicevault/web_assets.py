@@ -6489,7 +6489,7 @@ HTML_INDEX = """<!DOCTYPE html>
     let currentVolWheelCurve = 'adaptive';
     let soundboardPreviewEnabled = false;
     let soundboardPreviewVol = 0.75;
-    let lockScreenControlsEnabled = true;
+    lockScreenControlsEnabled = true;
     let auroraDefaultEnabled = true;
 
     function loadSettings() {
@@ -8091,8 +8091,12 @@ HTML_INDEX = """<!DOCTYPE html>
     } catch (e) {}
 
     // Initialize JuiceVault account, playlists & favorites
-    initJuiceVaultUser();
-    loadJuiceVaultPlaylists();
+    try {
+      initJuiceVaultUser();
+      loadJuiceVaultPlaylists();
+    } catch (e) {
+      console.warn('JuiceVault user/playlist init error:', e);
+    }
 
     // Startup
     fetchTelemetry();
