@@ -1934,20 +1934,81 @@ HTML_INDEX = """<!DOCTYPE html>
       text-transform: uppercase;
       white-space: nowrap;
     }
-    .vis-tag.accent {
-      background: rgba(168, 85, 247, 0.2);
+    .vis-tag.accent,
+    .vis-tag.ambient,
+    .vis-tag.cover {
+      background: rgba(168, 85, 247, 0.18);
       color: #c084fc;
       border: 1px solid rgba(168, 85, 247, 0.3);
     }
-    .vis-tag.ambient {
-      background: rgba(56, 189, 248, 0.15);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.3);
+    .vis-pad-container {
+      width: 140px;
+      height: 95px;
+      background: #09090e;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      position: relative;
+      cursor: crosshair;
+      user-select: none;
+      touch-action: none;
+      flex-shrink: 0;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.6);
     }
-    .vis-tag.cover {
-      background: rgba(244, 63, 94, 0.15);
-      color: #fb7185;
-      border: 1px solid rgba(244, 63, 94, 0.3);
+    .vis-pad-grid-line-x {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+    }
+    .vis-pad-grid-line-y {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+    }
+    .vis-pad-puck {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 10px var(--accent-glow);
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .vis-theme-chip {
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.18s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .vis-theme-chip.active {
+      border-color: var(--accent);
+      color: #fff;
+      background: rgba(168, 85, 247, 0.18);
+      box-shadow: 0 0 8px rgba(168, 85, 247, 0.3);
+    }
+    .vis-theme-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
     }
 
     /* Global Network Telemetry Header Bar */
@@ -4142,7 +4203,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
   <!-- Visualizer Studio Modal Sheet -->
   <div class="sheet-backdrop" id="visualizerModal" onclick="if(event.target===this) closeVisualizerModal()">
-    <div class="sheet-panel" style="max-width:540px;">
+    <div class="sheet-panel" style="max-width:580px; max-height:88vh; overflow-y:auto;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <div style="display:flex; align-items:center; gap:10px;">
           <div class="cat-icon-badge" style="width:36px; height:36px; border-radius:10px; background:var(--accent-muted); border:1px solid rgba(168,85,247,0.3); color:var(--accent);">
@@ -4153,7 +4214,7 @@ HTML_INDEX = """<!DOCTYPE html>
               <div style="font-weight:700; font-size:0.95rem; color:#fff;">Audio Reactive Visualizer</div>
               <span class="lt-sync-badge live" id="visActiveBadge">Active</span>
             </div>
-            <div style="font-size:0.72rem; color:var(--text-sub); margin-top:1px;">10 Presets • Background &amp; Album Art Dynamics</div>
+            <div style="font-size:0.72rem; color:var(--text-sub); margin-top:1px;">10 Presets • Custom Positioning, Zoom &amp; Dynamics</div>
           </div>
         </div>
         <button class="btn-kinetic btn-circle btn-action-sm" onclick="closeVisualizerModal()">
@@ -4176,7 +4237,71 @@ HTML_INDEX = """<!DOCTYPE html>
       <div style="font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-sub); margin-bottom:6px;">Select Preset</div>
       <div class="vis-preset-grid" id="visPresetList"></div>
 
-      <!-- Sliders for Intensity & Sensitivity -->
+      <!-- Geometry & Positioning Studio (Move it around & Zoom) -->
+      <div style="font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-sub); margin-bottom:6px;">Geometry &amp; Position (Zoom, Move &amp; Rotate)</div>
+      <div style="display:flex; flex-direction:column; gap:12px; padding:12px 14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:var(--radius-sm); margin-bottom:14px;">
+        <!-- 2D Touchpad & Quick Anchors -->
+        <div style="display:flex; gap:12px; align-items:center;">
+          <div id="visPadContainer" class="vis-pad-container" title="Drag to position visualizer in 2D space">
+            <div class="vis-pad-grid-line-x"></div>
+            <div class="vis-pad-grid-line-y"></div>
+            <div id="visPadPuck" class="vis-pad-puck"></div>
+          </div>
+          <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:0.68rem; color:var(--text-sub); font-weight:600;">Position Anchors:</span>
+              <button class="btn-kinetic btn-flat" style="padding:2px 7px; font-size:0.65rem;" onclick="setVisualizerAnchor('center')">Center</button>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:4px;">
+              <button class="btn-kinetic btn-flat" style="padding:4px 6px; font-size:0.68rem; justify-content:center;" onclick="setVisualizerAnchor('behind_art')">Behind Art</button>
+              <button class="btn-kinetic btn-flat" style="padding:4px 6px; font-size:0.68rem; justify-content:center;" onclick="setVisualizerAnchor('top')">Top</button>
+              <button class="btn-kinetic btn-flat" style="padding:4px 6px; font-size:0.68rem; justify-content:center;" onclick="setVisualizerAnchor('bottom')">Bottom</button>
+              <button class="btn-kinetic btn-flat" style="padding:4px 6px; font-size:0.68rem; justify-content:center;" onclick="setVisualizerAnchor('left')">Left</button>
+              <button class="btn-kinetic btn-flat" style="padding:4px 6px; font-size:0.68rem; justify-content:center;" onclick="setVisualizerAnchor('right')">Right</button>
+              <button class="btn-kinetic btn-flat" style="padding:4px 6px; font-size:0.68rem; justify-content:center;" onclick="setVisualizerAnchor('reset')">Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Position Sliders -->
+        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:10px;">
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px;">
+              <span>Move X</span>
+              <span id="visOffsetXVal" style="font-family:'JetBrains Mono',monospace; color:var(--text-sub);">0px</span>
+            </div>
+            <input type="range" min="-400" max="400" step="5" value="0" id="visOffsetXSlider" class="lt-volume-slider" oninput="updateVisualizerOffset(this.value, visOffsetY)" style="width:100%;">
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px;">
+              <span>Move Y</span>
+              <span id="visOffsetYVal" style="font-family:'JetBrains Mono',monospace; color:var(--text-sub);">0px</span>
+            </div>
+            <input type="range" min="-350" max="350" step="5" value="0" id="visOffsetYSlider" class="lt-volume-slider" oninput="updateVisualizerOffset(visOffsetX, this.value)" style="width:100%;">
+          </div>
+        </div>
+
+        <!-- Zoom & Rotation Sliders -->
+        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:10px;">
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px;">
+              <span>Zoom / Scale</span>
+              <span id="visZoomVal" style="font-family:'JetBrains Mono',monospace; color:var(--text-sub);">1.00x</span>
+            </div>
+            <input type="range" min="0.3" max="3.0" step="0.05" value="1.0" id="visZoomSlider" class="lt-volume-slider" oninput="updateVisualizerZoom(this.value)" style="width:100%;">
+          </div>
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px;">
+              <span>Rotation</span>
+              <span id="visRotationVal" style="font-family:'JetBrains Mono',monospace; color:var(--text-sub);">0°</span>
+            </div>
+            <input type="range" min="-180" max="180" step="5" value="0" id="visRotationSlider" class="lt-volume-slider" oninput="updateVisualizerRotation(this.value)" style="width:100%;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Atmosphere & Visual Dynamics -->
+      <div style="font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-sub); margin-bottom:6px;">Atmosphere &amp; Dynamics</div>
       <div style="display:flex; flex-direction:column; gap:10px; padding:12px 14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:var(--radius-sm); margin-bottom:14px;">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
           <span style="font-size:0.72rem; color:var(--text-muted);">Background Opacity</span>
@@ -4184,9 +4309,44 @@ HTML_INDEX = """<!DOCTYPE html>
           <span id="visOpacityVal" style="font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub); min-width:32px;">75%</span>
         </div>
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <span style="font-size:0.72rem; color:var(--text-muted);">Neon Glow &amp; Bloom</span>
+          <input type="range" min="0" max="35" step="1" value="14" id="visGlowSlider" class="lt-volume-slider" oninput="updateVisualizerGlow(this.value)" style="width:160px;">
+          <span id="visGlowVal" style="font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub); min-width:32px;">14px</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
           <span style="font-size:0.72rem; color:var(--text-muted);">Motion Sensitivity</span>
-          <input type="range" min="0.5" max="2" step="0.1" value="1" id="visSensSlider" class="lt-volume-slider" oninput="updateVisualizerSens(this.value)" style="width:160px;">
+          <input type="range" min="0.3" max="2.5" step="0.1" value="1" id="visSensSlider" class="lt-volume-slider" oninput="updateVisualizerSens(this.value)" style="width:160px;">
           <span id="visSensVal" style="font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub); min-width:32px;">1.0x</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <span style="font-size:0.72rem; color:var(--text-muted);">Animation Speed</span>
+          <input type="range" min="0.25" max="2.5" step="0.1" value="1.0" id="visSpeedSlider" class="lt-volume-slider" oninput="updateVisualizerSpeed(this.value)" style="width:160px;">
+          <span id="visSpeedVal" style="font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub); min-width:32px;">1.0x</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <span style="font-size:0.72rem; color:var(--text-muted);">Line / Bar Thickness</span>
+          <input type="range" min="1" max="8" step="0.5" value="2.5" id="visThicknessSlider" class="lt-volume-slider" oninput="updateVisualizerThickness(this.value)" style="width:160px;">
+          <span id="visThicknessVal" style="font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub); min-width:32px;">2.5px</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.05);">
+          <span style="font-size:0.72rem; color:var(--text-muted);">Color Accent</span>
+          <div style="display:flex; gap:5px; flex-wrap:wrap;">
+            <button class="vis-theme-chip active" data-theme="purple" onclick="setVisualizerTheme('purple')">
+              <span class="vis-theme-dot" style="background:#a855f7;"></span>Purple
+            </button>
+            <button class="vis-theme-chip" data-theme="cyber" onclick="setVisualizerTheme('cyber')">
+              <span class="vis-theme-dot" style="background:#f43f5e;"></span>Neon
+            </button>
+            <button class="vis-theme-chip" data-theme="cyan" onclick="setVisualizerTheme('cyan')">
+              <span class="vis-theme-dot" style="background:#38bdf8;"></span>Cyan
+            </button>
+            <button class="vis-theme-chip" data-theme="emerald" onclick="setVisualizerTheme('emerald')">
+              <span class="vis-theme-dot" style="background:#10b981;"></span>Emerald
+            </button>
+            <button class="vis-theme-chip" data-theme="white" onclick="setVisualizerTheme('white')">
+              <span class="vis-theme-dot" style="background:#ffffff;"></span>White
+            </button>
+          </div>
         </div>
       </div>
 
@@ -4770,11 +4930,14 @@ HTML_INDEX = """<!DOCTYPE html>
     let delayNode = null;
     let delayFeedbackNode = null;
     let delayGainNode = null;
+    let delayDampFilter = null;
     let masterGainNode = null;
+    let limiterNode = null;
     let analyserNode = null;
     let visDataArray = null;
     let pannerAnimFrame = null;
     let pannerAngle = 0;
+    let lastRateSteerTime = 0;
 
     function initWebAudio() {
       if (audioCtx) {
@@ -4786,8 +4949,8 @@ HTML_INDEX = """<!DOCTYPE html>
       try {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!AudioContextClass) return;
-        const isGecko = navigator.userAgent.toLowerCase().includes('firefox') || navigator.userAgent.toLowerCase().includes('zen');
-        audioCtx = new AudioContextClass(isGecko ? { latencyHint: 'playback' } : {});
+        // latencyHint: 'playback' gives a generous, stable buffer that prevents buffer-under-run pops
+        audioCtx = new AudioContextClass({ latencyHint: 'playback' });
         const audio = document.getElementById('liveAudio');
         if (!audio) return;
         audioSourceNode = audioCtx.createMediaElementSource(audio);
@@ -4810,17 +4973,22 @@ HTML_INDEX = """<!DOCTYPE html>
           stereoPannerNode = audioCtx.createStereoPanner();
         }
 
-        // 4. Delay / Echo Node
+        // 4. Delay / Echo Node with anti-feedback lowpass damping filter
         delayNode = audioCtx.createDelay(1.0);
         delayNode.delayTime.value = 0.25;
         delayFeedbackNode = audioCtx.createGain();
-        delayFeedbackNode.gain.value = 0.35;
+        delayFeedbackNode.gain.value = 0.32;
         delayGainNode = audioCtx.createGain();
         delayGainNode.gain.value = 0;
 
-        // Feedback loop
+        delayDampFilter = audioCtx.createBiquadFilter();
+        delayDampFilter.type = 'lowpass';
+        delayDampFilter.frequency.value = 3200;
+
+        // Damped feedback loop to prevent DC accumulation and runaway static clicks
         delayNode.connect(delayFeedbackNode);
-        delayFeedbackNode.connect(delayNode);
+        delayFeedbackNode.connect(delayDampFilter);
+        delayDampFilter.connect(delayNode);
         delayNode.connect(delayGainNode);
 
         // 5. Master Gain Node (for accurate hardware volume control)
@@ -4828,8 +4996,15 @@ HTML_INDEX = """<!DOCTYPE html>
         const curVol = parseFloat(document.getElementById('liveVolumeSlider')?.value || 1);
         masterGainNode.gain.value = curVol;
 
+        // 6. Studio Dynamics Peak Limiter: prevents DAC digital clipping pops on bass peaks
+        limiterNode = audioCtx.createDynamicsCompressor();
+        limiterNode.threshold.value = -0.5; // -0.5 dBfs safety ceiling
+        limiterNode.knee.value = 6.0;
+        limiterNode.ratio.value = 20.0;     // transparent peak limiting
+        limiterNode.attack.value = 0.003;   // 3ms attack catches sharp transients
+        limiterNode.release.value = 0.080;  // 80ms fast recovery
+
         // Audio graph routing:
-        // audioSourceNode -> bassFilterNode -> subFilterNode -> (stereoPanner or direct) -> masterGainNode -> destination
         let lastNode = audioSourceNode;
         lastNode.connect(bassFilterNode);
         lastNode = bassFilterNode;
@@ -4850,7 +5025,9 @@ HTML_INDEX = """<!DOCTYPE html>
         analyserNode.smoothingTimeConstant = 0.82;
         visDataArray = new Uint8Array(analyserNode.frequencyBinCount);
 
-        masterGainNode.connect(analyserNode);
+        // Route through limiter before output destination to stop all clipping crackle
+        masterGainNode.connect(limiterNode);
+        limiterNode.connect(analyserNode);
         analyserNode.connect(audioCtx.destination);
       } catch (err) {
         console.warn('Web Audio API initialization failed:', err);
@@ -4864,11 +5041,22 @@ HTML_INDEX = """<!DOCTYPE html>
 
       initWebAudio();
 
-      // Reset speed & pitch
-      audio.playbackRate = 1.0;
-      if ('preservesPitch' in audio) audio.preservesPitch = true;
-      if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = true;
-      if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = true;
+      // Disable pitch preservation time-stretching during standard playback:
+      // Browser WSOLA time-stretch engines chop audio into grains and create metallic white noise dots & popping
+      // whenever clock-sync speed adjustments happen. Direct sample-rate resampling is pure and click-free.
+      audio.preservesPitch = false;
+      if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = false;
+      if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = false;
+
+      const isNight = eff.includes('night');
+      const isSlow = eff.includes('slow');
+      if (isNight) {
+        audio.playbackRate = 1.22;
+      } else if (isSlow) {
+        audio.playbackRate = 0.86;
+      } else {
+        audio.playbackRate = 1.0;
+      }
 
       if (pannerAnimFrame) {
         cancelAnimationFrame(pannerAnimFrame);
@@ -4882,21 +5070,12 @@ HTML_INDEX = """<!DOCTYPE html>
       if (subFilterNode) subFilterNode.gain.value = 0;
       if (delayGainNode) delayGainNode.gain.value = 0;
 
-      if (eff.includes('night')) {
-        audio.preservesPitch = false;
-        audio.mozPreservesPitch = false;
-        audio.webkitPreservesPitch = false;
-        audio.playbackRate = 1.22;
-      } else if (eff.includes('slow')) {
-        audio.preservesPitch = false;
-        audio.mozPreservesPitch = false;
-        audio.webkitPreservesPitch = false;
-        audio.playbackRate = 0.86;
-      } else if (eff.includes('virtual') || eff.includes('sub')) {
-        if (bassFilterNode) bassFilterNode.gain.value = 16;
-        if (subFilterNode) subFilterNode.gain.value = 10;
+      // Studio-calibrated clean boost values to prevent clipping
+      if (eff.includes('virtual') || eff.includes('sub')) {
+        if (bassFilterNode) bassFilterNode.gain.value = 8;
+        if (subFilterNode) subFilterNode.gain.value = 4;
       } else if (eff.includes('8d')) {
-        if (bassFilterNode) bassFilterNode.gain.value = 4;
+        if (bassFilterNode) bassFilterNode.gain.value = 3;
         if (stereoPannerNode) {
           const run8D = () => {
             if (!liveStreamActive) return;
@@ -4907,13 +5086,13 @@ HTML_INDEX = """<!DOCTYPE html>
           run8D();
         }
       } else if (eff.includes('echo') || eff.includes('reverb')) {
-        if (delayGainNode) delayGainNode.gain.value = 0.45;
+        if (delayGainNode) delayGainNode.gain.value = 0.35;
       } else if (eff.includes('wide') || eff.includes('stereo')) {
         if (bassFilterNode) bassFilterNode.gain.value = 3;
-        if (delayGainNode) delayGainNode.gain.value = 0.18;
+        if (delayGainNode) delayGainNode.gain.value = 0.15;
       } else if (eff.includes('bass')) {
-        if (bassFilterNode) bassFilterNode.gain.value = 11;
-        if (subFilterNode) subFilterNode.gain.value = 4;
+        if (bassFilterNode) bassFilterNode.gain.value = 7;
+        if (subFilterNode) subFilterNode.gain.value = 3;
       }
     }
 
@@ -5066,7 +5245,17 @@ HTML_INDEX = """<!DOCTYPE html>
       const v = Math.max(0, Math.min(1, parseFloat(val)));
       const audio = document.getElementById('liveAudio');
       if (audio) audio.volume = v;
-      if (masterGainNode) masterGainNode.gain.value = v;
+      if (masterGainNode) {
+        if (audioCtx && audioCtx.state === 'running') {
+          try {
+            masterGainNode.gain.setTargetAtTime(v, audioCtx.currentTime, 0.012);
+          } catch (_) {
+            masterGainNode.gain.value = v;
+          }
+        } else {
+          masterGainNode.gain.value = v;
+        }
+      }
       const pctEl = document.getElementById('liveVolPercent');
       if (pctEl) pctEl.innerText = `${Math.round(v * 100)}%`;
       const slider = document.getElementById('liveVolumeSlider');
@@ -5283,19 +5472,18 @@ HTML_INDEX = """<!DOCTYPE html>
           driftLabel.innerText = (driftMs >= 0 ? `+${driftMs}ms` : `${driftMs}ms`);
         }
 
-        const isGecko = navigator.userAgent.toLowerCase().includes('firefox') || navigator.userAgent.toLowerCase().includes('zen');
-        let deadband = 0.08;
-        let hardSeekThreshold = 1.5;
-        let maxSteer = 0.05;
+        let deadband = 0.18;
+        let hardSeekThreshold = 2.2;
+        let maxSteer = 0.025;
 
         if (currentLatencyMode === 'low') {
-          deadband = 0.035;
-          hardSeekThreshold = 1.0;
-          maxSteer = 0.06;
-        } else if (currentLatencyMode === 'stable' || isGecko) {
-          deadband = 0.22;
-          hardSeekThreshold = 2.5;
+          deadband = 0.08;
+          hardSeekThreshold = 1.4;
           maxSteer = 0.035;
+        } else if (currentLatencyMode === 'stable' || isGecko) {
+          deadband = 0.28;
+          hardSeekThreshold = 2.8;
+          maxSteer = 0.018;
         }
 
         const statusText = document.getElementById('ltStatusText');
@@ -5310,25 +5498,31 @@ HTML_INDEX = """<!DOCTYPE html>
           if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
         }
 
+        const nowMs = performance.now();
         if (Math.abs(drift) > hardSeekThreshold) {
           // Large drift -> Hard seek directly to Discord master position
           const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
           try { audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek)); } catch (e) {}
-          if (Math.abs(audio.playbackRate - speed) > 0.005) {
+          if (Math.abs(audio.playbackRate - speed) > 0.003) {
             audio.playbackRate = speed;
           }
+          lastRateSteerTime = nowMs;
           if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
         } else if (Math.abs(drift) > deadband) {
-          // Micro-drift: Proportional rate steering with rate hysteresis to avoid buffer churn
-          const steer = Math.min(maxSteer, Math.max(0.012, Math.abs(drift) * 0.10));
-          const targetRate = (drift < 0) ? (speed * (1 + steer)) : (speed * (1 - steer));
-          if (Math.abs(audio.playbackRate - targetRate) > (isGecko ? 0.015 : 0.004)) {
-            audio.playbackRate = targetRate;
+          // Micro-drift: Gentle proportional steering with 1.2s cooldown to avoid rate fluttering & click artifacts
+          if (nowMs - lastRateSteerTime > 1200) {
+            const steer = Math.min(maxSteer, Math.max(0.006, Math.abs(drift) * 0.05));
+            const targetRate = (drift < 0) ? (speed * (1 + steer)) : (speed * (1 - steer));
+            if (Math.abs(audio.playbackRate - targetRate) > 0.004) {
+              audio.playbackRate = targetRate;
+              lastRateSteerTime = nowMs;
+            }
           }
         } else {
-          // Locked in exact 1:1 sync (within deadband)
-          if (Math.abs(audio.playbackRate - speed) > 0.008) {
+          // Locked in exact sync (within deadband): settle cleanly onto nominal speed
+          if (Math.abs(audio.playbackRate - speed) > 0.003) {
             audio.playbackRate = speed;
+            lastRateSteerTime = nowMs;
           }
         }
 
@@ -7993,10 +8187,57 @@ HTML_INDEX = """<!DOCTYPE html>
       { id: 'hyper_tunnel', name: 'Hyperdrive Warp Tunnel', desc: 'Infinite geometric tunnel rings zooming outward', tag: 'Background' }
     ];
 
+    const VIS_THEME_PALETTES = {
+      purple: {
+        primary: '#c084fc',
+        secondary: '#a855f7',
+        glow: '#a855f7',
+        rgb: '168, 85, 247',
+        rgbAlt: '192, 132, 252'
+      },
+      cyber: {
+        primary: '#f43f5e',
+        secondary: '#e11d48',
+        glow: '#f43f5e',
+        rgb: '244, 63, 94',
+        rgbAlt: '251, 113, 133'
+      },
+      cyan: {
+        primary: '#38bdf8',
+        secondary: '#0284c7',
+        glow: '#38bdf8',
+        rgb: '56, 189, 248',
+        rgbAlt: '14, 165, 233'
+      },
+      emerald: {
+        primary: '#34d399',
+        secondary: '#059669',
+        glow: '#10b981',
+        rgb: '52, 211, 153',
+        rgbAlt: '16, 185, 129'
+      },
+      white: {
+        primary: '#ffffff',
+        secondary: '#94a3b8',
+        glow: '#e2e8f0',
+        rgb: '255, 255, 255',
+        rgbAlt: '226, 232, 240'
+      }
+    };
+
     let visEnabled = localStorage.getItem('jv_vis_enabled') !== 'false';
     let visPreset = localStorage.getItem('jv_vis_preset') || 'aurora_mesh';
     let visOpacity = parseFloat(localStorage.getItem('jv_vis_opacity') || '0.75');
     let visSensitivity = parseFloat(localStorage.getItem('jv_vis_sensitivity') || '1.0');
+    let visZoom = parseFloat(localStorage.getItem('jv_vis_zoom') || '1.0');
+    let visOffsetX = parseFloat(localStorage.getItem('jv_vis_offset_x') || '0');
+    let visOffsetY = parseFloat(localStorage.getItem('jv_vis_offset_y') || '0');
+    let visRotation = parseFloat(localStorage.getItem('jv_vis_rotation') || '0');
+    let visGlow = parseFloat(localStorage.getItem('jv_vis_glow') || '14');
+    let visSpeed = parseFloat(localStorage.getItem('jv_vis_speed') || '1.0');
+    let visLineThickness = parseFloat(localStorage.getItem('jv_vis_thickness') || '2.5');
+    let visColorTheme = localStorage.getItem('jv_vis_theme') || 'purple';
+    let isDraggingVisPad = false;
     let visCoverBgEnabled = localStorage.getItem('jv_vis_cover_bg') !== 'false';
     let visCoverBlur = parseInt(localStorage.getItem('jv_vis_cover_blur') || '36', 10);
     let visCoverDim = parseInt(localStorage.getItem('jv_vis_cover_dim') || '62', 10);
@@ -8007,6 +8248,154 @@ HTML_INDEX = """<!DOCTYPE html>
     let visStars = [];
     let visGridOffset = 0;
     let visPeaks = new Float32Array(64);
+
+    function updateVisualizerZoom(val) {
+      visZoom = Math.max(0.3, Math.min(3.0, parseFloat(val) || 1.0));
+      try { localStorage.setItem('jv_vis_zoom', String(visZoom.toFixed(2))); } catch (_) {}
+      const zSlider = document.getElementById('visZoomSlider');
+      if (zSlider) zSlider.value = visZoom;
+      const zVal = document.getElementById('visZoomVal');
+      if (zVal) zVal.innerText = `${visZoom.toFixed(2)}x`;
+    }
+
+    function updateVisualizerRotation(val) {
+      visRotation = Math.max(-180, Math.min(180, parseInt(val, 10) || 0));
+      try { localStorage.setItem('jv_vis_rotation', String(visRotation)); } catch (_) {}
+      const rSlider = document.getElementById('visRotationSlider');
+      if (rSlider) rSlider.value = visRotation;
+      const rVal = document.getElementById('visRotationVal');
+      if (rVal) rVal.innerText = `${visRotation}°`;
+    }
+
+    function updateVisualizerGlow(val) {
+      visGlow = Math.max(0, Math.min(35, parseFloat(val) || 14));
+      try { localStorage.setItem('jv_vis_glow', String(visGlow)); } catch (_) {}
+      const gSlider = document.getElementById('visGlowSlider');
+      if (gSlider) gSlider.value = visGlow;
+      const gVal = document.getElementById('visGlowVal');
+      if (gVal) gVal.innerText = `${Math.round(visGlow)}px`;
+    }
+
+    function updateVisualizerSpeed(val) {
+      visSpeed = Math.max(0.2, Math.min(2.5, parseFloat(val) || 1.0));
+      try { localStorage.setItem('jv_vis_speed', String(visSpeed.toFixed(2))); } catch (_) {}
+      const spSlider = document.getElementById('visSpeedSlider');
+      if (spSlider) spSlider.value = visSpeed;
+      const spVal = document.getElementById('visSpeedVal');
+      if (spVal) spVal.innerText = `${visSpeed.toFixed(1)}x`;
+    }
+
+    function updateVisualizerThickness(val) {
+      visLineThickness = Math.max(1, Math.min(8, parseFloat(val) || 2.5));
+      try { localStorage.setItem('jv_vis_thickness', String(visLineThickness.toFixed(1))); } catch (_) {}
+      const thSlider = document.getElementById('visThicknessSlider');
+      if (thSlider) thSlider.value = visLineThickness;
+      const thVal = document.getElementById('visThicknessVal');
+      if (thVal) thVal.innerText = `${visLineThickness.toFixed(1)}px`;
+    }
+
+    function setVisualizerTheme(themeName) {
+      visColorTheme = themeName;
+      try { localStorage.setItem('jv_vis_theme', themeName); } catch (_) {}
+      document.querySelectorAll('.vis-theme-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.getAttribute('data-theme') === themeName);
+      });
+      showToast(`Visualizer Theme: ${themeName.toUpperCase()}`);
+    }
+
+    function updateVisualizerOffset(x, y) {
+      visOffsetX = Math.max(-400, Math.min(400, parseInt(x, 10) || 0));
+      visOffsetY = Math.max(-350, Math.min(350, parseInt(y, 10) || 0));
+      try {
+        localStorage.setItem('jv_vis_offset_x', String(visOffsetX));
+        localStorage.setItem('jv_vis_offset_y', String(visOffsetY));
+      } catch (_) {}
+
+      const xSlider = document.getElementById('visOffsetXSlider');
+      if (xSlider) xSlider.value = visOffsetX;
+      const xVal = document.getElementById('visOffsetXVal');
+      if (xVal) xVal.innerText = `${visOffsetX > 0 ? '+' : ''}${visOffsetX}px`;
+
+      const ySlider = document.getElementById('visOffsetYSlider');
+      if (ySlider) ySlider.value = visOffsetY;
+      const yVal = document.getElementById('visOffsetYVal');
+      if (yVal) yVal.innerText = `${visOffsetY > 0 ? '+' : ''}${visOffsetY}px`;
+
+      // Update touchpad puck position
+      const pad = document.getElementById('visPadContainer');
+      const puck = document.getElementById('visPadPuck');
+      if (pad && puck) {
+        const padW = pad.clientWidth || 140;
+        const padH = pad.clientHeight || 95;
+        const normX = (visOffsetX / 800) + 0.5;
+        const normY = (visOffsetY / 700) + 0.5;
+        puck.style.left = `${Math.max(7, Math.min(padW - 7, normX * padW))}px`;
+        puck.style.top = `${Math.max(7, Math.min(padH - 7, normY * padH))}px`;
+      }
+    }
+
+    function setVisualizerAnchor(anchor) {
+      if (anchor === 'center' || anchor === 'reset') {
+        updateVisualizerOffset(0, 0);
+      } else if (anchor === 'behind_art') {
+        const coverWrap = document.getElementById('artContainer');
+        if (coverWrap) {
+          const rect = coverWrap.getBoundingClientRect();
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          updateVisualizerOffset(Math.round(cx - (w / 2)), Math.round(cy - (h / 2)));
+        } else {
+          updateVisualizerOffset(0, 0);
+        }
+      } else if (anchor === 'top') {
+        updateVisualizerOffset(0, -180);
+      } else if (anchor === 'bottom') {
+        updateVisualizerOffset(0, 180);
+      } else if (anchor === 'left') {
+        updateVisualizerOffset(-200, 0);
+      } else if (anchor === 'right') {
+        updateVisualizerOffset(200, 0);
+      }
+      if (navigator.vibrate) navigator.vibrate(8);
+    }
+
+    function initVisualizerTouchpad() {
+      const pad = document.getElementById('visPadContainer');
+      if (!pad || pad._jv_bound) return;
+      pad._jv_bound = true;
+
+      function handlePadMove(e) {
+        const rect = pad.getBoundingClientRect();
+        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        const relX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+        const relY = Math.max(0, Math.min(rect.height, clientY - rect.top));
+        
+        const offX = Math.round(((relX / rect.width) - 0.5) * 800);
+        const offY = Math.round(((relY / rect.height) - 0.5) * 700);
+        updateVisualizerOffset(offX, offY);
+      }
+
+      pad.addEventListener('pointerdown', (e) => {
+        isDraggingVisPad = true;
+        pad.setPointerCapture(e.pointerId);
+        handlePadMove(e);
+      });
+      pad.addEventListener('pointermove', (e) => {
+        if (isDraggingVisPad) handlePadMove(e);
+      });
+      pad.addEventListener('pointerup', (e) => {
+        if (isDraggingVisPad) {
+          isDraggingVisPad = false;
+          try { pad.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+      });
+      pad.addEventListener('pointercancel', () => {
+        isDraggingVisPad = false;
+      });
+    }
 
     function initVisualizerStars() {
       visStars = [];
@@ -8058,6 +8447,38 @@ HTML_INDEX = """<!DOCTYPE html>
       if (sensSlider) sensSlider.value = visSensitivity;
       const sensVal = document.getElementById('visSensVal');
       if (sensVal) sensVal.innerText = `${visSensitivity.toFixed(1)}x`;
+
+      const zSlider = document.getElementById('visZoomSlider');
+      if (zSlider) zSlider.value = visZoom;
+      const zVal = document.getElementById('visZoomVal');
+      if (zVal) zVal.innerText = `${visZoom.toFixed(2)}x`;
+
+      const rSlider = document.getElementById('visRotationSlider');
+      if (rSlider) rSlider.value = visRotation;
+      const rVal = document.getElementById('visRotationVal');
+      if (rVal) rVal.innerText = `${visRotation}°`;
+
+      const gSlider = document.getElementById('visGlowSlider');
+      if (gSlider) gSlider.value = visGlow;
+      const gVal = document.getElementById('visGlowVal');
+      if (gVal) gVal.innerText = `${Math.round(visGlow)}px`;
+
+      const spSlider = document.getElementById('visSpeedSlider');
+      if (spSlider) spSlider.value = visSpeed;
+      const spVal = document.getElementById('visSpeedVal');
+      if (spVal) spVal.innerText = `${visSpeed.toFixed(1)}x`;
+
+      const thSlider = document.getElementById('visThicknessSlider');
+      if (thSlider) thSlider.value = visLineThickness;
+      const thVal = document.getElementById('visThicknessVal');
+      if (thVal) thVal.innerText = `${visLineThickness.toFixed(1)}px`;
+
+      updateVisualizerOffset(visOffsetX, visOffsetY);
+      initVisualizerTouchpad();
+
+      document.querySelectorAll('.vis-theme-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.getAttribute('data-theme') === visColorTheme);
+      });
 
       const bgToggle = document.getElementById('visCoverBgToggle');
       if (bgToggle) bgToggle.checked = visCoverBgEnabled;
@@ -8131,6 +8552,14 @@ HTML_INDEX = """<!DOCTYPE html>
       visPreset = 'aurora_mesh';
       visOpacity = 0.75;
       visSensitivity = 1.0;
+      visZoom = 1.0;
+      visOffsetX = 0;
+      visOffsetY = 0;
+      visRotation = 0;
+      visGlow = 14;
+      visSpeed = 1.0;
+      visLineThickness = 2.5;
+      visColorTheme = 'purple';
       visCoverBgEnabled = true;
       visCoverBlur = 36;
       visCoverDim = 62;
@@ -8139,6 +8568,14 @@ HTML_INDEX = """<!DOCTYPE html>
         localStorage.setItem('jv_vis_preset', 'aurora_mesh');
         localStorage.setItem('jv_vis_opacity', '0.75');
         localStorage.setItem('jv_vis_sensitivity', '1.0');
+        localStorage.setItem('jv_vis_zoom', '1.0');
+        localStorage.setItem('jv_vis_offset_x', '0');
+        localStorage.setItem('jv_vis_offset_y', '0');
+        localStorage.setItem('jv_vis_rotation', '0');
+        localStorage.setItem('jv_vis_glow', '14');
+        localStorage.setItem('jv_vis_speed', '1.0');
+        localStorage.setItem('jv_vis_thickness', '2.5');
+        localStorage.setItem('jv_vis_theme', 'purple');
         localStorage.setItem('jv_vis_cover_bg', 'true');
         localStorage.setItem('jv_vis_cover_blur', '36');
         localStorage.setItem('jv_vis_cover_dim', '62');
@@ -8146,6 +8583,13 @@ HTML_INDEX = """<!DOCTYPE html>
       } catch (e) {}
       updateVisualizerOpacity(visOpacity);
       updateVisualizerSens(visSensitivity);
+      updateVisualizerZoom(visZoom);
+      updateVisualizerRotation(visRotation);
+      updateVisualizerGlow(visGlow);
+      updateVisualizerSpeed(visSpeed);
+      updateVisualizerThickness(visLineThickness);
+      setVisualizerTheme(visColorTheme);
+      updateVisualizerOffset(0, 0);
       updateCoverBlur(visCoverBlur);
       updateCoverDim(visCoverDim);
       updateCoverBgToggle(true);
@@ -8227,6 +8671,7 @@ HTML_INDEX = """<!DOCTYPE html>
     function getActiveFrequencies() {
       const bins = new Uint8Array(64);
       if (liveStreamActive && analyserNode && visDataArray) {
+        visSimTime += 0.016 * visSpeed;
         analyserNode.getByteFrequencyData(visDataArray);
         for (let i = 0; i < 64; i++) {
           const idx = Math.floor((i / 64) * visDataArray.length * 0.85);
@@ -8237,7 +8682,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const isPlaying = !!(currentState && currentState.is_playing);
       const speed = (currentState && currentState.track && currentState.track.effect_speed) || 1.0;
       // Calm, fluid ambient motion when not actively streaming in browser
-      visSimTime += isPlaying ? (0.016 * speed) : 0.004;
+      visSimTime += (isPlaying ? (0.016 * speed) : 0.004) * visSpeed;
       for (let i = 0; i < 64; i++) {
         if (!isPlaying) {
           bins[i] = Math.max(0, Math.floor(8 + Math.sin(visSimTime + i * 0.2) * 5));
@@ -8310,9 +8755,9 @@ HTML_INDEX = """<!DOCTYPE html>
       if (['vinyl_aura', 'glass_ribbons', 'sunburst_orbit'].includes(visPreset)) {
         if (coverAura) {
           coverAura.classList.add('active');
-          const scale = 1.0 + (bassRatio * 0.18);
-          coverAura.style.transform = `scale(${scale})`;
-          coverAura.style.opacity = `${0.35 + bassRatio * 0.6}`;
+          const scale = (1.0 + (bassRatio * 0.18)) * visZoom;
+          coverAura.style.transform = `translate(${visOffsetX}px, ${visOffsetY}px) scale(${scale}) rotate(${visRotation}deg)`;
+          coverAura.style.opacity = `${(0.35 + bassRatio * 0.6) * visOpacity}`;
         }
       } else {
         if (coverAura) coverAura.classList.remove('active');
@@ -8321,6 +8766,19 @@ HTML_INDEX = """<!DOCTYPE html>
       ctx.save();
       ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, w, h);
+
+      // Apply user transform matrix (offset, zoom, rotation around preset origin)
+      const originX = ['vinyl_aura', 'glass_ribbons', 'sunburst_orbit'].includes(visPreset) ? cx : (w / 2);
+      const originY = ['vinyl_aura', 'glass_ribbons', 'sunburst_orbit'].includes(visPreset) ? cy : (h / 2);
+
+      ctx.translate(originX + visOffsetX, originY + visOffsetY);
+      ctx.scale(visZoom, visZoom);
+      if (visRotation !== 0) {
+        ctx.rotate((visRotation * Math.PI) / 180);
+      }
+      ctx.translate(-originX, -originY);
+
+      const pal = VIS_THEME_PALETTES[visColorTheme] || VIS_THEME_PALETTES.purple;
 
       // PRESET 1: CYBER NEON BARS
       if (visPreset === 'cyber_bars') {
@@ -8342,9 +8800,9 @@ HTML_INDEX = """<!DOCTYPE html>
           const peakY = baseY - Math.max(4, ((visPeaks[i] || 0) / 255) * maxH) - 4;
 
           const grad = ctx.createLinearGradient(0, y, 0, baseY);
-          grad.addColorStop(0, '#c084fc');
-          grad.addColorStop(0.5, '#a855f7');
-          grad.addColorStop(1, 'rgba(107, 33, 168, 0.2)');
+          grad.addColorStop(0, pal.primary);
+          grad.addColorStop(0.5, pal.secondary);
+          grad.addColorStop(1, `rgba(${pal.rgb}, 0.2)`);
 
           ctx.fillStyle = grad;
           if (ctx.roundRect) {
@@ -8356,7 +8814,7 @@ HTML_INDEX = """<!DOCTYPE html>
           }
 
           ctx.fillStyle = '#fff';
-          ctx.fillRect(x, peakY, barW, 2.5);
+          ctx.fillRect(x, peakY, barW, Math.max(1.5, visLineThickness));
         }
       }
 
@@ -8377,10 +8835,10 @@ HTML_INDEX = """<!DOCTYPE html>
           ctx.lineTo(x, y);
         }
 
-        ctx.strokeStyle = '#c084fc';
-        ctx.lineWidth = 3;
-        ctx.shadowColor = '#a855f7';
-        ctx.shadowBlur = 18;
+        ctx.strokeStyle = pal.primary;
+        ctx.lineWidth = visLineThickness;
+        ctx.shadowColor = pal.glow;
+        ctx.shadowBlur = visGlow;
         ctx.stroke();
         ctx.shadowBlur = 0;
       }
@@ -8394,10 +8852,10 @@ HTML_INDEX = """<!DOCTYPE html>
 
           ctx.beginPath();
           ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(192, 132, 252, ${0.18 + binVal * 0.45})`;
-          ctx.lineWidth = 2 + binVal * 3;
-          ctx.shadowColor = '#a855f7';
-          ctx.shadowBlur = 14;
+          ctx.strokeStyle = `rgba(${pal.rgbAlt}, ${0.18 + binVal * 0.45})`;
+          ctx.lineWidth = Math.max(1, visLineThickness * (0.8 + binVal * 1.2));
+          ctx.shadowColor = pal.glow;
+          ctx.shadowBlur = visGlow;
           ctx.stroke();
 
           const ticks = 16;
@@ -8411,7 +8869,7 @@ HTML_INDEX = """<!DOCTYPE html>
             ctx.moveTo(tx1, ty1);
             ctx.lineTo(tx2, ty2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = Math.max(1, visLineThickness * 0.6);
             ctx.stroke();
           }
         }
@@ -8442,14 +8900,14 @@ HTML_INDEX = """<!DOCTYPE html>
 
           const grad = ctx.createLinearGradient(0, baseWaveY - 80, 0, h);
           if (l === 0) {
-            grad.addColorStop(0, 'rgba(168, 85, 247, 0.28)');
-            grad.addColorStop(1, 'rgba(107, 33, 168, 0)');
+            grad.addColorStop(0, `rgba(${pal.rgb}, 0.32)`);
+            grad.addColorStop(1, `rgba(${pal.rgb}, 0)`);
           } else if (l === 1) {
-            grad.addColorStop(0, 'rgba(56, 189, 248, 0.24)');
-            grad.addColorStop(1, 'rgba(14, 165, 233, 0)');
+            grad.addColorStop(0, `rgba(${pal.rgbAlt}, 0.24)`);
+            grad.addColorStop(1, `rgba(${pal.rgbAlt}, 0)`);
           } else {
-            grad.addColorStop(0, 'rgba(244, 63, 94, 0.2)');
-            grad.addColorStop(1, 'rgba(225, 29, 72, 0)');
+            grad.addColorStop(0, `rgba(${pal.rgb}, 0.16)`);
+            grad.addColorStop(1, `rgba(${pal.rgb}, 0)`);
           }
           ctx.fillStyle = grad;
           ctx.fill();
@@ -8459,7 +8917,7 @@ HTML_INDEX = """<!DOCTYPE html>
       // PRESET 5: QUANTUM STARFIELD (Website Background)
       else if (visPreset === 'quantum_stars') {
         if (!visStars.length) initVisualizerStars();
-        const speed = 2 + bassRatio * 18;
+        const speed = (2 + bassRatio * 18) * visSpeed;
 
         for (let s of visStars) {
           s.z -= speed;
@@ -8479,9 +8937,9 @@ HTML_INDEX = """<!DOCTYPE html>
 
             ctx.beginPath();
             ctx.arc(px, py, size, 0, Math.PI * 2);
-            ctx.fillStyle = s.hue === 275 ? `rgba(192, 132, 252, ${alpha})` : `rgba(56, 189, 248, ${alpha})`;
-            ctx.shadowColor = s.hue === 275 ? '#a855f7' : '#38bdf8';
-            ctx.shadowBlur = 8;
+            ctx.fillStyle = s.hue === 275 ? `rgba(${pal.rgbAlt}, ${alpha})` : `rgba(${pal.rgb}, ${alpha})`;
+            ctx.shadowColor = pal.glow;
+            ctx.shadowBlur = Math.min(visGlow, 14);
             ctx.fill();
           }
         }
@@ -8491,7 +8949,7 @@ HTML_INDEX = """<!DOCTYPE html>
       // PRESET 6: RETRO SYNTHWAVE GRID (Website Background)
       else if (visPreset === 'synthwave_grid') {
         const horizonY = h * 0.62;
-        visGridOffset = (visGridOffset + 2 + bassRatio * 6) % 36;
+        visGridOffset = (visGridOffset + (2 + bassRatio * 6) * visSpeed) % 36;
 
         ctx.beginPath();
         ctx.moveTo(0, horizonY);
@@ -8503,9 +8961,9 @@ HTML_INDEX = """<!DOCTYPE html>
         }
         ctx.lineTo(w, horizonY);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(168, 85, 247, 0.12)';
-        ctx.strokeStyle = '#c084fc';
-        ctx.lineWidth = 1.5;
+        ctx.fillStyle = `rgba(${pal.rgb}, 0.12)`;
+        ctx.strokeStyle = pal.primary;
+        ctx.lineWidth = Math.max(1, visLineThickness * 0.6);
         ctx.stroke();
         ctx.fill();
 
@@ -8516,8 +8974,8 @@ HTML_INDEX = """<!DOCTYPE html>
             ctx.beginPath();
             ctx.moveTo(0, renderY);
             ctx.lineTo(w, renderY);
-            ctx.strokeStyle = `rgba(192, 132, 252, ${0.1 + progress * 0.4})`;
-            ctx.lineWidth = 1 + progress * 1.5;
+            ctx.strokeStyle = `rgba(${pal.rgbAlt}, ${0.1 + progress * 0.4})`;
+            ctx.lineWidth = Math.max(1, (1 + progress * 1.5) * (visLineThickness / 2.5));
             ctx.stroke();
           }
         }
@@ -8527,8 +8985,8 @@ HTML_INDEX = """<!DOCTYPE html>
           ctx.beginPath();
           ctx.moveTo(w / 2 + i * 18, horizonY);
           ctx.lineTo(w / 2 + i * 75, h);
-          ctx.strokeStyle = 'rgba(168, 85, 247, 0.22)';
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = `rgba(${pal.rgb}, 0.22)`;
+          ctx.lineWidth = Math.max(0.75, visLineThickness * 0.4);
           ctx.stroke();
         }
       }
@@ -8551,10 +9009,10 @@ HTML_INDEX = """<!DOCTYPE html>
             ctx.lineTo(x, y);
           }
 
-          ctx.strokeStyle = r === 0 ? 'rgba(192, 132, 252, 0.55)' : (r === 1 ? 'rgba(56, 189, 248, 0.45)' : 'rgba(244, 63, 94, 0.4)');
-          ctx.lineWidth = 3 + bassRatio * 4;
-          ctx.shadowColor = '#a855f7';
-          ctx.shadowBlur = 16;
+          ctx.strokeStyle = r === 0 ? `rgba(${pal.rgbAlt}, 0.55)` : (r === 1 ? `rgba(${pal.rgb}, 0.45)` : 'rgba(255, 255, 255, 0.35)');
+          ctx.lineWidth = Math.max(1, (3 + bassRatio * 4) * (visLineThickness / 2.5));
+          ctx.shadowColor = pal.glow;
+          ctx.shadowBlur = visGlow;
           ctx.stroke();
         }
         ctx.shadowBlur = 0;
@@ -8596,9 +9054,12 @@ HTML_INDEX = """<!DOCTYPE html>
           ctx.beginPath();
           ctx.moveTo(arcCx, arcCy);
           ctx.lineTo(nx, ny);
-          ctx.strokeStyle = val > 0.85 ? '#f43f5e' : '#c084fc';
-          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = val > 0.85 ? '#f43f5e' : pal.primary;
+          ctx.lineWidth = visLineThickness;
+          ctx.shadowColor = pal.glow;
+          ctx.shadowBlur = Math.min(visGlow, 10);
           ctx.stroke();
+          ctx.shadowBlur = 0;
 
           ctx.fillStyle = 'var(--text-sub)';
           ctx.font = '600 0.65rem JetBrains Mono, monospace';
@@ -8625,10 +9086,13 @@ HTML_INDEX = """<!DOCTYPE html>
           ctx.beginPath();
           ctx.moveTo(x1, y1);
           ctx.lineTo(x2, y2);
-          ctx.strokeStyle = `rgba(192, 132, 252, ${0.25 + val * 0.65})`;
-          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = `rgba(${pal.rgbAlt}, ${0.25 + val * 0.65})`;
+          ctx.lineWidth = visLineThickness;
+          ctx.shadowColor = pal.glow;
+          ctx.shadowBlur = Math.min(visGlow, 16);
           ctx.stroke();
         }
+        ctx.shadowBlur = 0;
       }
 
       // PRESET 10: HYPERDRIVE WARP TUNNEL (Background)
@@ -8642,10 +9106,13 @@ HTML_INDEX = """<!DOCTYPE html>
 
           ctx.beginPath();
           ctx.arc(cx, cy, r, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(168, 85, 247, ${alpha})`;
-          ctx.lineWidth = 1.5 + bassRatio * 3;
+          ctx.strokeStyle = `rgba(${pal.rgb}, ${alpha})`;
+          ctx.lineWidth = Math.max(1, (1.5 + bassRatio * 3) * (visLineThickness / 2.5));
+          ctx.shadowColor = pal.glow;
+          ctx.shadowBlur = Math.min(visGlow, 14);
           ctx.stroke();
         }
+        ctx.shadowBlur = 0;
       }
       ctx.restore();
     }
