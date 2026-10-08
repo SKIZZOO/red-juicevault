@@ -26,7 +26,7 @@ HTML_INDEX = """<!DOCTYPE html>
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #09090d;
@@ -78,7 +78,9 @@ HTML_INDEX = """<!DOCTYPE html>
       background-color: var(--bg) !important;
       color: var(--text) !important;
       color-scheme: dark !important;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       min-height: 100%;
       min-height: 100dvh;
       overflow-x: hidden;
@@ -201,6 +203,51 @@ HTML_INDEX = """<!DOCTYPE html>
       background: var(--danger);
       box-shadow: 0 0 8px var(--danger);
     }
+    /* Header Animated Visualizer Wave */
+    .header-visualizer-wave {
+      display: inline-flex;
+      align-items: center;
+      gap: 2.5px;
+      height: 18px;
+      padding: 0 4px;
+      margin-left: 2px;
+    }
+    .h-wave-bar {
+      width: 2.5px;
+      height: 4px;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: height 0.15s ease, background-color 0.2s ease;
+    }
+    .header-visualizer-wave.playing .h-wave-bar:nth-child(1) { animation: hWave 0.7s infinite alternate ease-in-out; }
+    .header-visualizer-wave.playing .h-wave-bar:nth-child(2) { animation: hWave 1.1s infinite alternate ease-in-out 0.2s; }
+    .header-visualizer-wave.playing .h-wave-bar:nth-child(3) { animation: hWave 0.85s infinite alternate ease-in-out 0.4s; }
+    .header-visualizer-wave.playing .h-wave-bar:nth-child(4) { animation: hWave 1.05s infinite alternate ease-in-out 0.1s; }
+    .header-visualizer-wave.playing .h-wave-bar:nth-child(5) { animation: hWave 0.75s infinite alternate ease-in-out 0.3s; }
+    @keyframes hWave {
+      0% { height: 3px; opacity: 0.5; }
+      100% { height: 16px; opacity: 1; filter: drop-shadow(0 0 4px var(--accent)); }
+    }
+    /* Header JuiceVault User Badge */
+    .header-user-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s, transform 0.18s;
+    }
+    .header-user-badge:hover {
+      border-color: var(--border-accent);
+      background: rgba(168, 85, 247, 0.12);
+    }
+    .header-user-avatar {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
     /* Layout Container: Responsive Mobile -> Desktop */
     .app-container {
       max-width: 1040px;
@@ -221,6 +268,12 @@ HTML_INDEX = """<!DOCTYPE html>
       }
       .desktop-segment {
         display: flex !important;
+        position: sticky;
+        top: 76px;
+        z-index: 25;
+        background: rgba(13, 13, 18, 0.94);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
       }
       .mobile-nav {
         display: none !important;
@@ -1389,12 +1442,44 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .lt-volume-slider {
       flex: 1;
-      height: 4px;
-      background: rgba(255, 255, 255, 0.12);
-      border-radius: 2px;
+      height: 5px;
+      background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--vol-fill, 100%), rgba(255, 255, 255, 0.12) var(--vol-fill, 100%), rgba(255, 255, 255, 0.12) 100%);
+      border-radius: 3px;
       accent-color: var(--accent);
       cursor: pointer;
       outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .lt-volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 8px var(--accent-glow);
+      cursor: pointer;
+      border: none;
+      transition: transform 0.08s ease;
+    }
+    .lt-volume-slider::-webkit-slider-thumb:hover,
+    .lt-volume-slider::-webkit-slider-thumb:active {
+      transform: scale(1.2);
+    }
+    .lt-volume-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      border: none;
+      box-shadow: 0 0 8px var(--accent-glow);
+      cursor: pointer;
+      transition: transform 0.08s ease;
+    }
+    .lt-volume-slider::-moz-range-thumb:hover,
+    .lt-volume-slider::-moz-range-thumb:active {
+      transform: scale(1.2);
     }
     .lt-vol-val {
       font-size: 0.69rem;
@@ -2101,10 +2186,22 @@ HTML_INDEX = """<!DOCTYPE html>
       </div>
       <div>
         <div class="brand-title">JuiceVault</div>
+        <div class="brand-sub" style="font-size:0.62rem; color:var(--text-muted); font-family:'JetBrains Mono',monospace; line-height:1; margin-top:1px;">by <span style="color:#c084fc;">SKIZZOO</span> • domain by <span style="color:#38bdf8;">Spinti</span></div>
       </div>
       <span class="brand-tag">REMOTE</span>
+      <div class="header-visualizer-wave" id="headerVisualizerWave" title="Active audio wave indicator">
+        <span class="h-wave-bar"></span>
+        <span class="h-wave-bar"></span>
+        <span class="h-wave-bar"></span>
+        <span class="h-wave-bar"></span>
+        <span class="h-wave-bar"></span>
+      </div>
     </div>
     <div class="header-meta">
+      <div class="status-badge header-user-badge" id="headerUserBadge" onclick="openUserModal()" title="JuiceVault.xyz Account — Tap to Connect">
+        <img id="headerUserAvatar" class="header-user-avatar" src="https://api.juicevault.xyz/favicon.ico" alt="Avatar">
+        <span id="headerUserName" style="max-width:88px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff;">Sign In</span>
+      </div>
       <div class="status-badge" id="guildBadge" onclick="openGuildModal()" title="Current Discord Server — Tap to Switch" style="cursor:pointer; transition:border-color 0.15s, background 0.15s;">
         <svg class="icon-svg" style="width:13px;height:13px;color:var(--accent);" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span id="guildBadgeName" style="max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff;">Server</span>
@@ -2274,10 +2371,10 @@ HTML_INDEX = """<!DOCTYPE html>
                 </button>
               </div>
             </div>
-            <div class="lt-controls-drawer" id="liveAudioControls" style="display:none;" onwheel="handleVolumeWheel(event)">
+            <div class="lt-controls-drawer" id="liveAudioControls" style="display:none;">
               <div class="lt-slider-wrap">
                 <svg class="icon-svg lt-vol-icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-                <input type="range" min="0" max="1" step="0.01" value="1" id="liveVolumeSlider" class="lt-volume-slider" oninput="updateLiveVolume(this.value)" onwheel="handleVolumeWheel(event)" aria-label="Stream volume">
+                <input type="range" min="0" max="1" step="any" value="1" id="liveVolumeSlider" class="lt-volume-slider" oninput="updateLiveVolume(this.value)" aria-label="Stream volume">
                 <span id="liveVolPercent" class="lt-vol-val">100%</span>
               </div>
               <div class="lt-drift-pill" title="Phase-Locked Loop clock offset vs Discord master audio">
@@ -2376,6 +2473,18 @@ HTML_INDEX = """<!DOCTYPE html>
             </div>
             <div class="track-list" id="upcomingList">
               <div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Loading queue…</div>
+            </div>
+          </div>
+
+          <div class="ui-card" style="margin-top:14px;">
+            <div class="section-header">
+              <span class="section-title">
+                <svg class="icon-svg" style="color:var(--text-sub);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Recently Played (Last 5 History) (<span id="historyCount">0</span>)
+              </span>
+            </div>
+            <div class="track-list" id="historyList">
+              <div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No recently played tracks yet.</div>
             </div>
           </div>
         </div>
@@ -3308,7 +3417,7 @@ HTML_INDEX = """<!DOCTYPE html>
     let searchMode = 'vault';
     let lockScreenActive = false;
     let lastQueueChecksum = '';
-    let currentQueueData = { requested: [], upcoming: [] };
+    let currentQueueData = { requested: [], upcoming: [], history: [] };
     let currentSearchResults = [];
     let isScrubbing = false;
     let currentTrackKey = '';
@@ -3882,20 +3991,23 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function animateVolumeToTarget() {
       const slider = document.getElementById('liveVolumeSlider');
-      if (!slider || volTarget === null) return;
-      let current = parseFloat(slider.value);
+      if (!slider || volTarget === null) {
+        volAnimFrame = null;
+        return;
+      }
+      let current = parseFloat(slider.value) || 0;
       const diff = volTarget - current;
-      if (Math.abs(diff) < 0.003) {
+      if (Math.abs(diff) < 0.002) {
         slider.value = volTarget.toFixed(2);
         applyVolumeGain(volTarget);
         volTarget = null;
         volAnimFrame = null;
         return;
       }
-      // Smooth exponential glide towards target
-      const step = diff * 0.35;
+      // Smooth responsive glide towards target
+      const step = diff * 0.32;
       current += step;
-      slider.value = current.toFixed(3);
+      slider.value = current.toFixed(4);
       applyVolumeGain(current);
       volAnimFrame = requestAnimationFrame(animateVolumeToTarget);
     }
@@ -3907,6 +4019,10 @@ HTML_INDEX = """<!DOCTYPE html>
       if (masterGainNode) masterGainNode.gain.value = v;
       const pctEl = document.getElementById('liveVolPercent');
       if (pctEl) pctEl.innerText = `${Math.round(v * 100)}%`;
+      const slider = document.getElementById('liveVolumeSlider');
+      if (slider) {
+        slider.style.setProperty('--vol-fill', `${(v * 100).toFixed(1)}%`);
+      }
       try {
         localStorage.setItem('jv_live_volume', String(v.toFixed(2)));
       } catch (e) {}
@@ -3914,6 +4030,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function handleVolumeWheel(e) {
       e.preventDefault();
+      e.stopPropagation();
       const slider = document.getElementById('liveVolumeSlider');
       if (!slider) return;
 
@@ -3922,23 +4039,23 @@ HTML_INDEX = """<!DOCTYPE html>
       lastVolWheelTime = now;
 
       // Accelerated wheel velocity:
-      // Deliberate scroll (>180ms): 1% per notch (0.01)
-      // Fast flicking (<55ms): scales up to 5%, ramping gradually through 2% and 3%
-      if (dt < 55) {
-        volWheelVelocity = Math.min(5.0, volWheelVelocity + 0.85);
-      } else if (dt < 115) {
-        volWheelVelocity = Math.min(3.5, volWheelVelocity + 0.45);
-      } else if (dt < 180) {
-        volWheelVelocity = Math.min(2.0, volWheelVelocity + 0.2);
-      } else {
+      // Deliberate scroll (>200ms): exactly 1% per notch (0.01)
+      // Rapid flicking: ramps up gradually: 2%, 3%, 4%, up to 5% max
+      if (dt > 220) {
         volWheelVelocity = 1.0;
+      } else if (dt < 65) {
+        volWheelVelocity = Math.min(5.0, volWheelVelocity + 0.45);
+      } else if (dt < 130) {
+        volWheelVelocity = Math.min(3.5, volWheelVelocity + 0.25);
+      } else {
+        volWheelVelocity = Math.min(2.0, volWheelVelocity + 0.12);
       }
 
       const stepPct = Math.max(1, Math.min(5, Math.round(volWheelVelocity)));
       const step = stepPct / 100;
       const dir = (e.deltaY < 0) ? 1 : -1;
 
-      let current = volTarget !== null ? volTarget : parseFloat(slider.value);
+      let current = volTarget !== null ? volTarget : (parseFloat(slider.value) || 0);
       let nextVol = current + (dir * step);
       nextVol = Math.max(0, Math.min(1, Math.round(nextVol * 100) / 100));
 
@@ -4290,6 +4407,9 @@ HTML_INDEX = """<!DOCTYPE html>
         soundwave.classList.remove('playing');
       }
 
+      const headerWave = document.getElementById('headerVisualizerWave');
+      if (headerWave) headerWave.classList.toggle('playing', !!state.is_playing);
+
       // Sync mobile mini-player bar
       const mini = document.getElementById('mobileMiniPlayer');
       if (mini && t) {
@@ -4439,7 +4559,7 @@ HTML_INDEX = """<!DOCTYPE html>
     let selectedQueueItem = null;
 
     function openTrackModalByIndex(source, index) {
-      const list = source === 'requested' ? currentQueueData.requested : currentQueueData.upcoming;
+      const list = source === 'requested' ? currentQueueData.requested : (source === 'history' ? currentQueueData.history : currentQueueData.upcoming);
       const t = list[index];
       if (!t) return;
       selectedQueueItem = {
@@ -4469,6 +4589,17 @@ HTML_INDEX = """<!DOCTYPE html>
       const { source, index, title } = selectedQueueItem;
       closeTrackModal();
       lastQueueChecksum = '';
+
+      if (source === 'history') {
+        if (actionType === 'play_now') {
+          replayHistoryTrack(index);
+        } else if (actionType === 'move_next') {
+          queueHistoryTrack(index);
+        } else {
+          showToast('History item cannot be removed');
+        }
+        return;
+      }
 
       try {
         if (actionType === 'remove') {
@@ -4515,6 +4646,11 @@ HTML_INDEX = """<!DOCTYPE html>
       const filter = queueFilterTerm;
       const reqList = document.getElementById('reqList');
       const upList = document.getElementById('upcomingList');
+      const histList = document.getElementById('historyList');
+      const histCountEl = document.getElementById('historyCount');
+      if (histCountEl) {
+        histCountEl.innerText = (currentQueueData.history || []).length;
+      }
       if (!reqList || !upList) return;
 
       const reqFiltered = filter
@@ -4556,6 +4692,74 @@ HTML_INDEX = """<!DOCTYPE html>
           ? '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No matching archive tracks.</div>'
           : '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Archive queue empty.</div>';
       }
+
+      if (histList) {
+        const histFiltered = filter
+          ? (currentQueueData.history || []).filter(t => (t.title && t.title.toLowerCase().includes(filter)) || (t.artist && t.artist.toLowerCase().includes(filter)))
+          : (currentQueueData.history || []);
+
+        if (histFiltered.length > 0) {
+          histList.innerHTML = histFiltered.map((t, idx) => `
+            <div class="track-card">
+              <div class="track-meta-col" style="cursor:pointer;" onclick="openTrackModalByIndex('history', ${idx})">
+                <div class="track-name">${escapeHtml(t.title || 'Untitled')}</div>
+                <div class="track-desc">${escapeHtml(t.artist || 'Juice WRLD')} • ${escapeHtml(t.length || '—')}</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <button class="btn-kinetic btn-flat" style="padding:4px 8px; font-size:0.7rem;" onclick="replayHistoryTrack(${idx})" title="Play this song right now">
+                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>Replay</span>
+                </button>
+                <button class="btn-kinetic btn-badge" style="padding:4px 8px; font-size:0.7rem;" onclick="queueHistoryTrack(${idx})" title="Add to Requested queue">
+                  <span>+ Add</span>
+                </button>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          histList.innerHTML = filter
+            ? '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No matching history tracks.</div>'
+            : '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No recently played tracks yet.</div>';
+        }
+      }
+    }
+
+    async function replayHistoryTrack(idx) {
+      const track = (currentQueueData.history || [])[idx];
+      showToast(track ? `Replaying: ${track.title}` : 'Replaying track...');
+      try {
+        const res = await fetch(`/api/queue/replay_history?${apiQuery()}`, {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ index: idx, guild_id: currentGuildId })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message || 'Replaying track');
+          loadQueue();
+        } else {
+          showToast(d.error || 'Replay failed');
+        }
+      } catch (err) {
+        showToast('Replay failed: ' + err.message);
+      }
+    }
+
+    async function queueHistoryTrack(idx) {
+      const track = (currentQueueData.history || [])[idx];
+      if (!track) return;
+      try {
+        const res = await fetch(`/api/queue/add?${apiQuery()}`, {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ track, play_now: false, guild_id: currentGuildId })
+        });
+        const d = await res.json();
+        showToast(d.message || `Added to queue: ${track.title}`);
+        loadQueue();
+      } catch (err) {
+        showToast('Queue failed: ' + err.message);
+      }
     }
 
     // Load Queue
@@ -4565,7 +4769,8 @@ HTML_INDEX = """<!DOCTYPE html>
         const data = await res.json();
         currentQueueData = {
           requested: data.requested || [],
-          upcoming: data.upcoming || []
+          upcoming: data.upcoming || [],
+          history: data.history || []
         };
         renderQueueLists();
       } catch (e) {
@@ -5362,6 +5567,12 @@ HTML_INDEX = """<!DOCTYPE html>
         userBtn.style.color = 'var(--accent)';
         userBtn.title = `Connected: @${user.username}`;
       }
+
+      const headerAvatar = document.getElementById('headerUserAvatar');
+      if (headerAvatar && user.avatar_url) headerAvatar.src = user.avatar_url;
+      const headerName = document.getElementById('headerUserName');
+      if (headerName) headerName.innerText = `@${user.username || user.display_name || 'User'}`;
+
       updateFavoriteButtonState();
     }
 
@@ -5386,6 +5597,12 @@ HTML_INDEX = """<!DOCTYPE html>
         userBtn.style.color = '';
         userBtn.title = 'JuiceVault Account';
       }
+
+      const headerAvatar = document.getElementById('headerUserAvatar');
+      if (headerAvatar) headerAvatar.src = 'https://api.juicevault.xyz/favicon.ico';
+      const headerName = document.getElementById('headerUserName');
+      if (headerName) headerName.innerText = 'Sign In';
+
       updateFavoriteButtonState();
       showToast('JuiceVault account disconnected');
     }
