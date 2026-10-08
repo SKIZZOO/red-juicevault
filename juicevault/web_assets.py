@@ -274,6 +274,7 @@ HTML_INDEX = """<!DOCTYPE html>
         background: rgba(13, 13, 18, 0.94);
         backdrop-filter: blur(16px);
         -webkit-backdrop-filter: blur(16px);
+        margin-bottom: 10px !important;
       }
       .mobile-nav {
         display: none !important;
@@ -761,7 +762,7 @@ HTML_INDEX = """<!DOCTYPE html>
       border-radius: 10px;
       padding: 3px;
       gap: 4px;
-      margin-bottom: 16px;
+      margin-bottom: 10px;
     }
     .segment-btn {
       flex: 1;
@@ -2463,44 +2464,68 @@ HTML_INDEX = """<!DOCTYPE html>
       flex-shrink: 0;
     }
 
-    /* Tab Onboarding & User Guide Cards */
-    .tab-tutorial-card {
-      background: linear-gradient(135deg, rgba(20, 20, 28, 0.96), rgba(14, 14, 20, 0.92));
-      border: 1px solid var(--border-accent);
-      border-radius: var(--radius-md);
+    /* Tab Onboarding & User Guide Popup Modal */
+    .tutorial-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 2100;
+      background: rgba(6, 6, 10, 0.78);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
       padding: 16px;
-      margin-bottom: 14px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tutorial-modal-backdrop.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .tutorial-popup-card {
+      background: linear-gradient(135deg, rgba(22, 22, 32, 0.98), rgba(13, 13, 19, 0.96));
+      border: 1px solid var(--border-accent);
+      border-radius: 18px;
+      padding: 22px 22px 20px;
+      max-width: 480px;
+      width: 100%;
       position: relative;
       overflow: hidden;
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-      transition: opacity 0.22s ease, transform 0.22s var(--ease);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65), 0 0 35px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      transform: scale(0.92) translateY(14px);
+      transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    .tab-tutorial-card::before {
+    .tutorial-modal-backdrop.active .tutorial-popup-card {
+      transform: scale(1) translateY(0);
+    }
+    .tutorial-popup-card::before {
       content: '';
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
-      height: 2px;
-      background: linear-gradient(90deg, var(--accent) 0%, rgba(168, 85, 247, 0.4) 60%, transparent 100%);
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent) 0%, rgba(168, 85, 247, 0.6) 60%, transparent 100%);
     }
-    .tab-tutorial-header {
+    .tutorial-popup-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
-      gap: 10px;
-      flex-wrap: wrap;
+      margin-bottom: 14px;
+      gap: 12px;
     }
-    .tab-tutorial-title-wrap {
+    .tutorial-popup-title-wrap {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
+      min-width: 0;
     }
-    .tab-tutorial-icon-box {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
+    .tutorial-popup-icon-box {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
       background: var(--accent-muted);
       border: 1px solid var(--border-accent);
       display: flex;
@@ -2508,28 +2533,35 @@ HTML_INDEX = """<!DOCTYPE html>
       justify-content: center;
       color: var(--accent);
       flex-shrink: 0;
+      box-shadow: 0 0 12px var(--accent-glow);
     }
-    .tab-tutorial-title {
-      font-size: 0.92rem;
-      font-weight: 700;
+    .tutorial-popup-title {
+      font-size: 0.96rem;
+      font-weight: 800;
       color: #fff;
       letter-spacing: -0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .tab-tutorial-sub {
+    .tutorial-popup-sub {
       font-size: 0.72rem;
-      color: var(--text-muted);
-      margin-top: 1px;
+      color: var(--text-sub);
+      margin-top: 2px;
     }
-    .tab-tutorial-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 10px;
+    .tutorial-popup-close {
+      flex-shrink: 0;
+    }
+    .tutorial-popup-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
       margin-bottom: 12px;
     }
     .tutorial-step-tile {
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 10px 12px;
       display: flex;
       flex-direction: column;
@@ -2537,74 +2569,66 @@ HTML_INDEX = """<!DOCTYPE html>
       transition: border-color 0.15s ease, background 0.15s ease;
     }
     .tutorial-step-tile:hover {
-      border-color: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.18);
       background: rgba(255, 255, 255, 0.05);
     }
     .tutorial-step-badge {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
       font-size: 0.67rem;
-      font-weight: 700;
+      font-weight: 800;
       color: var(--accent);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
       font-family: 'JetBrains Mono', monospace;
     }
     .tutorial-step-text {
       font-size: 0.76rem;
       color: var(--text-muted);
-      line-height: 1.42;
+      line-height: 1.44;
     }
     .tutorial-step-text strong {
       color: #f4f4f5;
       font-weight: 600;
     }
-    .tab-tutorial-footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
-      padding-top: 10px;
-      margin-top: 2px;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .tutorial-tip-pill {
-      font-size: 0.71rem;
+    .tutorial-step-text em {
       color: var(--text-sub);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex: 1;
-      min-width: 180px;
+      font-style: normal;
     }
-    .tutorial-tip-pill code {
+    .tutorial-popup-tip {
+      font-size: 0.72rem;
+      color: var(--text-sub);
+      background: rgba(168, 85, 247, 0.08);
+      border: 1px solid rgba(168, 85, 247, 0.22);
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+      line-height: 1.45;
+    }
+    .tutorial-popup-tip code {
       color: var(--accent);
-      background: rgba(168, 85, 247, 0.12);
+      background: rgba(168, 85, 247, 0.18);
       padding: 1px 5px;
       border-radius: 4px;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.68rem;
+      font-size: 0.7rem;
     }
-    .btn-tutorial-dismiss {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 5px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.15s ease;
+    .tutorial-popup-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      padding-top: 12px;
+      gap: 10px;
+    }
+    .tutorial-popup-badge {
+      font-size: 0.68rem;
+      color: var(--text-sub);
       display: inline-flex;
       align-items: center;
       gap: 5px;
-    }
-    .btn-tutorial-dismiss:hover {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
     }
     .btn-tab-help {
       background: transparent;
@@ -2911,12 +2935,11 @@ HTML_INDEX = """<!DOCTYPE html>
 
         <!-- TAB: QUEUE -->
         <div class="tab-content active" id="tab-queue">
-          <div class="search-input-group" style="margin-bottom:12px;">
-            <svg class="icon-svg" style="color:var(--text-sub); width:15px; height:15px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" class="search-field" id="queueFilterInput" placeholder="Filter queued tracks…" oninput="filterQueueDisplay(this.value)">
-          </div>
-
           <div class="ui-card" style="margin-bottom:14px;">
+            <div class="search-input-group" style="margin-bottom:12px;">
+              <svg class="icon-svg" style="color:var(--text-sub); width:15px; height:15px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" class="search-field" id="queueFilterInput" placeholder="Filter queued tracks…" oninput="filterQueueDisplay(this.value)">
+            </div>
             <div class="section-header">
               <span class="section-title">
                 <svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -2959,61 +2982,13 @@ HTML_INDEX = """<!DOCTYPE html>
 
         <!-- TAB: SEARCH -->
         <div class="tab-content" id="tab-search">
-          <!-- Search Tutorial Hero Card -->
-          <div class="tab-tutorial-card" id="tutorial-search">
-            <div class="tab-tutorial-header">
-              <div class="tab-tutorial-title-wrap">
-                <div class="tab-tutorial-icon-box">
-                  <svg class="icon-svg" style="width:16px;height:16px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                </div>
-                <div>
-                  <div class="tab-tutorial-title">Search Guide &amp; Track Explorer</div>
-                  <div class="tab-tutorial-sub">How to search 3,881+ unreleased songs &amp; queue on Discord</div>
-                </div>
-              </div>
-              <div style="display:flex; align-items:center; gap:6px;">
-                <span class="btn-badge" style="font-size:0.65rem;">Search Tips</span>
-                <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('search')">Got it</button>
-              </div>
-            </div>
-            <div class="tab-tutorial-grid">
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-                  Source Modes
-                </div>
-                <div class="tutorial-step-text">Toggle between <strong>JuiceVault Archive</strong> (3,881 studio sessions &amp; leaks) and <strong>Online</strong> (YouTube / SoundCloud).</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  Instant Actions
-                </div>
-                <div class="tutorial-step-text">Click any search result to open track options: <strong>Play Now</strong>, <strong>Play Next</strong> in queue, or <strong>Add to Queue</strong>.</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
-                  Fast Filtering
-                </div>
-                <div class="tutorial-step-text">Type title or era keywords and press <strong>Enter</strong>. Clear anytime using the <strong>(✕)</strong> button.</div>
-              </div>
-            </div>
-            <div class="tab-tutorial-footer">
-              <div class="tutorial-tip-pill">
-                <span>💡 Tip: Try searching <code>Rental</code>, <code>Autograph</code>, or <code>Sessions</code> for studio master recordings.</span>
-              </div>
-              <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('search')">Dismiss Guide</button>
-            </div>
-          </div>
-
           <div class="ui-card">
             <div class="section-header" style="margin-bottom:12px;">
               <span class="section-title">
                 <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 Track Search
               </span>
-              <button class="btn-tab-help" onclick="toggleTabTutorial('search')" title="Toggle Search Guide">
+              <button class="btn-tab-help" onclick="openTutorialPopup('search')" title="View Search Guide">
                 <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 <span>Guide</span>
               </button>
@@ -3048,54 +3023,6 @@ HTML_INDEX = """<!DOCTYPE html>
 
         <!-- TAB: CATEGORIES -->
         <div class="tab-content" id="tab-categories">
-          <!-- Library Tutorial Hero Card -->
-          <div class="tab-tutorial-card" id="tutorial-library">
-            <div class="tab-tutorial-header">
-              <div class="tab-tutorial-title-wrap">
-                <div class="tab-tutorial-icon-box">
-                  <svg class="icon-svg" style="width:16px;height:16px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-                </div>
-                <div>
-                  <div class="tab-tutorial-title">Library &amp; Vault Collections Guide</div>
-                  <div class="tab-tutorial-sub">Explore 8 eras, custom account playlists &amp; Discord queue shuffle</div>
-                </div>
-              </div>
-              <div style="display:flex; align-items:center; gap:6px;">
-                <span class="btn-badge" style="font-size:0.65rem;">Library Tips</span>
-                <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('library')">Got it</button>
-              </div>
-            </div>
-            <div class="tab-tutorial-grid">
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                  8 Vault Archives
-                </div>
-                <div class="tutorial-step-text">Select any era (2017, 2018, 2019, Sessions, Snippets, Acoustic) to make it the active archive.</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/></svg>
-                  Shuffle &amp; Play
-                </div>
-                <div class="tutorial-step-text">Click <strong>Shuffle &amp; Play</strong> to instantly launch a randomized stream of that archive in Discord.</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                  JuiceVault.xyz Sync
-                </div>
-                <div class="tutorial-step-text">Log in with your JuiceVault.xyz account to sync your personal playlists and liked songs automatically.</div>
-              </div>
-            </div>
-            <div class="tab-tutorial-footer">
-              <div class="tutorial-tip-pill">
-                <span>💡 Tip: Browse or filter individual songs inside any collection using the track browser card below.</span>
-              </div>
-              <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('library')">Dismiss Guide</button>
-            </div>
-          </div>
-
           <!-- Active Library Banner -->
           <div class="ui-card" style="margin-bottom:14px; position:relative; overflow:hidden;">
             <div class="active-col-banner" id="activeColBanner">
@@ -3113,7 +3040,7 @@ HTML_INDEX = """<!DOCTYPE html>
                   </div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                  <button class="btn-tab-help" onclick="toggleTabTutorial('library')" title="Toggle Library Guide">
+                  <button class="btn-tab-help" onclick="openTutorialPopup('library')" title="View Library Guide">
                     <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     <span>Guide</span>
                   </button>
@@ -3187,54 +3114,6 @@ HTML_INDEX = """<!DOCTYPE html>
 
         <!-- TAB: SHORTCUTS & API -->
         <div class="tab-content" id="tab-shortcuts">
-          <!-- Shortcuts Tutorial Hero Card -->
-          <div class="tab-tutorial-card" id="tutorial-shortcuts">
-            <div class="tab-tutorial-header">
-              <div class="tab-tutorial-title-wrap">
-                <div class="tab-tutorial-icon-box">
-                  <svg class="icon-svg" style="width:16px;height:16px;" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                </div>
-                <div>
-                  <div class="tab-tutorial-title">Hotkeys &amp; Remote Controls Guide</div>
-                  <div class="tab-tutorial-sub">Desktop keys, headphone media session &amp; developer REST API</div>
-                </div>
-              </div>
-              <div style="display:flex; align-items:center; gap:6px;">
-                <span class="btn-badge" style="font-size:0.65rem;">Hotkeys</span>
-                <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('shortcuts')">Got it</button>
-              </div>
-            </div>
-            <div class="tab-tutorial-grid">
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/></svg>
-                  Global Hotkeys
-                </div>
-                <div class="tutorial-step-text">Press <strong>Space</strong> for Play/Pause, <strong>N</strong> or <strong>Shift+→</strong> to Skip, <strong>M</strong> to Mute, and <strong>↑ / ↓</strong> for Volume.</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/></svg>
-                  Media Session
-                </div>
-                <div class="tutorial-step-text">Hardware media keys on wireless headphones, gaming keyboards, and phone lockscreens control the bot directly.</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-                  Web Remote API
-                </div>
-                <div class="tutorial-step-text">Copy 1-click webhook URLs below for Stream Decks, OBS widgets, or custom scripts to control Discord voice.</div>
-              </div>
-            </div>
-            <div class="tab-tutorial-footer">
-              <div class="tutorial-tip-pill">
-                <span>💡 Tip: Hotkeys work anywhere on this tab without needing to focus sliders or buttons.</span>
-              </div>
-              <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('shortcuts')">Dismiss Guide</button>
-            </div>
-          </div>
-
           <!-- Keyboard Hotkeys Card -->
           <div class="ui-card" style="margin-bottom:14px;">
             <div class="section-header">
@@ -3242,7 +3121,7 @@ HTML_INDEX = """<!DOCTYPE html>
                 <svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6.01" y2="8"/><line x1="10" y1="8" x2="10.01" y2="8"/><line x1="14" y1="8" x2="14.01" y2="8"/><line x1="18" y1="8" x2="18.01" y2="8"/><line x1="8" y1="16" x2="16" y2="16"/></svg>
                 Desktop Keyboard Hotkeys
               </span>
-              <button class="btn-tab-help" onclick="toggleTabTutorial('shortcuts')" title="Toggle Shortcuts Guide">
+              <button class="btn-tab-help" onclick="openTutorialPopup('shortcuts')" title="View Shortcuts Guide">
                 <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 <span>Guide</span>
               </button>
@@ -3410,54 +3289,6 @@ HTML_INDEX = """<!DOCTYPE html>
 
         <!-- TAB: SOUNDBOARD -->
         <div class="tab-content" id="tab-soundboard">
-          <!-- Soundboard Tutorial Hero Card -->
-          <div class="tab-tutorial-card" id="tutorial-sounds">
-            <div class="tab-tutorial-header">
-              <div class="tab-tutorial-title-wrap">
-                <div class="tab-tutorial-icon-box">
-                  <svg class="icon-svg" style="width:16px;height:16px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
-                </div>
-                <div>
-                  <div class="tab-tutorial-title">Discord Soundboard &amp; Audition Guide</div>
-                  <div class="tab-tutorial-sub">50 meme sound clips, smooth music ducking &amp; browser audition</div>
-                </div>
-              </div>
-              <div style="display:flex; align-items:center; gap:6px;">
-                <span class="btn-badge" style="font-size:0.65rem;">Sound Tips</span>
-                <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('sounds')">Got it</button>
-              </div>
-            </div>
-            <div class="tab-tutorial-grid">
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                  1-Click Trigger
-                </div>
-                <div class="tutorial-step-text">Click any sound pad to play in Discord VC. Current music smoothly ducks or pauses, then resumes.</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-                  Browser Audition
-                </div>
-                <div class="tutorial-step-text">Enable <strong>Soundboard Preview</strong> in Settings to test clips in your headphones before triggering on Discord.</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  Instant Filter
-                </div>
-                <div class="tutorial-step-text">Filter 50+ sounds by name in real time using the soundboard search bar at the top of the grid.</div>
-              </div>
-            </div>
-            <div class="tab-tutorial-footer">
-              <div class="tutorial-tip-pill">
-                <span>💡 Tip: Try <code>bruh</code>, <code>airhorn</code>, <code>vine_boom</code>, or <code>fart</code> for instant reactions in VC.</span>
-              </div>
-              <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('sounds')">Dismiss Guide</button>
-            </div>
-          </div>
-
           <div class="ui-card" style="margin-bottom:14px;">
             <div class="section-header" style="flex-wrap:wrap; gap:10px;">
               <span class="section-title">
@@ -3466,7 +3297,7 @@ HTML_INDEX = """<!DOCTYPE html>
                 <span style="font-size:0.7rem; font-weight:600; padding:2px 8px; border-radius:10px; background:rgba(235,47,150,0.15); color:var(--accent); margin-left:6px;">50 Sounds</span>
               </span>
               <div style="display:flex; gap:8px; align-items:center;">
-                <button class="btn-tab-help" onclick="toggleTabTutorial('sounds')" title="Toggle Soundboard Guide">
+                <button class="btn-tab-help" onclick="openTutorialPopup('soundboard')" title="View Soundboard Guide">
                   <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                   <span>Guide</span>
                 </button>
@@ -3524,54 +3355,6 @@ HTML_INDEX = """<!DOCTYPE html>
 
         <!-- TAB: SETTINGS -->
         <div class="tab-content" id="tab-settings">
-          <!-- Settings Tutorial Hero Card -->
-          <div class="tab-tutorial-card" id="tutorial-settings">
-            <div class="tab-tutorial-header">
-              <div class="tab-tutorial-title-wrap">
-                <div class="tab-tutorial-icon-box">
-                  <svg class="icon-svg" style="width:16px;height:16px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                </div>
-                <div>
-                  <div class="tab-tutorial-title">Studio Remote &amp; Audio Settings Guide</div>
-                  <div class="tab-tutorial-sub">Latency buffer modes, smooth volume wheel &amp; visual themes</div>
-                </div>
-              </div>
-              <div style="display:flex; align-items:center; gap:6px;">
-                <span class="btn-badge" style="font-size:0.65rem;">Settings Guide</span>
-                <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('settings')">Got it</button>
-              </div>
-            </div>
-            <div class="tab-tutorial-grid">
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-                  Buffer Latency
-                </div>
-                <div class="tutorial-step-text">Keep on <strong>Stable (Gecko/Firefox/Zen)</strong> to prevent audio pops. Use <strong>Ultra (250ms)</strong> for near-zero lag.</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                  Tactile Wheel
-                </div>
-                <div class="tutorial-step-text">Mouse wheel scrolls move smoothly at <strong>1% per notch</strong>, accelerating dynamically to <strong>2%–5%</strong> when scrolled quickly.</div>
-              </div>
-              <div class="tutorial-step-tile">
-                <div class="tutorial-step-badge">
-                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/></svg>
-                  Neon Themes
-                </div>
-                <div class="tutorial-step-text">Choose between 5 neon accent themes (Purple, Cyan, Rose, Green, Gold) and custom album art shapes.</div>
-              </div>
-            </div>
-            <div class="tab-tutorial-footer">
-              <div class="tutorial-tip-pill">
-                <span>💡 Tip: All settings auto-save directly to your browser storage and persist across visits.</span>
-              </div>
-              <button class="btn-tutorial-dismiss" onclick="dismissTabTutorial('settings')">Dismiss Guide</button>
-            </div>
-          </div>
-
           <div class="ui-card" style="margin-bottom:14px;">
             <div class="section-header">
               <span class="section-title">
@@ -3579,7 +3362,7 @@ HTML_INDEX = """<!DOCTYPE html>
                 Remote &amp; Studio Settings
               </span>
               <div style="display:flex; align-items:center; gap:8px;">
-                <button class="btn-tab-help" onclick="toggleTabTutorial('settings')" title="Toggle Settings Guide">
+                <button class="btn-tab-help" onclick="openTutorialPopup('settings')" title="View Settings Guide">
                   <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                   <span>Guide</span>
                 </button>
@@ -3780,12 +3563,12 @@ HTML_INDEX = """<!DOCTYPE html>
 
                 <div class="setting-row">
                   <div class="setting-info">
-                    <div class="setting-label">Reset Tab Guides &amp; Tutorials</div>
-                    <div class="setting-desc">Re-opens interactive walkthrough banners across Search, Library, Sounds, Shortcuts and Settings.</div>
+                    <div class="setting-label">Reset Tab Guides &amp; Walkthrough Popups</div>
+                    <div class="setting-desc">Re-enables the 1-time animated walkthrough popups across Search, Library, Sounds, Shortcuts, and Settings.</div>
                   </div>
                   <div class="setting-action">
                     <button class="btn-kinetic btn-flat" style="padding:6px 12px; font-size:0.75rem;" onclick="resetAllTabTutorials()">
-                      Show All Guides
+                      Reset Popups
                     </button>
                   </div>
                 </div>
@@ -3872,6 +3655,40 @@ HTML_INDEX = """<!DOCTYPE html>
       <span>Settings</span>
     </button>
   </nav>
+
+  <!-- Tab Tutorial / User Onboarding Popup Modal -->
+  <div class="tutorial-modal-backdrop" id="tutorialModal" onclick="if(event.target===this) closeTutorialPopup()">
+    <div class="tutorial-popup-card">
+      <div class="tutorial-popup-header">
+        <div class="tutorial-popup-title-wrap">
+          <div class="tutorial-popup-icon-box" id="tutModalIcon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <div>
+            <div class="tutorial-popup-title" id="tutModalTitle">Tab Guide &amp; Walkthrough</div>
+            <div class="tutorial-popup-sub" id="tutModalSub">Feature tips and quick controls</div>
+          </div>
+        </div>
+        <button class="btn-kinetic btn-circle btn-action-sm tutorial-popup-close" onclick="closeTutorialPopup()" title="Close guide (Esc)">
+          <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="tutorial-popup-steps" id="tutModalSteps"></div>
+
+      <div class="tutorial-popup-tip" id="tutModalTip"></div>
+
+      <div class="tutorial-popup-footer">
+        <span class="tutorial-popup-badge">
+          <svg class="icon-svg" style="width:11px;height:11px;" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span id="tutModalFooterNote">First-Time Tab Tour • Shown 1 Time</span>
+        </span>
+        <button class="btn-kinetic btn-primary" onclick="closeTutorialPopup()" style="padding:8px 18px; font-weight:700; font-size:0.8rem;">
+          <span>Got it, explore!</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- EQ Preset Bottom Sheet -->
   <div class="sheet-backdrop" id="eqSheet" onclick="if(event.target===this) closeEqModal()">
@@ -4498,6 +4315,8 @@ HTML_INDEX = """<!DOCTYPE html>
       if (tabId === 'shortcuts') renderShortcuts();
       if (tabId === 'settings') renderSettingsUI();
       if (navigator.vibrate) navigator.vibrate(8);
+      // Animated 1-time tutorial popup over UI
+      maybeShowTabTutorialPopup(tabId);
     }
 
     function switchMobileNav(tabId) {
@@ -7195,66 +7014,147 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
-    // Interactive Tab Tutorials & Walkthroughs
-    function dismissTabTutorial(tabKey) {
-      const card = document.getElementById('tutorial-' + tabKey);
-      if (card) {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(-6px)';
-        setTimeout(() => {
-          card.style.display = 'none';
-        }, 220);
+    // ==========================================
+    // Interactive Tab Tutorials & Popup Guides
+    // ==========================================
+    const TAB_TUTORIALS = {
+      search: {
+        title: 'Track Search & Discovery Guide',
+        sub: 'Search 3,800+ lossless archive songs or stream online',
+        icon: '<svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+        steps: [
+          { badge: 'STEP 1 • QUERY', text: 'Type any title, artist, or album and press <strong>Search</strong>.' },
+          { badge: 'STEP 2 • SOURCES', text: 'Toggle between <strong>JuiceVault Archive</strong> (instant lossless) and <strong>Online</strong> (YouTube & SoundCloud).' },
+          { badge: 'STEP 3 • 1-CLICK QUEUE', text: 'Click any song row to immediately add to the Discord VC queue.' }
+        ],
+        tip: '💡 Tip: Press <code>/</code> anywhere on desktop to focus the search field instantly.'
+      },
+      library: {
+        title: 'Collections & Library Guide',
+        sub: 'Curated discography, JuiceVault account playlists & favorites',
+        icon: '<svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>',
+        steps: [
+          { badge: 'STEP 1 • CHOOSE COLLECTION', text: 'Select curated eras (e.g. <em>Death Race For Love</em>, <em>Studio Sessions</em>, <em>Unreleased Bangers</em>).' },
+          { badge: 'STEP 2 • SHUFFLE & PLAY', text: 'Click <strong>Shuffle & Play</strong> on any collection to load hundreds of tracks into Discord VC.' },
+          { badge: 'STEP 3 • ACCOUNT PLAYLISTS', text: 'Sign in to JuiceVault.xyz to sync your personal cloud playlists and liked tracks.' }
+        ],
+        tip: '💡 Tip: Switching collections does not stop active playback until you trigger Shuffle & Play.'
+      },
+      soundboard: {
+        title: 'Discord Soundboard & Audition Guide',
+        sub: '50 meme sounds with voice ducking & local preview',
+        icon: '<svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>',
+        steps: [
+          { badge: 'STEP 1 • INSTANT TRIGGER', text: 'Click any pad to play on Discord VC. Music automatically ducks or pauses, then resumes.' },
+          { badge: 'STEP 2 • LOCAL AUDITION', text: 'Enable <strong>Play preview locally</strong> to test sounds in your headphones first.' },
+          { badge: 'STEP 3 • LIVE FILTER', text: 'Use the filter input to instantly find clips like <em>bruh</em>, <em>airhorn</em>, or <em>vine_boom</em>.' }
+        ],
+        tip: '💡 Tip: Click <strong>Stop Sound</strong> or "Resume Song" to immediately return to music.'
+      },
+      shortcuts: {
+        title: 'Hotkeys & Remote Controls Guide',
+        sub: 'Desktop keys, headphone media session & webhook REST API',
+        icon: '<svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+        steps: [
+          { badge: 'STEP 1 • KEYBOARD HOTKEYS', text: 'Press <strong>Space</strong> for Play/Pause, <strong>Shift+→</strong> to Skip, <strong>M</strong> to Mute, and <strong>↑ / ↓</strong> for Volume.' },
+          { badge: 'STEP 2 • MEDIA CONTROLS', text: 'Wireless headphones, keyboard volume dials, and mobile lockscreens control the bot directly.' },
+          { badge: 'STEP 3 • WEBHOOK REST API', text: 'Copy 1-click webhook URLs for Siri Shortcuts, back-taps, or Stream Deck buttons.' }
+        ],
+        tip: '💡 Tip: Hotkeys operate globally anywhere on the web remote without needing to click the player.'
+      },
+      settings: {
+        title: 'Studio Remote & Audio Settings Guide',
+        sub: 'Latency buffer modes, smooth volume wheel & visual themes',
+        icon: '<svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+        steps: [
+          { badge: 'STEP 1 • BUFFER LATENCY', text: 'Keep on <strong>Stable (Gecko/Firefox)</strong> to prevent pops, or switch to <strong>Ultra (250ms)</strong> for near-zero lag.' },
+          { badge: 'STEP 2 • TACTILE WHEEL', text: 'Mouse wheel smoothly moves at <strong>1% per notch</strong>, accelerating dynamically on rapid spins.' },
+          { badge: 'STEP 3 • ACCENT THEMES', text: 'Choose from 5 neon accent color themes and customize live audio reactive backdrops.' }
+        ],
+        tip: '💡 Tip: All preferences auto-save to browser storage and persist on every session.'
+      },
+      queue: {
+        title: 'Queue & Playback Flow Guide',
+        sub: 'Manage live requests, upcoming archive & playback history',
+        icon: '<svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+        steps: [
+          { badge: 'STEP 1 • REQUEST PRIORITY', text: 'User-requested tracks sit at the top of the queue and play with highest priority.' },
+          { badge: 'STEP 2 • UPCOMING ARCHIVE', text: 'Upcoming archive songs automatically fill in when no user requests remain.' },
+          { badge: 'STEP 3 • QUEUE ACTIONS', text: 'Tap any queued track for options to Play Right Now, Move to Next, or Remove.' }
+        ],
+        tip: '💡 Tip: Audio plays lossless PCM stream directly synchronized with your Discord voice channel.'
       }
-      try {
-        localStorage.setItem('jv_guide_dismissed_' + tabKey, 'true');
-      } catch (e) {}
-      showToast('Guide dismissed (click Guide button anytime to view)');
+    };
+
+    function openTutorialPopup(tabKey, isAuto = false) {
+      if (tabKey === 'categories') tabKey = 'library';
+      if (tabKey === 'sounds') tabKey = 'soundboard';
+      const data = TAB_TUTORIALS[tabKey];
+      if (!data) return;
+
+      const modal = document.getElementById('tutorialModal');
+      if (!modal) return;
+
+      const iconEl = document.getElementById('tutModalIcon');
+      if (iconEl) iconEl.innerHTML = data.icon;
+      const titleEl = document.getElementById('tutModalTitle');
+      if (titleEl) titleEl.textContent = data.title;
+      const subEl = document.getElementById('tutModalSub');
+      if (subEl) subEl.textContent = data.sub;
+
+      const stepsContainer = document.getElementById('tutModalSteps');
+      if (stepsContainer) {
+        stepsContainer.innerHTML = data.steps.map(s => `
+          <div class="tutorial-step-tile">
+            <div class="tutorial-step-badge">
+              <svg class="icon-svg" style="width:11px;height:11px;" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              ${escapeHtml(s.badge)}
+            </div>
+            <div class="tutorial-step-text">${s.text}</div>
+          </div>
+        `).join('');
+      }
+
+      const tipEl = document.getElementById('tutModalTip');
+      if (tipEl) tipEl.innerHTML = data.tip;
+
+      const noteEl = document.getElementById('tutModalFooterNote');
+      if (noteEl) noteEl.textContent = isAuto ? 'First-Time Tab Tour • Shown 1 Time' : 'Tab Guide & Walkthrough';
+
+      modal.classList.add('active');
     }
 
-    function toggleTabTutorial(tabKey) {
-      const card = document.getElementById('tutorial-' + tabKey);
-      if (!card) return;
-      const isHidden = card.style.display === 'none' || window.getComputedStyle(card).display === 'none';
-      if (isHidden) {
-        card.style.display = 'block';
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(-6px)';
+    function closeTutorialPopup() {
+      const modal = document.getElementById('tutorialModal');
+      if (modal) modal.classList.remove('active');
+    }
+
+    function maybeShowTabTutorialPopup(tabKey) {
+      if (tabKey === 'categories') tabKey = 'library';
+      if (tabKey === 'sounds') tabKey = 'soundboard';
+      if (!TAB_TUTORIALS[tabKey]) return;
+      try {
+        const key = 'jv_popup_seen_' + tabKey;
+        if (localStorage.getItem(key) === 'true') return;
+        localStorage.setItem(key, 'true');
         setTimeout(() => {
-          card.style.opacity = '1';
-          card.style.transform = 'translateY(0)';
-        }, 20);
-        try {
-          localStorage.removeItem('jv_guide_dismissed_' + tabKey);
-        } catch (e) {}
-      } else {
-        dismissTabTutorial(tabKey);
-      }
+          openTutorialPopup(tabKey, true);
+        }, 260);
+      } catch (e) {}
     }
 
     function resetAllTabTutorials() {
-      ['search', 'library', 'sounds', 'shortcuts', 'settings'].forEach(k => {
+      ['search', 'library', 'soundboard', 'shortcuts', 'settings', 'queue'].forEach(k => {
         try {
+          localStorage.removeItem('jv_popup_seen_' + k);
           localStorage.removeItem('jv_guide_dismissed_' + k);
         } catch (e) {}
-        const card = document.getElementById('tutorial-' + k);
-        if (card) {
-          card.style.display = 'block';
-          card.style.opacity = '1';
-          card.style.transform = 'translateY(0)';
-        }
       });
-      showToast('All tab tutorials & walkthroughs restored');
+      showToast('All tab tutorials & walkthrough popups restored');
     }
 
     function initTabTutorials() {
-      ['search', 'library', 'sounds', 'shortcuts', 'settings'].forEach(k => {
-        try {
-          if (localStorage.getItem('jv_guide_dismissed_' + k) === 'true') {
-            const card = document.getElementById('tutorial-' + k);
-            if (card) card.style.display = 'none';
-          }
-        } catch (e) {}
-      });
+      // Kept for settings reset backwards compatibility
     }
 
     function updateFavoriteButtonState() {
@@ -8531,6 +8431,7 @@ HTML_INDEX = """<!DOCTYPE html>
         const sInput = document.getElementById('searchInput');
         if (sInput) { sInput.focus(); sInput.select(); }
       } else if (e.key === 'Escape') {
+        closeTutorialPopup();
         closeEqModal();
         closeVisualizerModal();
         closeTrackModal();
