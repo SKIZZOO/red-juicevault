@@ -313,7 +313,7 @@ HTML_INDEX = """<!DOCTYPE html>
         padding: 4px 8px !important;
         font-size: 0.72rem !important;
       }
-      .banner-box {
+      .banner-box, .listen-together-card, .telemetry-dock {
         padding: 8px 10px !important;
         margin-top: 8px !important;
         gap: 8px !important;
@@ -387,26 +387,6 @@ HTML_INDEX = """<!DOCTYPE html>
     .player-cover.playing {
       transform: scale(1.035);
       filter: drop-shadow(0 0 16px var(--accent-glow));
-    }
-    /* Real-Time Spectrum Visualizer */
-    .visualizer-container {
-      width: 100%;
-      height: 38px;
-      margin: 10px 0 6px;
-      border-radius: var(--radius-sm);
-      background: rgba(0, 0, 0, 0.45);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      overflow: hidden;
-      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
-    }
-    .visualizer-canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
     }
     /* Kinetic Soundwave Indicator */
     .soundwave-box {
@@ -1125,7 +1105,254 @@ HTML_INDEX = """<!DOCTYPE html>
     .toast-pill.show {
       transform: translateX(-50%) translateY(0);
     }
-    /* Lockscreen Banner */
+    /* Listen Together Studio Stream Card */
+    .listen-together-card {
+      margin-top: 12px;
+      background: linear-gradient(135deg, rgba(20, 20, 28, 0.95), rgba(13, 13, 19, 0.98));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 11px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .listen-together-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--accent);
+      opacity: 0.35;
+      transition: opacity 0.25s ease, background 0.25s ease;
+    }
+    .listen-together-card.active {
+      border-color: rgba(168, 85, 247, 0.4);
+      box-shadow: 0 4px 24px rgba(168, 85, 247, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .listen-together-card.active::before {
+      opacity: 1;
+      box-shadow: 0 0 10px var(--accent);
+    }
+    .lt-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .lt-info-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1;
+    }
+    .lt-icon-capsule {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+    .listen-together-card.active .lt-icon-capsule {
+      background: var(--accent-muted);
+      border-color: rgba(168, 85, 247, 0.3);
+    }
+    .lt-icon {
+      width: 17px;
+      height: 17px;
+      color: #e2e8f0;
+      transition: color 0.2s ease;
+    }
+    .listen-together-card.active .lt-icon {
+      color: var(--accent);
+    }
+    .lt-live-indicator {
+      display: none;
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      border: 1.5px solid #0d0d12;
+    }
+    .listen-together-card.active .lt-live-indicator {
+      display: block;
+      animation: pulseNeon 1.6s infinite ease-in-out;
+    }
+    .lt-text-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .lt-title-line {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .lt-title {
+      font-weight: 700;
+      font-size: 0.83rem;
+      color: #fff;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    .lt-sync-badge {
+      font-size: 0.58rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.04em;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(168, 85, 247, 0.15);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      text-transform: uppercase;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+    .lt-sync-badge.connecting {
+      background: rgba(234, 179, 8, 0.15);
+      color: #facc15;
+      border-color: rgba(234, 179, 8, 0.3);
+    }
+    .lt-sync-badge.live {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+    .lt-sync-badge.paused {
+      background: rgba(148, 163, 184, 0.15);
+      color: #94a3b8;
+      border-color: rgba(148, 163, 184, 0.3);
+    }
+    .lt-subtitle {
+      font-size: 0.69rem;
+      color: var(--text-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+    .btn-lt-action {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: 0.74rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 7px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.18s ease;
+    }
+    .btn-lt-action:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 14px var(--accent-glow);
+      transform: translateY(-1px);
+    }
+    .btn-lt-action:active {
+      transform: scale(0.96);
+    }
+    .btn-lt-action.active {
+      background: rgba(244, 63, 94, 0.16);
+      border-color: rgba(244, 63, 94, 0.4);
+      color: #fb7185;
+      box-shadow: 0 0 12px rgba(244, 63, 94, 0.2);
+    }
+    .btn-lt-action.active:hover {
+      background: rgba(244, 63, 94, 0.3);
+      border-color: rgba(244, 63, 94, 0.6);
+      color: #fff;
+    }
+    .lt-action-icon {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
+    }
+    .lt-controls-drawer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      animation: fadeIn 0.2s ease;
+    }
+    .lt-slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+    .lt-vol-icon {
+      width: 13px;
+      height: 13px;
+      color: var(--text-sub);
+      flex-shrink: 0;
+    }
+    .lt-volume-slider {
+      flex: 1;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 2px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      outline: none;
+    }
+    .lt-vol-val {
+      font-size: 0.69rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: var(--text-sub);
+      min-width: 34px;
+      text-align: right;
+    }
+    .lt-drift-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      font-size: 0.65rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+    .lt-drift-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+    }
+
+    /* Fallback banner-box if ever used */
     .banner-box {
       background: rgba(168, 85, 247, 0.08);
       border: 1px solid var(--border-accent);
@@ -1142,109 +1369,121 @@ HTML_INDEX = """<!DOCTYPE html>
       color: #e9d5ff;
       line-height: 1.4;
     }
-    /* Telemetry, Views & Daily Usage System */
-    .stats-badge {
+
+    /* Studio Telemetry Dock */
+    .telemetry-dock {
+      margin-top: 10px;
+      background: linear-gradient(180deg, rgba(20, 20, 28, 0.9), rgba(14, 14, 20, 0.95));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
       cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+      transition: all 0.22s var(--spring);
       user-select: none;
-      transition: all 0.2s var(--spring);
-      position: relative;
     }
-    .stats-badge:hover {
-      background: var(--surface-elevated);
-      border-color: rgba(235, 47, 150, 0.4);
-      box-shadow: 0 0 14px rgba(235, 47, 150, 0.25);
+    .telemetry-dock:hover {
+      background: linear-gradient(180deg, rgba(26, 26, 36, 0.95), rgba(18, 18, 25, 0.98));
+      border-color: rgba(168, 85, 247, 0.3);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 16px rgba(168, 85, 247, 0.12);
       transform: translateY(-1px);
     }
-    .stats-badge:active {
-      transform: scale(0.96);
+    .telemetry-dock:active {
+      transform: scale(0.99);
     }
-    .telemetry-live-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 8px var(--accent-glow);
-      animation: pulseNeon 1.8s infinite ease-in-out;
-      flex-shrink: 0;
-    }
-    @keyframes pulseNeon {
-      0%, 100% { opacity: 0.5; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.3); }
-    }
-    .header-pill-sub {
-      font-size: 0.65rem;
-      font-weight: 700;
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.12);
-      border: 1px solid rgba(56, 189, 248, 0.25);
-      padding: 1px 6px;
-      border-radius: 10px;
-      margin-left: 2px;
-      letter-spacing: 0.02em;
-    }
-
-    /* Left Column Compact Telemetry Ribbon */
-    .telemetry-quick-bar {
-      margin-top: 10px;
-      background: rgba(18, 18, 24, 0.85);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 8px 12px;
+    .telemetry-dock-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 6px;
-      cursor: pointer;
-      transition: all 0.2s var(--spring);
+      gap: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
-    .telemetry-quick-bar:hover {
-      background: var(--surface-elevated);
-      border-color: rgba(255, 255, 255, 0.18);
-      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
-      transform: translateY(-1px);
-    }
-    .telemetry-q-item {
+    .telemetry-dock-tag {
       display: flex;
       align-items: center;
       gap: 6px;
-      min-width: 0;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text-sub);
+      text-transform: uppercase;
     }
-    .telemetry-q-col {
+    .telemetry-dock-link {
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+      transition: transform 0.18s ease, color 0.18s ease;
+    }
+    .telemetry-dock:hover .telemetry-dock-link {
+      color: #e9d5ff;
+      transform: translateX(2px);
+    }
+    .telemetry-dock-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .telemetry-dock-tile {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-sm);
+      padding: 6px 8px;
       display: flex;
       flex-direction: column;
-      line-height: 1.1;
+      align-items: flex-start;
+      justify-content: center;
+      min-width: 0;
+      transition: background 0.18s ease, border-color 0.18s ease;
     }
-    .telemetry-q-sub {
-      font-size: 0.6rem;
-      text-transform: uppercase;
-      color: var(--text-sub);
-      font-weight: 600;
-      letter-spacing: 0.03em;
+    .telemetry-dock:hover .telemetry-dock-tile {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.08);
     }
-    .telemetry-q-num {
-      font-size: 0.8rem;
+    .t-dock-val {
+      font-size: 0.88rem;
       font-weight: 700;
       font-family: 'JetBrains Mono', monospace;
       color: #fff;
+      line-height: 1.15;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
     }
-    .telemetry-q-num.highlight {
-      color: #f43f5e;
+    .telemetry-dock-tile.highlight-rose .t-dock-val {
+      color: #fb7185;
     }
-    .telemetry-q-sep {
-      width: 1px;
-      height: 20px;
-      background: rgba(255, 255, 255, 0.07);
+    .telemetry-dock-tile.highlight-cyan .t-dock-val {
+      color: #38bdf8;
     }
-    .telemetry-q-more {
-      font-size: 0.75rem;
+    .telemetry-dock-tile.highlight-green .t-dock-val {
+      color: #34d399;
+    }
+    .t-dock-lbl {
+      font-size: 0.58rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       color: var(--text-sub);
-      font-weight: 700;
-      margin-left: 2px;
-      transition: color 0.15s ease, transform 0.15s ease;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
     }
-    .telemetry-quick-bar:hover .telemetry-q-more {
-      color: var(--accent);
-      transform: translate(2px, -2px);
+    @media (max-width: 440px) {
+      .telemetry-dock-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+      }
+      .t-dock-val {
+        font-size: 0.84rem;
+      }
     }
 
     /* Global Network Telemetry Header Bar */
@@ -1712,11 +1951,6 @@ HTML_INDEX = """<!DOCTYPE html>
             </div>
           </div>
 
-          <!-- Real-Time Spectrum Visualizer -->
-          <div class="visualizer-container" id="visualizerWrap" title="Real-Time Audio Spectrum Visualizer">
-            <canvas class="visualizer-canvas" id="audioVisualizer" width="320" height="38"></canvas>
-          </div>
-
           <!-- Interactive Scrubber Bar -->
           <div class="scrubber-wrap">
             <div class="scrubber-track" id="progressBar">
@@ -1776,69 +2010,69 @@ HTML_INDEX = """<!DOCTYPE html>
             </button>
           </div>
 
-          <!-- Listen Together & Lock Screen Banner -->
-          <div class="banner-box" id="liveAudioBanner" style="flex-direction:column; align-items:stretch; gap:8px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <div style="width:28px; height:28px; border-radius:50%; background:var(--accent-muted); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                  <svg class="icon-svg" style="color:var(--accent); width:15px; height:15px;" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          <!-- Listen Together Studio Stream Card -->
+          <div class="listen-together-card" id="liveAudioBanner">
+            <div class="lt-header-row">
+              <div class="lt-info-left">
+                <div class="lt-icon-capsule">
+                  <svg class="icon-svg lt-icon" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                  <span class="lt-live-indicator"></span>
                 </div>
-                <div>
-                  <div style="display:flex; align-items:center; gap:6px;">
-                    <div style="font-weight:700; font-size:0.82rem; color:#fff;" id="liveStatusTitle">Listen Together</div>
-                    <span class="pill-tag accent" style="font-size:0.62rem; padding:1px 5px; text-transform:uppercase;" id="liveSyncBadge">1:1 Sync</span>
+                <div class="lt-text-meta">
+                  <div class="lt-title-line">
+                    <span class="lt-title" id="liveStatusTitle">Listen Together</span>
+                    <span class="lt-sync-badge" id="liveSyncBadge">1:1 SYNC</span>
                   </div>
-                  <div style="font-size:0.7rem; color:var(--text-sub);" id="liveStatusSub">1:1 Real-time synced audio with Discord voice channel</div>
+                  <div class="lt-subtitle" id="liveStatusSub">Ultra-low latency stream synced with Discord voice</div>
                 </div>
               </div>
-              <div style="display:flex; gap:6px; align-items:center;">
-                <button class="btn-kinetic btn-badge" id="btnListenLive" onclick="toggleLiveAudio()" title="Stream synchronized audio directly on this phone">
-                  <span id="liveBtnLabel">Listen Together</span>
+              <div class="lt-actions-right">
+                <button class="btn-kinetic btn-lt-action" id="btnListenLive" onclick="toggleLiveAudio()" title="Stream synchronized audio directly in your browser">
+                  <svg class="icon-svg lt-action-icon" id="liveBtnIcon" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                  <span id="liveBtnLabel">Listen Live</span>
                 </button>
               </div>
             </div>
-            <div id="liveAudioControls" style="display:none; align-items:center; gap:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06);">
-              <svg class="icon-svg" style="width:13px; height:13px; color:var(--text-sub);" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-              <input type="range" min="0" max="1" step="0.05" value="1" id="liveVolumeSlider" style="flex:1; accent-color:var(--accent); cursor:pointer;" oninput="updateLiveVolume(this.value)">
-              <span id="liveVolPercent" style="font-size:0.7rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub);">100%</span>
-              <span style="font-size:0.65rem; color:var(--accent); font-family:'JetBrains Mono',monospace;" id="syncDriftLabel">±0ms</span>
+            <div class="lt-controls-drawer" id="liveAudioControls" style="display:none;">
+              <div class="lt-slider-wrap">
+                <svg class="icon-svg lt-vol-icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                <input type="range" min="0" max="1" step="0.05" value="1" id="liveVolumeSlider" class="lt-volume-slider" oninput="updateLiveVolume(this.value)" aria-label="Stream volume">
+                <span id="liveVolPercent" class="lt-vol-val">100%</span>
+              </div>
+              <div class="lt-drift-pill" title="Phase-Locked Loop clock offset vs Discord master audio">
+                <span class="lt-drift-dot"></span>
+                <span id="syncDriftLabel">±0ms</span>
+              </div>
             </div>
           </div>
 
-          <!-- Telemetry & Daily Usage Quick Bar -->
-          <div class="telemetry-quick-bar" onclick="openStatsModal()" title="Click to view full Live Telemetry &amp; Daily Usage">
-            <div class="telemetry-q-item">
-              <svg class="icon-svg" style="width:13px;height:13px;color:var(--accent);" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <div class="telemetry-q-col">
-                <span class="telemetry-q-sub">Views</span>
-                <span class="telemetry-q-num" id="quickTotalViews">--</span>
+          <!-- Studio Telemetry Dock -->
+          <div class="telemetry-dock" id="telemetryDock" onclick="openStatsModal()" title="Open detailed global telemetry and playback metrics">
+            <div class="telemetry-dock-header">
+              <div class="telemetry-dock-tag">
+                <span class="telemetry-live-dot"></span>
+                <span>GLOBAL TELEMETRY</span>
+              </div>
+              <span class="telemetry-dock-link">Live Metrics &rsaquo;</span>
+            </div>
+            <div class="telemetry-dock-grid">
+              <div class="telemetry-dock-tile">
+                <span class="t-dock-val" id="quickTotalViews">--</span>
+                <span class="t-dock-lbl">Total Views</span>
+              </div>
+              <div class="telemetry-dock-tile highlight-rose">
+                <span class="t-dock-val" id="quickDailyViews">--</span>
+                <span class="t-dock-lbl">Today</span>
+              </div>
+              <div class="telemetry-dock-tile highlight-cyan">
+                <span class="t-dock-val" id="quickDailyTime">--</span>
+                <span class="t-dock-lbl">Stream Time</span>
+              </div>
+              <div class="telemetry-dock-tile highlight-green">
+                <span class="t-dock-val" id="quickDailyTracks">--</span>
+                <span class="t-dock-lbl">Tracks Played</span>
               </div>
             </div>
-            <div class="telemetry-q-sep"></div>
-            <div class="telemetry-q-item">
-              <svg class="icon-svg" style="width:13px;height:13px;color:#f43f5e;" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
-              <div class="telemetry-q-col">
-                <span class="telemetry-q-sub">Today</span>
-                <span class="telemetry-q-num highlight" id="quickDailyViews">--</span>
-              </div>
-            </div>
-            <div class="telemetry-q-sep"></div>
-            <div class="telemetry-q-item">
-              <svg class="icon-svg" style="width:13px;height:13px;color:#38bdf8;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <div class="telemetry-q-col">
-                <span class="telemetry-q-sub">Streamed</span>
-                <span class="telemetry-q-num" id="quickDailyTime">--</span>
-              </div>
-            </div>
-            <div class="telemetry-q-sep"></div>
-            <div class="telemetry-q-item">
-              <svg class="icon-svg" style="width:13px;height:13px;color:#10b981;" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-              <div class="telemetry-q-col">
-                <span class="telemetry-q-sub">Played</span>
-                <span class="telemetry-q-num" id="quickDailyTracks">--</span>
-              </div>
-            </div>
-            <span class="telemetry-q-more">↗</span>
           </div>
         </div>
       </div>
@@ -2966,11 +3200,6 @@ HTML_INDEX = """<!DOCTYPE html>
     let delayFeedbackNode = null;
     let delayGainNode = null;
     let masterGainNode = null;
-    let analyserNode = null;
-    let dataArray = null;
-    let visualizerCanvas = null;
-    let visualizerCtx = null;
-    let simAngle = 0;
     let pannerAnimFrame = null;
     let pannerAngle = 0;
 
@@ -3025,12 +3254,6 @@ HTML_INDEX = """<!DOCTYPE html>
         const curVol = parseFloat(document.getElementById('liveVolumeSlider')?.value || 1);
         masterGainNode.gain.value = curVol;
 
-        // 6. Analyser Node (for real-time audio spectrum visualizer)
-        analyserNode = audioCtx.createAnalyser();
-        analyserNode.fftSize = 64;
-        analyserNode.smoothingTimeConstant = 0.82;
-        dataArray = new Uint8Array(analyserNode.frequencyBinCount);
-
         // Audio graph routing:
         // audioSourceNode -> bassFilterNode -> subFilterNode -> (stereoPanner or direct) -> masterGainNode -> destination
         let lastNode = audioSourceNode;
@@ -3048,90 +3271,9 @@ HTML_INDEX = """<!DOCTYPE html>
         lastNode.connect(delayNode);
         delayGainNode.connect(masterGainNode);
 
-        masterGainNode.connect(analyserNode);
-        analyserNode.connect(audioCtx.destination);
+        masterGainNode.connect(audioCtx.destination);
       } catch (err) {
         console.warn('Web Audio API initialization failed:', err);
-      }
-    }
-
-    function initVisualizer() {
-      visualizerCanvas = document.getElementById('audioVisualizer');
-      if (!visualizerCanvas) return;
-      visualizerCtx = visualizerCanvas.getContext('2d');
-      const dpr = window.devicePixelRatio || 1;
-      visualizerCanvas.width = 320 * dpr;
-      visualizerCanvas.height = 38 * dpr;
-      visualizerCtx.scale(dpr, dpr);
-      renderVisualizerFrame();
-    }
-
-    function renderVisualizerFrame() {
-      requestAnimationFrame(renderVisualizerFrame);
-      if (!visualizerCanvas || !visualizerCtx) return;
-
-      const w = 320;
-      const h = 38;
-      visualizerCtx.clearRect(0, 0, w, h);
-
-      const isPlaying = !!(currentState && currentState.is_playing);
-      const numBars = 28;
-      const barWidth = Math.max(2, (w / numBars) - 3);
-
-      if (liveStreamActive && analyserNode && dataArray) {
-        analyserNode.getByteFrequencyData(dataArray);
-        for (let i = 0; i < numBars; i++) {
-          const freqIdx = Math.floor((i / numBars) * dataArray.length * 0.8);
-          const val = dataArray[freqIdx] || 0;
-          const barHeight = Math.max(3, (val / 255) * (h - 4));
-          const x = i * (barWidth + 3) + 2;
-          const y = h - barHeight;
-
-          const grad = visualizerCtx.createLinearGradient(0, y, 0, h);
-          grad.addColorStop(0, '#c084fc');
-          grad.addColorStop(0.5, '#a855f7');
-          grad.addColorStop(1, '#6b21a8');
-
-          visualizerCtx.fillStyle = grad;
-          if (visualizerCtx.roundRect) {
-            visualizerCtx.beginPath();
-            visualizerCtx.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]);
-            visualizerCtx.fill();
-          } else {
-            visualizerCtx.fillRect(x, y, barWidth, barHeight);
-          }
-        }
-      } else if (isPlaying) {
-        simAngle += 0.045;
-        for (let i = 0; i < numBars; i++) {
-          const wave1 = Math.sin(simAngle + i * 0.28) * 0.5 + 0.5;
-          const wave2 = Math.cos(simAngle * 0.65 + i * 0.18) * 0.5 + 0.5;
-          const combined = (wave1 * 0.6 + wave2 * 0.4);
-          const barHeight = Math.max(3, combined * (h - 6));
-          const x = i * (barWidth + 3) + 2;
-          const y = h - barHeight;
-
-          const grad = visualizerCtx.createLinearGradient(0, y, 0, h);
-          grad.addColorStop(0, '#a855f7');
-          grad.addColorStop(1, '#4c1d95');
-
-          visualizerCtx.fillStyle = grad;
-          if (visualizerCtx.roundRect) {
-            visualizerCtx.beginPath();
-            visualizerCtx.roundRect(x, y, barWidth, barHeight, [2, 2, 0, 0]);
-            visualizerCtx.fill();
-          } else {
-            visualizerCtx.fillRect(x, y, barWidth, barHeight);
-          }
-        }
-      } else {
-        for (let i = 0; i < numBars; i++) {
-          const x = i * (barWidth + 3) + 2;
-          const barHeight = 2.5;
-          const y = h - barHeight - 2;
-          visualizerCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-          visualizerCtx.fillRect(x, y, barWidth, barHeight);
-        }
       }
     }
 
@@ -3247,6 +3389,7 @@ HTML_INDEX = """<!DOCTYPE html>
     function toggleLiveAudio() {
       const audio = document.getElementById('liveAudio');
       liveStreamActive = !liveStreamActive;
+      const banner = document.getElementById('liveAudioBanner');
       const btn = document.getElementById('btnListenLive');
       const controls = document.getElementById('liveAudioControls');
       const title = document.getElementById('liveStatusTitle');
@@ -3258,13 +3401,17 @@ HTML_INDEX = """<!DOCTYPE html>
 
         const silent = document.getElementById('silentAudio');
         if (silent) silent.pause();
+        if (banner) banner.classList.add('active');
         if (btn) {
           btn.classList.add('active');
-          btn.innerHTML = '<span>Stop Listening</span>';
+          btn.innerHTML = '<svg class="icon-svg lt-action-icon" id="liveBtnIcon" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg><span id="liveBtnLabel">Stop Stream</span>';
         }
         if (controls) controls.style.display = 'flex';
-        if (title) title.innerText = 'Listen Together: Connecting...';
-        if (badge) badge.innerText = 'Connecting';
+        if (title) title.innerText = 'Listen Together';
+        if (badge) {
+          badge.innerText = 'CONNECTING';
+          badge.className = 'lt-sync-badge connecting';
+        }
 
         syncLiveAudio(true);
         setupMediaSession();
@@ -3272,7 +3419,7 @@ HTML_INDEX = """<!DOCTYPE html>
         liveSyncInterval = setInterval(() => {
           if (liveStreamActive) syncLiveAudio(false);
         }, 250);
-        showToast('Listen Together connecting stream...');
+        showToast('Connecting 1:1 stream...');
       } else {
         if (liveSyncInterval) {
           clearInterval(liveSyncInterval);
@@ -3287,13 +3434,17 @@ HTML_INDEX = """<!DOCTYPE html>
           audio.removeAttribute('src');
           audio.load();
         }
+        if (banner) banner.classList.remove('active');
         if (btn) {
           btn.classList.remove('active');
-          btn.innerHTML = '<span>Listen Together</span>';
+          btn.innerHTML = '<svg class="icon-svg lt-action-icon" id="liveBtnIcon" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg><span id="liveBtnLabel">Listen Live</span>';
         }
         if (controls) controls.style.display = 'none';
         if (title) title.innerText = 'Listen Together';
-        if (badge) badge.innerText = '1:1 Sync';
+        if (badge) {
+          badge.innerText = '1:1 SYNC';
+          badge.className = 'lt-sync-badge';
+        }
         currentLiveTrackId = null;
         isAudioLoading = false;
         if (audioRetryTimer) {
@@ -3326,7 +3477,10 @@ HTML_INDEX = """<!DOCTYPE html>
 
       if (!t || !currentState.is_running) {
         if (!audio.paused) audio.pause();
-        if (badge) badge.innerText = 'Paused';
+        if (badge) {
+          badge.innerText = 'PAUSED';
+          badge.className = 'lt-sync-badge paused';
+        }
         return;
       }
 
@@ -3349,17 +3503,26 @@ HTML_INDEX = """<!DOCTYPE html>
         audio.src = streamUrl;
         audio.load();
 
-        if (title) title.innerText = 'Listen Together: Buffering...';
-        if (badge) badge.innerText = 'Buffering';
+        if (title) title.innerText = 'Listen Together';
+        if (badge) {
+          badge.innerText = 'BUFFERING';
+          badge.className = 'lt-sync-badge connecting';
+        }
 
         audio.onwaiting = () => {
-          if (badge) badge.innerText = 'Buffering';
+          if (badge) {
+            badge.innerText = 'BUFFERING';
+            badge.className = 'lt-sync-badge connecting';
+          }
         };
 
         audio.onplaying = () => {
           isAudioLoading = false;
-          if (badge) badge.innerText = '1:1 Sync';
-          if (title) title.innerText = 'Listen Together: Live';
+          if (badge) {
+            badge.innerText = '1:1 SYNC';
+            badge.className = 'lt-sync-badge live';
+          }
+          if (title) title.innerText = 'Listen Together';
         };
 
         const onReady = () => {
@@ -3636,9 +3799,6 @@ HTML_INDEX = """<!DOCTYPE html>
             : '<polygon points="6 3 20 12 6 21 6 3"/>';
         }
       }
-
-      // Initialize visualizer if not already initialized
-      if (!visualizerCanvas) initVisualizer();
 
       const repeatBtn = document.getElementById('btnRepeat');
       if (state.repeat) repeatBtn.classList.add('active');
@@ -4953,20 +5113,11 @@ HTML_INDEX = """<!DOCTYPE html>
     });
 
     window.addEventListener('resize', () => {
-      if (visualizerCanvas && visualizerCtx) {
-        const dpr = window.devicePixelRatio || 1;
-        visualizerCanvas.width = 320 * dpr;
-        visualizerCanvas.height = 38 * dpr;
-        visualizerCtx.scale(dpr, dpr);
-      }
       const mini = document.getElementById('mobileMiniPlayer');
       if (window.innerWidth >= 860 && mini) {
         mini.classList.remove('visible');
       }
     });
-
-    // Initialize real-time audio visualizer canvas
-    initVisualizer();
 
     // Instant paint from local cache (0ms perceived startup)
     try {
