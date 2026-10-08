@@ -2858,11 +2858,11 @@ HTML_INDEX = """<!DOCTYPE html>
                 <span id="liveVolPercent" class="lt-vol-val">100%</span>
               </div>
               <div class="lt-telemetry-row">
-                <div class="lt-status-indicator locked" id="ltStatusInd">
+                <div class="lt-status-indicator locked" id="ltStatusInd" onclick="forceStreamRefresh(false)" title="Stream Status (Click to force refresh)" style="cursor:pointer;">
                   <span class="lt-drift-dot" style="width:6px; height:6px;"></span>
                   <span id="ltStatusText">Phase-Locked</span>
                 </div>
-                <div class="lt-telemetry-pill" title="PLL Clock Drift vs Discord Bot Master">
+                <div class="lt-telemetry-pill" id="ltDriftPill" onclick="forceStreamRefresh(false)" title="PLL Clock Drift vs Discord Bot Master (Click to force refresh)" style="cursor:pointer;">
                   <span id="syncDriftLabel">±0ms</span>
                 </div>
                 <div class="lt-telemetry-pill" title="Audio Stream Quality">
@@ -4942,7 +4942,7 @@ HTML_INDEX = """<!DOCTYPE html>
         }
 
         const gid = (currentState && currentState.guild && currentState.guild.id) ? currentState.guild.id : '';
-        const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&guild_id=${encodeURIComponent(gid)}&t=${encodeURIComponent(trackKey)}`;
+        const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&guild_id=${encodeURIComponent(gid)}&t=${encodeURIComponent(trackKey)}${force ? `&_cb=${Date.now()}` : ''}`;
         
         audio.crossOrigin = 'anonymous';
         audio.src = streamUrl;
@@ -4959,10 +4959,16 @@ HTML_INDEX = """<!DOCTYPE html>
             badge.innerText = 'BUFFERING';
             badge.className = 'lt-sync-badge connecting';
           }
+          const statusText = document.getElementById('ltStatusText');
+          if (statusText) statusText.innerText = 'Aligning...';
+          const statusInd = document.getElementById('ltStatusInd');
+          if (statusInd) statusInd.className = 'lt-status-indicator buffering';
+          if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
         };
 
         audio.onplaying = () => {
           isAudioLoading = false;
+          aligningStuckStartTime = null;
           if (badge) {
             badge.innerText = '1:1 SYNC';
             badge.className = 'lt-sync-badge live';
@@ -4977,7 +4983,8 @@ HTML_INDEX = """<!DOCTYPE html>
           isAudioLoading = false;
           try {
             if (audio.readyState >= 1 && currentElapsed > 0.1 && Math.abs(audio.currentTime - currentElapsed) > 0.4) {
-              audio.currentTime = currentElapsed;
+              const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
+              audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek));
             }
           } catch (e) {}
           applyLiveEQ(currentState.effect);
@@ -4993,6 +5000,7 @@ HTML_INDEX = """<!DOCTYPE html>
           if (statusText) statusText.innerText = 'Phase-Locked';
           const statusInd = document.getElementById('ltStatusInd');
           if (statusInd) statusInd.className = 'lt-status-indicator locked';
+          aligningStuckStartTime = null;
         };
 
         audio.onloadedmetadata = onReady;
@@ -5005,6 +5013,7 @@ HTML_INDEX = """<!DOCTYPE html>
           if (statusText) statusText.innerText = 'Reconnecting';
           const statusInd = document.getElementById('ltStatusInd');
           if (statusInd) statusInd.className = 'lt-status-indicator buffering';
+          if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
           if (!liveStreamActive || !currentState || !currentState.is_playing) return;
           console.warn('Live audio stream error, auto-retrying in 1.2s...', e);
           if (badge) {
@@ -5023,7 +5032,10 @@ HTML_INDEX = """<!DOCTYPE html>
 
       if (isAudioLoading) {
         if (audio.readyState >= 2) isAudioLoading = false;
-        else return;
+        else {
+          if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
+          return;
+        }
       }
 
       applyLiveEQ(currentState.effect);
@@ -5031,6 +5043,7 @@ HTML_INDEX = """<!DOCTYPE html>
       if (!currentState.is_playing) {
         if (!audio.paused) audio.pause();
         if (badge) badge.innerText = 'Paused';
+        aligningStuckStartTime = null;
         return;
       }
 
@@ -5038,11 +5051,13 @@ HTML_INDEX = """<!DOCTYPE html>
         try {
           if (Math.abs(audio.currentTime - currentElapsed) > 0.4) {
             if (!(currentElapsed < 1.0 && audio.currentTime > 2.0)) {
-              audio.currentTime = Math.max(0, currentElapsed);
+              const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
+              audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek));
             }
           }
         } catch (e) {}
         audio.play().catch(() => {});
+        if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
       }
 
       // High-precision 1:1 Phase-Locked Loop (PLL) clock sync with Discord
@@ -5074,19 +5089,23 @@ HTML_INDEX = """<!DOCTYPE html>
         if (Math.abs(driftMs) <= Math.round(deadband * 1000) + 40) {
           if (statusText) statusText.innerText = 'Phase-Locked';
           if (statusInd) statusInd.className = 'lt-status-indicator locked';
+          aligningStuckStartTime = null;
         } else {
           if (statusText) statusText.innerText = 'Aligning...';
           if (statusInd) statusInd.className = 'lt-status-indicator buffering';
+          if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
         }
 
         if (Math.abs(drift) > hardSeekThreshold) {
           // Large drift -> Hard seek directly to Discord master position
           if (!(currentElapsed < 1.0 && audio.currentTime > 2.5)) {
-            try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
+            const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
+            try { audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek)); } catch (e) {}
           }
           if (Math.abs(audio.playbackRate - speed) > 0.005) {
             audio.playbackRate = speed;
           }
+          if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
         } else if (Math.abs(drift) > deadband) {
           // Micro-drift: Proportional rate steering with rate hysteresis to avoid buffer churn
           const steer = Math.min(maxSteer, Math.max(0.012, Math.abs(drift) * 0.10));
@@ -5098,6 +5117,14 @@ HTML_INDEX = """<!DOCTYPE html>
           // Locked in exact 1:1 sync (within deadband)
           if (Math.abs(audio.playbackRate - speed) > 0.008) {
             audio.playbackRate = speed;
+          }
+        }
+
+        // Track end boundary detection: fetch state from Discord if song is at end
+        if (durationSeconds > 0 && currentElapsed >= durationSeconds - 0.5) {
+          if (Date.now() - lastAligningRecoveryTime > 2000) {
+            lastAligningRecoveryTime = Date.now();
+            fetchStatus();
           }
         }
       }
@@ -6923,9 +6950,95 @@ HTML_INDEX = """<!DOCTYPE html>
       else if (currentLatencyMode === 'stable') intervalMs = 800;
       else intervalMs = 450;
       liveSyncInterval = setInterval(() => {
-        if (liveStreamActive) syncLiveAudio(false);
+        if (liveStreamActive) {
+          syncLiveAudio(false);
+          checkAligningWatchdog();
+        }
       }, intervalMs);
     }
+
+    // ========================================================
+    // Stream Alignment Watchdog & 5-Second Force-Refresh Engine
+    // ========================================================
+    let aligningStuckStartTime = null;
+    let lastAligningRecoveryTime = 0;
+
+    function forceStreamRefresh(fromWatchdog = false) {
+      console.warn(`[JuiceVault] Forcing stream refresh (triggered by ${fromWatchdog ? '5s aligning watchdog' : 'user click'})...`);
+
+      // 1. Save auto-resume flag so Listen Together reconnects immediately on page reload
+      try {
+        sessionStorage.setItem('jv_auto_resume_stream', 'true');
+      } catch (e) {}
+
+      // 2. Prevent infinite reload loops if server or Discord VC has persistent issue
+      const lastReload = parseInt(sessionStorage.getItem('jv_last_align_reload') || '0', 10);
+      const now = Date.now();
+
+      if (now - lastReload > 10000) {
+        try { sessionStorage.setItem('jv_last_align_reload', String(now)); } catch (e) {}
+        showToast(fromWatchdog ? 'Stuck in aligning for 5s — refreshing...' : 'Refreshing stream & web page...');
+        setTimeout(() => {
+          window.location.reload();
+        }, 180);
+      } else {
+        // Reloaded very recently: perform aggressive in-place audio pipeline reset
+        showToast('Resyncing live audio pipeline...');
+        aligningStuckStartTime = null;
+        const audio = document.getElementById('liveAudio');
+        if (audio) {
+          audio.pause();
+          audio.removeAttribute('src');
+          audio.load();
+        }
+        currentLiveTrackId = null;
+        isAudioLoading = false;
+        fetchStatus().then(() => {
+          setTimeout(() => {
+            if (liveStreamActive) syncLiveAudio(true);
+          }, 350);
+        });
+      }
+    }
+
+    function checkAligningWatchdog() {
+      if (!liveStreamActive || !currentState || !currentState.is_playing) {
+        aligningStuckStartTime = null;
+        return;
+      }
+
+      const statusText = document.getElementById('ltStatusText');
+      const statusInd = document.getElementById('ltStatusInd');
+      const text = (statusText ? statusText.innerText : '').toLowerCase();
+      const isBuffering = statusInd && statusInd.classList.contains('buffering');
+      const isAligning = text.includes('align') || text.includes('buffer') || text.includes('reconnect') || isBuffering;
+
+      if (!isAligning) {
+        aligningStuckStartTime = null;
+        return;
+      }
+
+      if (!aligningStuckStartTime) {
+        aligningStuckStartTime = Date.now();
+        return;
+      }
+
+      const stuckDuration = Date.now() - aligningStuckStartTime;
+
+      // Soft recovery at ~2.5s: fetch status in case track changed on Discord
+      if (stuckDuration >= 2500 && (Date.now() - lastAligningRecoveryTime > 2500)) {
+        lastAligningRecoveryTime = Date.now();
+        fetchStatus();
+      }
+
+      // Hard refresh at 5 seconds: exact user requirement
+      if (stuckDuration >= 5000) {
+        aligningStuckStartTime = null;
+        forceStreamRefresh(true);
+      }
+    }
+
+    setInterval(checkAligningWatchdog, 500);
 
     function renderSettingsUI() {
       document.querySelectorAll('.color-swatch').forEach(el => {
@@ -8517,6 +8630,19 @@ HTML_INDEX = """<!DOCTYPE html>
       connectWS();
       fetchStatus();
     }
+
+    // Auto-resume Listen Together stream if page was refreshed by alignment watchdog
+    try {
+      if (sessionStorage.getItem('jv_auto_resume_stream') === 'true') {
+        sessionStorage.removeItem('jv_auto_resume_stream');
+        setTimeout(() => {
+          if (!liveStreamActive) {
+            toggleLiveAudio();
+            showToast('Live stream auto-resumed');
+          }
+        }, 600);
+      }
+    } catch (e) {}
   </script>
 </body>
 </html>
