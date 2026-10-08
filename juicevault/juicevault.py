@@ -744,10 +744,21 @@ class JuiceVault(commands.Cog):
                     p.cancel()
                 explicit_skip = skip.is_set() or (skip_task in done)
                 explicit_seek = seek.is_set() or (seek_task in done)
-                elapsed = self.get_position(gid)
+                completed = bool(not explicit_skip and not explicit_seek and not stop.is_set() and (finish_task in done))
+                track_dur = self._parse_duration(track.get("length"))
+                started = getattr(voice, "_jv_started_at", None)
+                if completed and track_dur and track_dur > 0:
+                    elapsed = track_dur
+                elif started is not None:
+                    eff = str(self.effects.get(gid, "none")).lower()
+                    effect_speed = 1.22 if "night" in eff else (0.86 if "slow" in eff else 1.0)
+                    elapsed = max(0.0, float(self.play_positions.get(gid, 0.0)) + (time.monotonic() - started) * effect_speed)
+                    if track_dur and track_dur > 0:
+                        elapsed = min(elapsed, track_dur)
+                else:
+                    elapsed = self.get_position(gid)
                 self.play_positions[gid] = elapsed
                 if hasattr(self, "web_remote") and self.web_remote:
-                    completed = bool(not explicit_skip and not explicit_seek and not stop.is_set())
                     self.web_remote.record_playback(elapsed_seconds=max(0.0, elapsed), completed=completed, guild_id=gid)
                 if explicit_skip or explicit_seek:
                     if voice.is_playing() or voice.is_paused():

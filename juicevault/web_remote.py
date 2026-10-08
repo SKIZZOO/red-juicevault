@@ -91,6 +91,7 @@ class JuiceVaultWebRemote:
         self._current_day = None
         self._stats_dirty = False
         self._saver_task = None
+        self._tracker_task = None
 
     def _get_main_cog(self):
         return self.bot.get_cog("JuiceVault")
@@ -152,6 +153,8 @@ class JuiceVaultWebRemote:
 
         if self._saver_task is None or self._saver_task.done():
             self._saver_task = asyncio.create_task(self._stats_saver_loop())
+        if self._tracker_task is None or self._tracker_task.done():
+            self._tracker_task = asyncio.create_task(self._playback_tracker_loop())
 
         # If the saved custom_url is a trycloudflare.com URL, it's stale —
         # the tunnel process died when the cog was last unloaded/reloaded.
@@ -314,6 +317,8 @@ class JuiceVaultWebRemote:
     async def _stop_server_internal(self):
         if hasattr(self, "_saver_task") and self._saver_task and not self._saver_task.done():
             self._saver_task.cancel()
+        if hasattr(self, "_tracker_task") and self._tracker_task and not self._tracker_task.done():
+            self._tracker_task.cancel()
         await self._save_stats()
 
         for ws in list(self.ws_clients):
@@ -471,9 +476,9 @@ class JuiceVaultWebRemote:
         today_reqs = day_stats.get("requests", 0)
         today_uniques = max(len(self._today_ips), 1 if today_views > 0 else 0)
 
-        all_sec = self._all_time_stats.get("listening_seconds", 0)
-        all_tracks = self._all_time_stats.get("tracks_played", 0)
-        all_actions = self._all_time_stats.get("remote_actions", 0)
+        all_sec = max(self._all_time_stats.get("listening_seconds", 0), today_sec)
+        all_tracks = max(self._all_time_stats.get("tracks_played", 0), today_tracks)
+        all_actions = max(self._all_time_stats.get("remote_actions", 0), today_actions)
 
         def _fmt_time(s):
             s = int(s)
@@ -482,6 +487,10 @@ class JuiceVaultWebRemote:
             h = s // 3600
             m = (s % 3600) // 60
             return f"{h}h {m:02d}m"
+
+        hourly = day_stats.get("hourly_activity", [0] * 24)
+        if not isinstance(hourly, list) or len(hourly) != 24:
+            hourly = [0] * 24
 
         global_stats = {
             "views": {
@@ -504,12 +513,63 @@ class JuiceVaultWebRemote:
                 "listening_formatted": _fmt_time(all_sec),
                 "remote_actions": all_actions,
             },
-            "hourly_activity": day_stats.get("hourly_activity", [0] * 24),
+            "hourly_activity": hourly,
         }
 
         result = dict(global_stats)
         result["global"] = global_stats
         return result
+
+    async def _playback_tracker_loop(self):
+        """Continuously track active Discord voice playback duration in real time 24/7."""
+        last_tick = time.monotonic()
+        try:
+            while True:
+                await asyncio.sleep(1.0)
+                now = time.monotonic()
+                delta = max(0.0, min(5.0, now - last_tick))
+                last_tick = now
+
+                active_guild_ids = set()
+                if self.bot and getattr(self.bot, "voice_clients", None):
+                    for vc in self.bot.voice_clients:
+                        if vc and vc.is_connected() and vc.is_playing() and not vc.is_paused():
+                            active_guild_ids.add(vc.guild.id)
+
+                if active_guild_ids:
+                    today = self._ensure_today()
+                    int_delta = int(round(delta))
+                    if int_delta > 0:
+                        hour = datetime.datetime.now(datetime.timezone.utc).hour
+                        day_stats = self._daily_history.setdefault(today, {
+                            "views": 0, "tracks": 0, "seconds": 0, "actions": 0, "requests": 0, "hourly_activity": [0] * 24
+                        })
+                        day_stats["seconds"] = day_stats.get("seconds", 0) + int_delta
+                        hourly = day_stats.setdefault("hourly_activity", [0] * 24)
+                        if isinstance(hourly, list) and len(hourly) == 24:
+                            hourly[hour] = hourly[hour] + int_delta
+
+                        self._all_time_stats["listening_seconds"] = self._all_time_stats.get("listening_seconds", 0) + int_delta
+
+                        for gid in active_guild_ids:
+                            gid_str = str(gid)
+                            g_entry = self._guild_stats.setdefault(gid_str, {
+                                "total_views": 0,
+                                "all_time": {"tracks_played": 0, "listening_seconds": 0, "remote_actions": 0},
+                                "daily_history": {},
+                            })
+                            g_daily = g_entry.setdefault("daily_history", {}).setdefault(today, {
+                                "views": 0, "tracks": 0, "seconds": 0, "actions": 0, "requests": 0
+                            })
+                            g_daily["seconds"] = g_daily.get("seconds", 0) + int_delta
+                            g_all = g_entry.setdefault("all_time", {"tracks_played": 0, "listening_seconds": 0, "remote_actions": 0})
+                            g_all["listening_seconds"] = g_all.get("listening_seconds", 0) + int_delta
+
+                        self._stats_dirty = True
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"[JuiceVault Web Remote] Playback tracker error: {e}")
 
     async def _stats_saver_loop(self):
         """Background loop saving dirty telemetry data every 45s."""

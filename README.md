@@ -14,9 +14,9 @@ Featuring a **mobile-first PWA controller**, **1:1 phase-locked audio streaming 
 
 ## 📸 Showcase & Preview
 
-![JuiceVault UI Showcase](docs/remote-showcase.png)
+![JuiceVault Desktop Web Remote & Queue](docs/remote-showcase.png)
 
-![Listen Together & Soundboard Mockup](docs/mobile-listen-together.png)
+![Listen Together Phase-Locked Audio Streaming & Mobile Remote](docs/mobile-listen-together.png)
 
 ![JuiceVault Discord Control Panel](docs/ui-preview.png)
 
@@ -30,14 +30,28 @@ Featuring a **mobile-first PWA controller**, **1:1 phase-locked audio streaming 
 - **Live Hardware Volume Slider & Micro-Steering**: Smooth dynamic pitch and rate adjustments keep audio perfectly aligned without stuttering.
 - **Lock Screen Media Player**: Full integration with the iOS / Android `MediaSession` API allows play, pause, skip, and scrubbing directly from your lock screen, notification center, or Apple Dynamic Island.
 
+### 🌌 10-Preset Audio-Reactive Visualizer Engine
+- **Dynamic Cover Art Aura**: Reactive coronal glow, vinyl aura, and radiant frequency pulses pulsating directly behind the rotating album cover.
+- **Ambient Background Visualizer**: Full-screen canvas modes including *Ambient Aurora Waves*, *Quantum Starfield*, *Retro Synthwave Grid*, and *Hyperdrive Warp Tunnel*.
+- **Hardware DSP Analysis**: Built-in Web Audio API FFT frequency analyzer (Cyber Neon Bars, Phosphor Oscilloscope, dual ballistic Analog VU Meters) with harmonic rhythm synthesis.
+- **Custom Sensitivity & Opacity**: In-app slider adjustments with persistent local configuration.
+
+### ⌨️ Hardware Media Controls & Gaming Mouse Support
+- **Keyboard Media Keys**: Native OS media key capture (`MediaPlayPause`, `MediaTrackNext`, `MediaTrackPrevious`, `MediaStop`), including keyboard shortcuts like `Fn + F11`, `F10`, `F12`, and `Spacebar`.
+- **Gaming Mouse Media Buttons**: Direct support for gaming mice side buttons (e.g. Razer Viper V3 Hyperspeed buttons 4 & 5 / auxiliary clicks) mapped to play/pause and queue skipping.
+- **Bluetooth & Lock Screen Integration**: Continuous playback control from Bluetooth headphones, AirPods, and steering wheel media buttons.
+
+### 📊 24/7 Global Telemetry & Streaming Analytics
+- **24/7 Background Tracking**: Playback time, hourly listening activity curves, and songs completed are tracked persistently round-the-clock directly from Discord voice, ensuring metrics match and accumulate even when the website is closed.
+- **Sleek Broadcasting Telemetry Sheet**: Real-time traffic counter (total views, daily visits, unique visitors, active WebSocket sessions) paired with 24-hour hourly distribution and all-time statistics.
+
 ### 🔊 50 Meme Soundboard
 - **50 Curated Viral Sounds**: Instant soundboard pads (Airhorn, OOF, Bruh, Yeet, Sad Trombone, Wow, etc.) from MyInstants.
 - **Smart Music Ducking / Auto-Pause**: When any soundboard pad is triggered, current music playback pauses instantly, plays the soundboard effect into the voice channel, and seamlessly resumes the music.
 - **Audio Previews**: Optional local audio preview checkbox lets you audition sounds directly on your device.
 
 ### 📱 Mobile Web Remote PWA
-- **Compact & Modern Layout**: Streamlined, ultra-responsive dark glassmorphic UI optimized to fit cleanly on mobile screens without excessive scrolling.
-- **Live Views & Daily Usage Telemetry**: Real-time traffic counter (total page views, daily visits, unique visitors, active sessions) paired with 24-hour daily streaming analytics (audio duration streamed today, songs completed, and remote commands executed).
+- **Compact & Modern Layout**: Streamlined, ultra-responsive dark glassmorphic UI optimized to fit cleanly on mobile screens without horizontal overflow or excessive scrolling.
 - **1-Tap Pairing**: Instant QR Code pairing generated from Discord with secure auth tokens.
 - **Installable PWA**: Tap *Add to Home Screen* in Safari (iOS) or Chrome (Android) for a standalone fullscreen mobile app with custom app icons.
 - **Live WebSocket Sync**: Real-time 60fps playback scrubber, live soundwave visualizer, and dynamic status badges.

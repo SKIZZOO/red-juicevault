@@ -243,15 +243,41 @@ HTML_INDEX = """<!DOCTYPE html>
         gap: 5px !important;
       }
       #vcLabel {
-        max-width: 68px;
+        max-width: 85px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+      .btn-lt-action {
+        padding: 5px 9px !important;
+        font-size: 0.7rem !important;
       }
       .stats-badge {
         padding: 4px 7px !important;
         font-size: 0.7rem !important;
         gap: 4px !important;
+      }
+      .header-pill-sub {
+        display: none !important;
+      }
+      .brand-tag {
+        display: none !important;
+      }
+      #connLabel {
+        display: none !important;
+      }
+      #guildBadge {
+        display: none !important;
+      }
+      .controls-sub .btn-flat {
+        padding: 5px 4px !important;
+        font-size: 0.68rem !important;
+        gap: 4px !important;
+      }
+      .controls-sub .btn-flat span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .desktop-segment {
         display: none !important;
@@ -1197,20 +1223,27 @@ HTML_INDEX = """<!DOCTYPE html>
     .lt-text-meta {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 3px;
       min-width: 0;
+      flex: 1;
     }
     .lt-title-line {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
     }
     .lt-title {
       font-weight: 700;
-      font-size: 0.83rem;
+      font-size: 0.84rem;
       color: #fff;
       letter-spacing: -0.01em;
       white-space: nowrap;
+    }
+    .lt-meta-sub-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
     }
     .lt-sync-badge {
       font-size: 0.58rem;
@@ -1224,6 +1257,7 @@ HTML_INDEX = """<!DOCTYPE html>
       border: 1px solid rgba(168, 85, 247, 0.3);
       text-transform: uppercase;
       white-space: nowrap;
+      flex-shrink: 0;
       transition: all 0.2s ease;
     }
     .lt-sync-badge.connecting {
@@ -1242,7 +1276,7 @@ HTML_INDEX = """<!DOCTYPE html>
       border-color: rgba(148, 163, 184, 0.3);
     }
     .lt-subtitle {
-      font-size: 0.69rem;
+      font-size: 0.68rem;
       color: var(--text-sub);
       white-space: nowrap;
       overflow: hidden;
@@ -1484,6 +1518,119 @@ HTML_INDEX = """<!DOCTYPE html>
       .t-dock-val {
         font-size: 0.84rem;
       }
+    }
+
+    /* Ambient Audio-Reactive Background Canvas */
+    .ambient-visualizer-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .ambient-visualizer-canvas.active {
+      opacity: 0.75;
+    }
+
+    /* Cover Art Audio Reactive Dynamic Aura */
+    .cover-visualizer-aura {
+      position: absolute;
+      inset: -14px;
+      border-radius: 20px;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(18px);
+      opacity: 0;
+      transition: opacity 0.35s ease, transform 0.08s ease;
+      background: radial-gradient(circle, var(--accent) 0%, rgba(121, 40, 202, 0.45) 55%, transparent 80%);
+    }
+    .cover-visualizer-aura.active {
+      opacity: 0.85;
+    }
+
+    /* Visualizer Presets Modal Grid */
+    .vis-preset-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin: 12px 0 16px;
+    }
+    @media (max-width: 480px) {
+      .vis-preset-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .vis-preset-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      transition: all 0.2s var(--spring);
+      user-select: none;
+    }
+    .vis-preset-card:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.16);
+      transform: translateY(-1px);
+    }
+    .vis-preset-card.active {
+      background: var(--accent-muted);
+      border-color: var(--accent);
+      box-shadow: 0 0 14px var(--accent-glow);
+    }
+    .vis-preset-card .p-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .vis-preset-card .p-name {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .vis-preset-card.active .p-name {
+      color: var(--accent-light);
+    }
+    .vis-preset-card .p-desc {
+      font-size: 0.65rem;
+      color: var(--text-sub);
+    }
+    .vis-tag {
+      font-size: 0.58rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .vis-tag.accent {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+    .vis-tag.ambient {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .vis-tag.cover {
+      background: rgba(244, 63, 94, 0.15);
+      color: #fb7185;
+      border: 1px solid rgba(244, 63, 94, 0.3);
     }
 
     /* Global Network Telemetry Header Bar */
@@ -1864,6 +2011,7 @@ HTML_INDEX = """<!DOCTYPE html>
   </style>
 </head>
 <body>
+  <canvas id="ambientVisualizerCanvas" class="ambient-visualizer-canvas"></canvas>
   <div class="backdrop-glow"></div>
 
   <!-- Header -->
@@ -1928,6 +2076,7 @@ HTML_INDEX = """<!DOCTYPE html>
         <div class="ui-card">
           <div class="player-visual-wrap">
             <div class="player-visual-ambient" id="artAmbient"></div>
+            <div class="cover-visualizer-aura" id="coverVisualizerAura"></div>
             <div class="player-visual" id="artContainer">
               <img src="https://api.juicevault.xyz/favicon.ico" class="player-cover" id="coverImg" alt="Album Cover">
             </div>
@@ -1996,6 +2145,10 @@ HTML_INDEX = """<!DOCTYPE html>
               <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
               <span>EQ Presets</span>
             </button>
+            <button class="btn-kinetic btn-flat" id="visualizerBtn" onclick="openVisualizerModal()">
+              <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M12 2v20M17 5v14M7 9v6M22 10v4M2 10v4"/></svg>
+              <span id="visualizerBtnText">Visualizer</span>
+            </button>
             <button class="btn-kinetic btn-flat" onclick="switchMobileNav('soundboard')">
               <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
               <span>Soundboard</span>
@@ -2021,9 +2174,11 @@ HTML_INDEX = """<!DOCTYPE html>
                 <div class="lt-text-meta">
                   <div class="lt-title-line">
                     <span class="lt-title" id="liveStatusTitle">Listen Together</span>
-                    <span class="lt-sync-badge" id="liveSyncBadge">1:1 SYNC</span>
                   </div>
-                  <div class="lt-subtitle" id="liveStatusSub">Ultra-low latency stream synced with Discord voice</div>
+                  <div class="lt-meta-sub-row">
+                    <span class="lt-sync-badge" id="liveSyncBadge">1:1 SYNC</span>
+                    <span class="lt-subtitle" id="liveStatusSub">Discord Voice Sync</span>
+                  </div>
                 </div>
               </div>
               <div class="lt-actions-right">
@@ -2707,13 +2862,69 @@ HTML_INDEX = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- Visualizer Studio Modal Sheet -->
+  <div class="sheet-backdrop" id="visualizerModal" onclick="if(event.target===this) closeVisualizerModal()">
+    <div class="sheet-panel" style="max-width:540px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="cat-icon-badge" style="width:36px; height:36px; border-radius:10px; background:var(--accent-muted); border:1px solid rgba(168,85,247,0.3); color:var(--accent);">
+            <svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24"><path d="M12 2v20M17 5v14M7 9v6M22 10v4M2 10v4"/></svg>
+          </div>
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="font-weight:700; font-size:0.95rem; color:#fff;">Audio Reactive Visualizer</div>
+              <span class="lt-sync-badge live" id="visActiveBadge">Active</span>
+            </div>
+            <div style="font-size:0.72rem; color:var(--text-sub); margin-top:1px;">10 Presets • Background &amp; Album Art Dynamics</div>
+          </div>
+        </div>
+        <button class="btn-kinetic btn-circle btn-action-sm" onclick="closeVisualizerModal()">
+          <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Master Switch -->
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:var(--radius-sm); margin-bottom:12px;">
+        <div>
+          <div style="font-size:0.8rem; font-weight:700; color:#fff;">Reactive Visualizer</div>
+          <div style="font-size:0.68rem; color:var(--text-sub);">Full-screen canvas &amp; dynamic cover aura</div>
+        </div>
+        <button class="btn-kinetic btn-lt-action" id="visToggleMasterBtn" onclick="toggleVisualizerState()">
+          <span id="visToggleMasterLabel">Enabled</span>
+        </button>
+      </div>
+
+      <!-- Presets Grid (10 Presets) -->
+      <div style="font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-sub); margin-bottom:6px;">Select Preset</div>
+      <div class="vis-preset-grid" id="visPresetList"></div>
+
+      <!-- Sliders for Intensity & Sensitivity -->
+      <div style="display:flex; flex-direction:column; gap:10px; padding:12px 14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:var(--radius-sm); margin-bottom:14px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <span style="font-size:0.72rem; color:var(--text-muted);">Background Opacity</span>
+          <input type="range" min="0.1" max="1" step="0.05" value="0.75" id="visOpacitySlider" class="lt-volume-slider" oninput="updateVisualizerOpacity(this.value)" style="width:160px;">
+          <span id="visOpacityVal" style="font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub); min-width:32px;">75%</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <span style="font-size:0.72rem; color:var(--text-muted);">Motion Sensitivity</span>
+          <input type="range" min="0.5" max="2" step="0.1" value="1" id="visSensSlider" class="lt-volume-slider" oninput="updateVisualizerSens(this.value)" style="width:160px;">
+          <span id="visSensVal" style="font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--text-sub); min-width:32px;">1.0x</span>
+        </div>
+      </div>
+
+      <button class="btn-kinetic btn-flat" style="padding:10px; width:100%; justify-content:center;" onclick="closeVisualizerModal()">
+        Done
+      </button>
+    </div>
+  </div>
+
   <!-- Live Telemetry & Daily Usage Full Modal Sheet -->
   <div class="sheet-backdrop" id="statsSheet" onclick="if(event.target===this) closeStatsModal()">
     <div class="sheet-panel" style="max-width:560px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
         <div style="display:flex; align-items:center; gap:12px;">
-          <div class="brand-logo-disc" style="width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg, var(--accent), #7928ca); box-shadow:0 0 18px var(--accent-glow);">
-            <svg class="icon-svg fill-current" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <div class="brand-logo-disc" style="width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg, var(--accent), #7928ca); box-shadow:0 0 18px var(--accent-glow); display:flex; align-items:center; justify-content:center;">
+            <svg class="icon-svg" style="width:20px;height:20px;color:#fff;" viewBox="0 0 24 24"><path d="M4.93 4.93a10 10 0 0 1 14.14 0"/><path d="M7.76 7.76a6 6 0 0 1 8.48 0"/><circle cx="12" cy="12" r="2"/><path d="M12 14v8"/></svg>
           </div>
           <div>
             <div style="display:flex; align-items:center; gap:8px;">
@@ -3200,6 +3411,8 @@ HTML_INDEX = """<!DOCTYPE html>
     let delayFeedbackNode = null;
     let delayGainNode = null;
     let masterGainNode = null;
+    let analyserNode = null;
+    let visDataArray = null;
     let pannerAnimFrame = null;
     let pannerAngle = 0;
 
@@ -3271,7 +3484,13 @@ HTML_INDEX = """<!DOCTYPE html>
         lastNode.connect(delayNode);
         delayGainNode.connect(masterGainNode);
 
-        masterGainNode.connect(audioCtx.destination);
+        analyserNode = audioCtx.createAnalyser();
+        analyserNode.fftSize = 128;
+        analyserNode.smoothingTimeConstant = 0.82;
+        visDataArray = new Uint8Array(analyserNode.frequencyBinCount);
+
+        masterGainNode.connect(analyserNode);
+        analyserNode.connect(audioCtx.destination);
       } catch (err) {
         console.warn('Web Audio API initialization failed:', err);
       }
@@ -5064,6 +5283,559 @@ HTML_INDEX = """<!DOCTYPE html>
       armBackgroundMediaSession();
     }
 
+    // ==========================================
+    // 10-PRESET AUDIO REACTIVE VISUALIZER ENGINE
+    // ==========================================
+    const VISUALIZER_PRESETS = [
+      { id: 'cyber_bars', name: 'Cyber Neon Bars', desc: 'Dual-gradient 32-band spectrum with peak caps', tag: 'Studio' },
+      { id: 'oscilloscope', name: 'Phosphor Oscilloscope', desc: 'High-voltage vector beam sine wave', tag: 'Vector' },
+      { id: 'vinyl_aura', name: 'Circular Vinyl Aura', desc: 'Pulsing reactive rings surrounding album cover', tag: 'Cover' },
+      { id: 'aurora_mesh', name: 'Ambient Aurora Waves', desc: 'Fluid cosmic northern lights across background', tag: 'Background' },
+      { id: 'quantum_stars', name: 'Quantum Starfield', desc: 'Drifting galaxy stars bursting with bass drops', tag: 'Background' },
+      { id: 'synthwave_grid', name: 'Retro Synthwave Grid', desc: '80s wireframe horizon with reactive rolling hills', tag: 'Background' },
+      { id: 'glass_ribbons', name: 'Glass Frequency Ribbons', desc: 'Translucent glowing harmonic ribbons weaving behind cover', tag: 'Cover+BG' },
+      { id: 'analog_vu', name: 'Analog Studio VU Meters', desc: 'Dual Left/Right ballistic dB peak needles', tag: 'Studio' },
+      { id: 'sunburst_orbit', name: 'Radial Sunburst Coronal', desc: '360° solar flare rays emitting from vinyl disc', tag: 'Cover' },
+      { id: 'hyper_tunnel', name: 'Hyperdrive Warp Tunnel', desc: 'Infinite geometric tunnel rings zooming outward', tag: 'Background' }
+    ];
+
+    let visEnabled = localStorage.getItem('jv_vis_enabled') !== 'false';
+    let visPreset = localStorage.getItem('jv_vis_preset') || 'vinyl_aura';
+    let visOpacity = parseFloat(localStorage.getItem('jv_vis_opacity') || '0.75');
+    let visSensitivity = parseFloat(localStorage.getItem('jv_vis_sensitivity') || '1.0');
+    let visSimTime = 0;
+    let visAnimFrame = null;
+    let visStars = [];
+    let visGridOffset = 0;
+    let visPeaks = new Float32Array(64);
+
+    function initVisualizerStars() {
+      visStars = [];
+      const w = window.innerWidth || 1200;
+      const h = window.innerHeight || 800;
+      for (let i = 0; i < 75; i++) {
+        visStars.push({
+          x: (Math.random() - 0.5) * w * 1.5,
+          y: (Math.random() - 0.5) * h * 1.5,
+          z: Math.random() * 1000 + 1,
+          size: Math.random() * 2 + 1,
+          hue: Math.random() > 0.5 ? 275 : 195
+        });
+      }
+    }
+
+    function renderVisualizerPresetsList() {
+      const container = document.getElementById('visPresetList');
+      if (!container) return;
+      container.innerHTML = VISUALIZER_PRESETS.map(p => {
+        const isActive = p.id === visPreset;
+        let tagClass = 'accent';
+        if (p.tag === 'Background') tagClass = 'ambient';
+        if (p.tag === 'Cover' || p.tag === 'Cover+BG') tagClass = 'cover';
+        return `
+          <div class="vis-preset-card ${isActive ? 'active' : ''}" onclick="setVisualizerPreset('${p.id}')">
+            <div class="p-left">
+              <span class="p-name">${p.name}</span>
+              <span class="p-desc">${p.desc}</span>
+            </div>
+            <span class="vis-tag ${tagClass}">${p.tag}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openVisualizerModal() {
+      renderVisualizerPresetsList();
+      const modal = document.getElementById('visualizerModal');
+      if (modal) modal.classList.add('visible');
+      const opSlider = document.getElementById('visOpacitySlider');
+      if (opSlider) opSlider.value = visOpacity;
+      const opVal = document.getElementById('visOpacityVal');
+      if (opVal) opVal.innerText = `${Math.round(visOpacity * 100)}%`;
+      const sensSlider = document.getElementById('visSensSlider');
+      if (sensSlider) sensSlider.value = visSensitivity;
+      const sensVal = document.getElementById('visSensVal');
+      if (sensVal) sensVal.innerText = `${visSensitivity.toFixed(1)}x`;
+      updateVisualizerMasterBtnUI();
+    }
+
+    function closeVisualizerModal() {
+      const modal = document.getElementById('visualizerModal');
+      if (modal) modal.classList.remove('visible');
+    }
+
+    function updateVisualizerMasterBtnUI() {
+      const btn = document.getElementById('visToggleMasterBtn');
+      const lbl = document.getElementById('visToggleMasterLabel');
+      const badge = document.getElementById('visActiveBadge');
+      const headerBtn = document.getElementById('visualizerBtn');
+      if (visEnabled) {
+        if (btn) btn.classList.add('active');
+        if (lbl) lbl.innerText = 'Enabled';
+        if (badge) { badge.innerText = 'Active'; badge.className = 'lt-sync-badge live'; }
+        if (headerBtn) headerBtn.classList.add('active');
+      } else {
+        if (btn) btn.classList.remove('active');
+        if (lbl) lbl.innerText = 'Disabled';
+        if (badge) { badge.innerText = 'Off'; badge.className = 'lt-sync-badge paused'; }
+        if (headerBtn) headerBtn.classList.remove('active');
+      }
+    }
+
+    function toggleVisualizerState() {
+      visEnabled = !visEnabled;
+      localStorage.setItem('jv_vis_enabled', visEnabled ? 'true' : 'false');
+      updateVisualizerMasterBtnUI();
+      const canvas = document.getElementById('ambientVisualizerCanvas');
+      const aura = document.getElementById('coverVisualizerAura');
+      if (visEnabled) {
+        if (canvas) canvas.classList.add('active');
+        showToast('Visualizer activated');
+      } else {
+        if (canvas) {
+          canvas.classList.remove('active');
+          const ctx = canvas.getContext('2d');
+          if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        if (aura) aura.classList.remove('active');
+        showToast('Visualizer deactivated');
+      }
+    }
+
+    function setVisualizerPreset(id) {
+      visPreset = id;
+      localStorage.setItem('jv_vis_preset', id);
+      renderVisualizerPresetsList();
+      const p = VISUALIZER_PRESETS.find(x => x.id === id);
+      showToast(`Preset: ${p ? p.name : id}`);
+    }
+
+    function updateVisualizerOpacity(val) {
+      visOpacity = parseFloat(val);
+      localStorage.setItem('jv_vis_opacity', visOpacity);
+      const canvas = document.getElementById('ambientVisualizerCanvas');
+      if (canvas) canvas.style.opacity = visOpacity;
+      const opVal = document.getElementById('visOpacityVal');
+      if (opVal) opVal.innerText = `${Math.round(visOpacity * 100)}%`;
+    }
+
+    function updateVisualizerSens(val) {
+      visSensitivity = parseFloat(val);
+      localStorage.setItem('jv_vis_sensitivity', visSensitivity);
+      const sensVal = document.getElementById('visSensVal');
+      if (sensVal) sensVal.innerText = `${visSensitivity.toFixed(1)}x`;
+    }
+
+    function getActiveFrequencies() {
+      const bins = new Uint8Array(64);
+      if (liveStreamActive && analyserNode && visDataArray) {
+        analyserNode.getByteFrequencyData(visDataArray);
+        for (let i = 0; i < 64; i++) {
+          const idx = Math.floor((i / 64) * visDataArray.length * 0.85);
+          bins[i] = Math.min(255, Math.floor((visDataArray[idx] || 0) * visSensitivity));
+        }
+        return bins;
+      }
+      const isPlaying = !!(currentState && currentState.is_playing);
+      const speed = (currentState && currentState.track && currentState.track.effect_speed) || 1.0;
+      visSimTime += isPlaying ? (0.04 * speed) : 0.006;
+      for (let i = 0; i < 64; i++) {
+        if (!isPlaying) {
+          bins[i] = Math.max(0, Math.floor(12 + Math.sin(visSimTime + i * 0.25) * 8));
+          continue;
+        }
+        const bass = Math.sin(visSimTime * 1.8) * 0.5 + 0.5;
+        const kick = Math.pow(Math.sin(visSimTime * 3.6), 6);
+        const mid = Math.cos(visSimTime * 2.1 + i * 0.18) * 0.5 + 0.5;
+        const high = Math.sin(visSimTime * 4.2 + i * 0.4) * 0.5 + 0.5;
+        let v = (i < 8) ? (bass * 0.65 + kick * 0.85) : ((i < 28) ? (mid * 0.7 + kick * 0.25) : high * 0.6);
+        bins[i] = Math.min(255, Math.floor(v * 245 * visSensitivity));
+      }
+      return bins;
+    }
+
+    function renderVisualizerLoop(now) {
+      visAnimFrame = requestAnimationFrame(renderVisualizerLoop);
+      const canvas = document.getElementById('ambientVisualizerCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+
+      if (!visEnabled) {
+        ctx.clearRect(0, 0, w, h);
+        const aura = document.getElementById('coverVisualizerAura');
+        if (aura) aura.classList.remove('active');
+        return;
+      }
+
+      const bins = getActiveFrequencies();
+      let bassSum = 0;
+      for (let i = 0; i < 8; i++) bassSum += bins[i];
+      const avgBass = bassSum / 8;
+      const bassRatio = Math.min(1.0, avgBass / 220);
+
+      const coverWrap = document.getElementById('artContainer');
+      const coverAura = document.getElementById('coverVisualizerAura');
+      let cx = w / 2;
+      let cy = h / 2;
+      let coverRadius = 110;
+      if (coverWrap) {
+        const rect = coverWrap.getBoundingClientRect();
+        if (rect.width > 0) {
+          cx = rect.left + rect.width / 2;
+          cy = rect.top + rect.height / 2;
+          coverRadius = rect.width / 2;
+        }
+      }
+
+      // Update Cover Aura element for reactive presets
+      if (['vinyl_aura', 'glass_ribbons', 'sunburst_orbit'].includes(visPreset)) {
+        if (coverAura) {
+          coverAura.classList.add('active');
+          const scale = 1.0 + (bassRatio * 0.18);
+          coverAura.style.transform = `scale(${scale})`;
+          coverAura.style.opacity = `${0.35 + bassRatio * 0.6}`;
+        }
+      } else {
+        if (coverAura) coverAura.classList.remove('active');
+      }
+
+      ctx.clearRect(0, 0, w, h);
+
+      // PRESET 1: CYBER NEON BARS
+      if (visPreset === 'cyber_bars') {
+        const numBars = 36;
+        const totalW = Math.min(w * 0.9, 720);
+        const startX = (w - totalW) / 2;
+        const barW = (totalW / numBars) - 4;
+        const maxH = Math.min(h * 0.35, 220);
+        const baseY = h - 18;
+
+        for (let i = 0; i < numBars; i++) {
+          const val = bins[i] || 0;
+          const barH = Math.max(4, (val / 255) * maxH);
+          const x = startX + i * (barW + 4);
+          const y = baseY - barH;
+
+          if (val > (visPeaks[i] || 0)) visPeaks[i] = val;
+          else visPeaks[i] = Math.max(0, (visPeaks[i] || 0) - 1.8);
+          const peakY = baseY - Math.max(4, ((visPeaks[i] || 0) / 255) * maxH) - 4;
+
+          const grad = ctx.createLinearGradient(0, y, 0, baseY);
+          grad.addColorStop(0, '#c084fc');
+          grad.addColorStop(0.5, '#a855f7');
+          grad.addColorStop(1, 'rgba(107, 33, 168, 0.2)');
+
+          ctx.fillStyle = grad;
+          if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(x, y, barW, barH, [3, 3, 0, 0]);
+            ctx.fill();
+          } else {
+            ctx.fillRect(x, y, barW, barH);
+          }
+
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(x, peakY, barW, 2.5);
+        }
+      }
+
+      // PRESET 2: OSCILLOSCOPE BEAM
+      else if (visPreset === 'oscilloscope') {
+        ctx.beginPath();
+        const centerY = h * 0.65;
+        const amp = Math.min(140, h * 0.22) * (0.6 + bassRatio * 0.8);
+        ctx.moveTo(0, centerY);
+
+        for (let x = 0; x < w; x += 4) {
+          const normX = x / w;
+          const binIdx = Math.floor(normX * 32);
+          const val = (bins[binIdx] || 0) / 255;
+          const wave1 = Math.sin(normX * 12 + visSimTime * 3) * val;
+          const wave2 = Math.cos(normX * 24 - visSimTime * 2) * (val * 0.5);
+          const y = centerY + (wave1 + wave2) * amp;
+          ctx.lineTo(x, y);
+        }
+
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#a855f7';
+        ctx.shadowBlur = 18;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      // PRESET 3: CIRCULAR VINYL AURA (Cover Art)
+      else if (visPreset === 'vinyl_aura') {
+        const numRings = 5;
+        for (let r = 0; r < numRings; r++) {
+          const binVal = (bins[r * 4] || 0) / 255;
+          const radius = coverRadius + 14 + (r * 22) + (binVal * 28 * bassRatio);
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(192, 132, 252, ${0.18 + binVal * 0.45})`;
+          ctx.lineWidth = 2 + binVal * 3;
+          ctx.shadowColor = '#a855f7';
+          ctx.shadowBlur = 14;
+          ctx.stroke();
+
+          const ticks = 16;
+          for (let t = 0; t < ticks; t++) {
+            const angle = (t / ticks) * Math.PI * 2 + (visSimTime * (r % 2 === 0 ? 0.4 : -0.4));
+            const tx1 = cx + Math.cos(angle) * (radius - 3);
+            const ty1 = cy + Math.sin(angle) * (radius - 3);
+            const tx2 = cx + Math.cos(angle) * (radius + 5 + binVal * 8);
+            const ty2 = cy + Math.sin(angle) * (radius + 5 + binVal * 8);
+            ctx.beginPath();
+            ctx.moveTo(tx1, ty1);
+            ctx.lineTo(tx2, ty2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // PRESET 4: AMBIENT AURORA WAVES (Website Background)
+      else if (visPreset === 'aurora_mesh') {
+        const layers = 3;
+        for (let l = 0; l < layers; l++) {
+          ctx.beginPath();
+          const baseWaveY = h * (0.45 + l * 0.18);
+          ctx.moveTo(0, h);
+          ctx.lineTo(0, baseWaveY);
+
+          for (let x = 0; x <= w; x += 18) {
+            const normX = x / w;
+            const binIdx = Math.floor(normX * 24);
+            const freq = (bins[binIdx] || 0) / 255;
+            const wave = Math.sin(normX * 4 + visSimTime * (1.2 + l * 0.4)) * 60 * (1 + bassRatio);
+            const waveSub = Math.cos(normX * 8 - visSimTime) * 30 * freq;
+            const y = baseWaveY + wave + waveSub;
+            ctx.lineTo(x, y);
+          }
+
+          ctx.lineTo(w, h);
+          ctx.closePath();
+
+          const grad = ctx.createLinearGradient(0, baseWaveY - 80, 0, h);
+          if (l === 0) {
+            grad.addColorStop(0, 'rgba(168, 85, 247, 0.28)');
+            grad.addColorStop(1, 'rgba(107, 33, 168, 0)');
+          } else if (l === 1) {
+            grad.addColorStop(0, 'rgba(56, 189, 248, 0.24)');
+            grad.addColorStop(1, 'rgba(14, 165, 233, 0)');
+          } else {
+            grad.addColorStop(0, 'rgba(244, 63, 94, 0.2)');
+            grad.addColorStop(1, 'rgba(225, 29, 72, 0)');
+          }
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
+      }
+
+      // PRESET 5: QUANTUM STARFIELD (Website Background)
+      else if (visPreset === 'quantum_stars') {
+        if (!visStars.length) initVisualizerStars();
+        const speed = 2 + bassRatio * 18;
+
+        for (let s of visStars) {
+          s.z -= speed;
+          if (s.z <= 0) {
+            s.z = 1000;
+            s.x = (Math.random() - 0.5) * w * 1.5;
+            s.y = (Math.random() - 0.5) * h * 1.5;
+          }
+
+          const k = 280 / s.z;
+          const px = s.x * k + w / 2;
+          const py = s.y * k + h / 2;
+
+          if (px >= 0 && px <= w && py >= 0 && py <= h) {
+            const size = Math.max(0.8, (1 - s.z / 1000) * 3.5 * s.size * (1 + bassRatio * 0.4));
+            const alpha = Math.min(1, (1 - s.z / 1000) * 0.85);
+
+            ctx.beginPath();
+            ctx.arc(px, py, size, 0, Math.PI * 2);
+            ctx.fillStyle = s.hue === 275 ? `rgba(192, 132, 252, ${alpha})` : `rgba(56, 189, 248, ${alpha})`;
+            ctx.shadowColor = s.hue === 275 ? '#a855f7' : '#38bdf8';
+            ctx.shadowBlur = 8;
+            ctx.fill();
+          }
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // PRESET 6: RETRO SYNTHWAVE GRID (Website Background)
+      else if (visPreset === 'synthwave_grid') {
+        const horizonY = h * 0.62;
+        visGridOffset = (visGridOffset + 2 + bassRatio * 6) % 36;
+
+        ctx.beginPath();
+        ctx.moveTo(0, horizonY);
+        for (let x = 0; x <= w; x += 16) {
+          const normX = x / w;
+          const binIdx = Math.floor(Math.abs(normX - 0.5) * 48);
+          const mH = ((bins[binIdx] || 0) / 255) * 75 * (0.8 + bassRatio * 0.6);
+          ctx.lineTo(x, horizonY - mH);
+        }
+        ctx.lineTo(w, horizonY);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.12)';
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fill();
+
+        for (let y = horizonY; y < h; y += 18) {
+          const progress = (y - horizonY) / (h - horizonY);
+          const renderY = horizonY + Math.pow(progress, 1.8) * (h - horizonY) + (visGridOffset * progress * 0.4);
+          if (renderY > horizonY && renderY <= h) {
+            ctx.beginPath();
+            ctx.moveTo(0, renderY);
+            ctx.lineTo(w, renderY);
+            ctx.strokeStyle = `rgba(192, 132, 252, ${0.1 + progress * 0.4})`;
+            ctx.lineWidth = 1 + progress * 1.5;
+            ctx.stroke();
+          }
+        }
+
+        const numVLines = 28;
+        for (let i = -numVLines; i <= numVLines; i++) {
+          ctx.beginPath();
+          ctx.moveTo(w / 2 + i * 18, horizonY);
+          ctx.lineTo(w / 2 + i * 75, h);
+          ctx.strokeStyle = 'rgba(168, 85, 247, 0.22)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
+      // PRESET 7: GLASS FREQUENCY RIBBONS (Cover & Background)
+      else if (visPreset === 'glass_ribbons') {
+        const numRibbons = 3;
+        for (let r = 0; r < numRibbons; r++) {
+          ctx.beginPath();
+          const startY = cy + (r - 1) * 60;
+          ctx.moveTo(0, startY);
+
+          for (let x = 0; x <= w; x += 24) {
+            const normX = x / w;
+            const binIdx = Math.floor(normX * 30);
+            const val = (bins[binIdx] || 0) / 255;
+            const distFromCover = Math.abs(x - cx);
+            const coverDodge = Math.max(0, 1 - distFromCover / 220);
+            const y = startY + Math.sin(normX * 8 + visSimTime * 2 + r) * 45 * (1 + bassRatio) + (coverDodge * (r === 0 ? -40 : 40) * bassRatio);
+            ctx.lineTo(x, y);
+          }
+
+          ctx.strokeStyle = r === 0 ? 'rgba(192, 132, 252, 0.55)' : (r === 1 ? 'rgba(56, 189, 248, 0.45)' : 'rgba(244, 63, 94, 0.4)');
+          ctx.lineWidth = 3 + bassRatio * 4;
+          ctx.shadowColor = '#a855f7';
+          ctx.shadowBlur = 16;
+          ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      // PRESET 8: STUDIO ANALOG VU METERS
+      else if (visPreset === 'analog_vu') {
+        const meterW = Math.min(220, w * 0.4);
+        const meterH = 110;
+        const startY = h - meterH - 25;
+        const centers = [w / 2 - meterW - 14, w / 2 + 14];
+
+        centers.forEach((mx, idx) => {
+          const val = ((bins[idx * 8] || 0) / 255);
+          ctx.fillStyle = 'rgba(18, 18, 25, 0.85)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.lineWidth = 1;
+          if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(mx, startY, meterW, meterH, 8);
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            ctx.fillRect(mx, startY, meterW, meterH);
+          }
+
+          const arcCx = mx + meterW / 2;
+          const arcCy = startY + meterH - 12;
+          const arcR = meterH * 0.72;
+          ctx.beginPath();
+          ctx.arc(arcCx, arcCy, arcR, Math.PI * 1.2, Math.PI * 1.8);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          const needleAngle = Math.PI * 1.2 + val * (Math.PI * 0.6);
+          const nx = arcCx + Math.cos(needleAngle) * (arcR - 4);
+          const ny = arcCy + Math.sin(needleAngle) * (arcR - 4);
+          ctx.beginPath();
+          ctx.moveTo(arcCx, arcCy);
+          ctx.lineTo(nx, ny);
+          ctx.strokeStyle = val > 0.85 ? '#f43f5e' : '#c084fc';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+
+          ctx.fillStyle = 'var(--text-sub)';
+          ctx.font = '600 0.65rem JetBrains Mono, monospace';
+          ctx.fillText(idx === 0 ? 'CH-L (VU)' : 'CH-R (VU)', mx + 10, startY + 18);
+        });
+      }
+
+      // PRESET 9: RADIAL SUNBURST ORBIT (Cover Art)
+      else if (visPreset === 'sunburst_orbit') {
+        const numRays = 48;
+        for (let i = 0; i < numRays; i++) {
+          const angle = (i / numRays) * Math.PI * 2 + (visSimTime * 0.3);
+          const binIdx = Math.floor((i / numRays) * 32);
+          const val = (bins[binIdx] || 0) / 255;
+          const innerR = coverRadius + 12;
+          const rayLen = 14 + val * 65 * (0.8 + bassRatio * 0.8);
+          const outerR = innerR + rayLen;
+
+          const x1 = cx + Math.cos(angle) * innerR;
+          const y1 = cy + Math.sin(angle) * innerR;
+          const x2 = cx + Math.cos(angle) * outerR;
+          const y2 = cy + Math.sin(angle) * outerR;
+
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.strokeStyle = `rgba(192, 132, 252, ${0.25 + val * 0.65})`;
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+      }
+
+      // PRESET 10: HYPERDRIVE WARP TUNNEL (Background)
+      else if (visPreset === 'hyper_tunnel') {
+        const numTunnels = 8;
+        for (let t = 0; t < numTunnels; t++) {
+          const progress = ((t / numTunnels) + (visSimTime * 0.4)) % 1.0;
+          const maxR = Math.max(w, h) * 0.8;
+          const r = coverRadius + progress * maxR * (1 + bassRatio * 0.3);
+          const alpha = (1 - progress) * 0.65;
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(168, 85, 247, ${alpha})`;
+          ctx.lineWidth = 1.5 + bassRatio * 3;
+          ctx.stroke();
+        }
+      }
+    }
+
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') handleLifecycleSync();
     });
@@ -5071,11 +5843,87 @@ HTML_INDEX = """<!DOCTYPE html>
     window.addEventListener('pageshow', handleLifecycleSync);
     window.addEventListener('focus', handleLifecycleSync);
 
-    window.addEventListener('pointerdown', () => { armBackgroundMediaSession(); }, { passive: true });
-    window.addEventListener('touchstart', () => { armBackgroundMediaSession(); }, { passive: true });
+    // Global Arming on Any User Touch/Click/Key to Guarantee MediaSession Routing
+    ['pointerdown', 'mousedown', 'keydown', 'touchstart'].forEach(evt => {
+      window.addEventListener(evt, () => {
+        armBackgroundMediaSession();
+      }, { passive: true });
+    });
 
-    // Desktop Pro Keyboard Navigation & Hotkeys
+    // Gaming Mouse Media Buttons (Razer Viper V3 Hyperspeed side buttons 3 & 4)
+    window.addEventListener('auxclick', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (['input', 'textarea', 'select', 'a', 'button'].includes(tag)) return;
+      if (e.button === 3) {
+        // Razer Viper V3 / Side Button Back
+        e.preventDefault();
+        action('previous');
+        showToast('Mouse: Previous Track');
+      } else if (e.button === 4) {
+        // Razer Viper V3 / Side Button Forward
+        e.preventDefault();
+        action('skip');
+        showToast('Mouse: Next Track');
+      }
+    });
+
+    // Desktop Pro Keyboard Navigation & Hotkeys (Fn+F11, Media Keys, F-keys)
     window.addEventListener('keydown', (e) => {
+      // 1. Hardware Media Keys (Fn+F11 on keyboards, Razer Synapse, Logitech G Hub, Windows HID)
+      if (e.key === 'MediaPlayPause' || e.code === 'MediaPlayPause') {
+        e.preventDefault();
+        action('toggle');
+        showToast('Media: Play / Pause');
+        return;
+      }
+      if (e.key === 'MediaTrackNext' || e.code === 'MediaTrackNext') {
+        e.preventDefault();
+        action('skip');
+        showToast('Media: Next Track');
+        return;
+      }
+      if (e.key === 'MediaTrackPrevious' || e.code === 'MediaTrackPrevious') {
+        e.preventDefault();
+        action('previous');
+        showToast('Media: Previous Track');
+        return;
+      }
+      if (e.key === 'MediaStop' || e.code === 'MediaStop') {
+        e.preventDefault();
+        action('stop');
+        showToast('Media: Stop Playback');
+        return;
+      }
+
+      // Fn+F11 on keyboards that pass raw F11 keycode
+      if (e.key === 'F11' || e.code === 'F11') {
+        const tag = (e.target.tagName || '').toLowerCase();
+        if (!['input', 'textarea', 'select'].includes(tag)) {
+          e.preventDefault();
+          action('toggle');
+          showToast('Fn+F11: Play / Pause');
+          return;
+        }
+      }
+      if (e.key === 'F10' || e.code === 'F10') {
+        const tag = (e.target.tagName || '').toLowerCase();
+        if (!['input', 'textarea', 'select'].includes(tag) && (e.ctrlKey || e.altKey || e.shiftKey)) {
+          e.preventDefault();
+          action('previous');
+          showToast('Previous Track');
+          return;
+        }
+      }
+      if (e.key === 'F12' || e.code === 'F12') {
+        const tag = (e.target.tagName || '').toLowerCase();
+        if (!['input', 'textarea', 'select'].includes(tag) && (e.ctrlKey || e.altKey || e.shiftKey)) {
+          e.preventDefault();
+          action('skip');
+          showToast('Next Track');
+          return;
+        }
+      }
+
       const tag = (e.target.tagName || '').toLowerCase();
       if (['input', 'textarea', 'select'].includes(tag) || e.target.isContentEditable) {
         if (e.key === 'Escape') e.target.blur();
@@ -5098,6 +5946,8 @@ HTML_INDEX = """<!DOCTYPE html>
         openLyrics();
       } else if (e.key === 'q' || e.key === 'Q') {
         switchTab('queue');
+      } else if (e.key === 'v' || e.key === 'V') {
+        toggleVisualizerState();
       } else if (e.key === '/') {
         e.preventDefault();
         switchTab('search');
@@ -5105,6 +5955,7 @@ HTML_INDEX = """<!DOCTYPE html>
         if (sInput) { sInput.focus(); sInput.select(); }
       } else if (e.key === 'Escape') {
         closeEqModal();
+        closeVisualizerModal();
         closeTrackModal();
         closeLyricsModal();
         closeGuildModal();
@@ -5128,6 +5979,17 @@ HTML_INDEX = """<!DOCTYPE html>
     } catch (e) {
       console.error('State cache load failed:', e);
     }
+
+    // Initialize visualizer engine
+    initVisualizerStars();
+    renderVisualizerPresetsList();
+    updateVisualizerMasterBtnUI();
+    const visCanvasEl = document.getElementById('ambientVisualizerCanvas');
+    if (visCanvasEl && visEnabled) {
+      visCanvasEl.classList.add('active');
+      visCanvasEl.style.opacity = visOpacity;
+    }
+    visAnimFrame = requestAnimationFrame(renderVisualizerLoop);
 
     // Startup
     fetchTelemetry();
