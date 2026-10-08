@@ -26,7 +26,7 @@ HTML_INDEX = """<!DOCTYPE html>
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #09090d;
@@ -78,13 +78,10 @@ HTML_INDEX = """<!DOCTYPE html>
       background-color: var(--bg) !important;
       color: var(--text) !important;
       color-scheme: dark !important;
-      font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       min-height: 100%;
       min-height: 100dvh;
       overflow-x: hidden;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-      text-rendering: optimizeLegibility;
     }
     body {
       display: flex;
@@ -180,8 +177,6 @@ HTML_INDEX = """<!DOCTYPE html>
       display: flex;
       align-items: center;
       gap: 8px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
     }
     .status-badge {
       display: inline-flex;
@@ -194,8 +189,6 @@ HTML_INDEX = """<!DOCTYPE html>
       background: var(--surface);
       border: 1px solid var(--border);
       color: var(--text-muted);
-      white-space: nowrap;
-      flex-shrink: 0;
     }
     .status-dot {
       width: 6px;
@@ -207,163 +200,6 @@ HTML_INDEX = """<!DOCTYPE html>
     .status-dot.offline {
       background: var(--danger);
       box-shadow: 0 0 8px var(--danger);
-    }
-    /* Header Animated Visualizer Wave */
-    .header-visualizer-wave {
-      display: inline-flex;
-      align-items: center;
-      gap: 2.5px;
-      height: 18px;
-      padding: 0 4px;
-    }
-    .h-wave-bar {
-      width: 2.5px;
-      height: 4px;
-      background: var(--accent);
-      border-radius: 2px;
-      transition: height 0.15s ease, background-color 0.2s ease;
-    }
-    .header-visualizer-wave.playing .h-wave-bar:nth-child(1) { animation: hWave 0.7s infinite alternate ease-in-out; }
-    .header-visualizer-wave.playing .h-wave-bar:nth-child(2) { animation: hWave 1.1s infinite alternate ease-in-out 0.2s; }
-    .header-visualizer-wave.playing .h-wave-bar:nth-child(3) { animation: hWave 0.85s infinite alternate ease-in-out 0.4s; }
-    .header-visualizer-wave.playing .h-wave-bar:nth-child(4) { animation: hWave 1.05s infinite alternate ease-in-out 0.1s; }
-    .header-visualizer-wave.playing .h-wave-bar:nth-child(5) { animation: hWave 0.75s infinite alternate ease-in-out 0.3s; }
-    @keyframes hWave {
-      0% { height: 3px; opacity: 0.5; }
-      100% { height: 16px; opacity: 1; filter: drop-shadow(0 0 3px var(--accent)); }
-    }
-    /* Header JuiceVault User Badge */
-    .header-user-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-      transition: border-color 0.18s, background 0.18s, transform 0.18s;
-    }
-    .header-user-badge:hover {
-      border-color: var(--border-accent);
-      background: rgba(168, 85, 247, 0.12);
-    }
-    .header-user-avatar {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      object-fit: cover;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-    /* Favorite Heart Button */
-    .btn-fav {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: transform 0.22s var(--spring), color 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.2s ease;
-      flex-shrink: 0;
-      margin-left: 8px;
-    }
-    .btn-fav:hover {
-      color: #f43f5e;
-      border-color: rgba(244, 63, 94, 0.4);
-      background: rgba(244, 63, 94, 0.12);
-    }
-    .btn-fav.is-favorite {
-      color: #f43f5e;
-      border-color: rgba(244, 63, 94, 0.6);
-      background: rgba(244, 63, 94, 0.2);
-      box-shadow: 0 0 14px rgba(244, 63, 94, 0.4);
-      animation: favPop 0.32s var(--spring);
-    }
-    .btn-fav.is-favorite svg {
-      fill: #f43f5e;
-      stroke: #f43f5e;
-    }
-    @keyframes favPop {
-      0% { transform: scale(0.8); }
-      50% { transform: scale(1.28); }
-      100% { transform: scale(1); }
-    }
-    /* JuiceVault Profile Modal Card */
-    .jv-profile-card {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 14px;
-      border-radius: var(--radius-md);
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border);
-      margin-bottom: 14px;
-    }
-    .jv-profile-avatar {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid var(--accent);
-      box-shadow: 0 0 12px var(--accent-glow);
-    }
-    .jv-profile-info {
-      min-width: 0;
-      flex: 1;
-    }
-    .jv-profile-name {
-      font-weight: 700;
-      font-size: 0.96rem;
-      color: #fff;
-    }
-    .jv-profile-handle {
-      font-size: 0.74rem;
-      color: var(--accent);
-      font-family: 'JetBrains Mono', monospace;
-    }
-    .jv-profile-bio {
-      font-size: 0.72rem;
-      color: var(--text-sub);
-      margin-top: 3px;
-      max-height: 38px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .jv-badge-pill {
-      font-size: 0.62rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: rgba(168, 85, 247, 0.2);
-      color: var(--accent);
-      border: 1px solid var(--border-accent);
-    }
-    .jv-stats-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-    .jv-stat-tile {
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px 8px;
-      text-align: center;
-    }
-    .jv-stat-val {
-      font-size: 1.05rem;
-      font-weight: 800;
-      color: #fff;
-      font-family: 'JetBrains Mono', monospace;
-      display: block;
-    }
-    .jv-stat-lbl {
-      font-size: 0.68rem;
-      color: var(--text-sub);
-      margin-top: 2px;
-      display: block;
     }
     /* Layout Container: Responsive Mobile -> Desktop */
     .app-container {
@@ -400,29 +236,17 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     @media (max-width: 859px) {
       header.app-header {
-        padding: 8px 10px !important;
+        padding: 10px 12px !important;
         gap: 6px;
       }
-      .header-brand {
-        gap: 8px !important;
-      }
-      .brand-title {
-        font-size: 0.9rem !important;
-      }
       .header-meta {
-        gap: 4px !important;
+        gap: 5px !important;
       }
       #vcLabel {
-        max-width: 75px;
+        max-width: 85px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      #guildBadgeName {
-        max-width: 75px !important;
-      }
-      #headerUserName {
-        max-width: 68px !important;
       }
       .btn-lt-action {
         padding: 5px 9px !important;
@@ -442,18 +266,9 @@ HTML_INDEX = """<!DOCTYPE html>
       #connLabel {
         display: none !important;
       }
-    }
-    @media (max-width: 520px) {
-      .voice-badge-pill {
+      #guildBadge {
         display: none !important;
       }
-      .live-dot-pill {
-        display: none !important;
-      }
-      #guildBadgeName {
-        max-width: 58px !important;
-      }
-    }
       .controls-sub .btn-flat {
         padding: 5px 4px !important;
         font-size: 0.68rem !important;
@@ -1267,7 +1082,7 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .sheet-backdrop.active,
     .sheet-backdrop.visible {
-      display: flex !important;
+      display: flex;
     }
     .sheet-panel {
       width: 100%;
@@ -2210,23 +2025,12 @@ HTML_INDEX = """<!DOCTYPE html>
         <div class="brand-title">JuiceVault</div>
       </div>
       <span class="brand-tag">REMOTE</span>
-      <div class="header-visualizer-wave" id="headerVisualizerWave" title="Active audio wave indicator">
-        <span class="h-wave-bar"></span>
-        <span class="h-wave-bar"></span>
-        <span class="h-wave-bar"></span>
-        <span class="h-wave-bar"></span>
-        <span class="h-wave-bar"></span>
-      </div>
     </div>
     <div class="header-meta">
       <div class="status-badge" id="guildBadge" onclick="openGuildModal()" title="Current Discord Server — Tap to Switch" style="cursor:pointer; transition:border-color 0.15s, background 0.15s;">
         <svg class="icon-svg" style="width:13px;height:13px;color:var(--accent);" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span id="guildBadgeName" style="max-width:88px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff;">Server</span>
+        <span id="guildBadgeName" style="max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff;">Server</span>
         <svg class="icon-svg" style="width:10px;height:10px;opacity:0.6;margin-left:-2px;" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      <div class="status-badge header-user-badge" id="headerUserBadge" onclick="openUserModal()" title="JuiceVault.xyz Account — Tap to Connect">
-        <img id="headerUserAvatar" class="header-user-avatar" src="https://api.juicevault.xyz/favicon.ico" alt="Avatar">
-        <span id="headerUserName" style="max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff;">Sign In</span>
       </div>
       <div class="status-badge stats-badge" id="headerViewsBadge" onclick="openStatsModal()" title="View Live Traffic & Daily Usage">
         <span class="telemetry-live-dot"></span>
@@ -2234,11 +2038,11 @@ HTML_INDEX = """<!DOCTYPE html>
         <span id="headerViewsCount" style="font-family:'JetBrains Mono',monospace;">--</span>
         <span class="header-pill-sub" id="headerDailyCount">-- today</span>
       </div>
-      <div class="status-badge voice-badge-pill" id="voiceBadge">
-        <svg class="icon-svg" style="width:13px;height:13px;" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      <div class="status-badge" id="voiceBadge">
+        <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
         <span id="vcLabel">Not Connected</span>
       </div>
-      <div class="status-badge live-dot-pill">
+      <div class="status-badge">
         <span class="status-dot" id="connDot"></span>
         <span id="connLabel" style="font-family:'JetBrains Mono',monospace;">Live</span>
       </div>
@@ -2271,8 +2075,34 @@ HTML_INDEX = """<!DOCTYPE html>
       <!-- LEFT COLUMN: NOW PLAYING CARD -->
       <div class="card-player-wrap">
         <div class="ui-card">
-          <!-- Interactive Scrubber Bar (Top) -->
-          <div class="scrubber-wrap" style="margin-top:2px;">
+          <div class="player-visual-wrap">
+            <div class="player-visual-ambient" id="artAmbient"></div>
+            <div class="cover-visualizer-aura" id="coverVisualizerAura"></div>
+            <div class="player-visual" id="artContainer">
+              <img src="https://api.juicevault.xyz/favicon.ico" class="player-cover" id="coverImg" alt="Album Cover">
+            </div>
+          </div>
+
+          <div class="track-meta" id="trackMetaContainer">
+            <div class="track-title-row">
+              <div class="soundwave-box" id="soundwaveBox">
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+                <span class="wave-bar"></span>
+              </div>
+              <div class="track-title" id="trackTitle">Connecting…</div>
+            </div>
+            <div class="track-artist" id="trackArtist">Please wait</div>
+            <div class="pill-row">
+              <span class="pill-tag accent" id="categoryBadge">All Music</span>
+              <span class="pill-tag" id="sourceBadge">Archive</span>
+              <span class="pill-tag" id="eqBadge">Flat</span>
+            </div>
+          </div>
+
+          <!-- Interactive Scrubber Bar -->
+          <div class="scrubber-wrap">
             <div class="scrubber-track" id="progressBar">
               <span class="scrubber-tooltip" id="scrubberTooltip">0:00</span>
               <div class="scrubber-fill" id="progressFill">
@@ -2285,12 +2115,12 @@ HTML_INDEX = """<!DOCTYPE html>
             </div>
           </div>
 
-          <!-- Main Controls (Top) -->
+          <!-- Main Controls -->
           <div class="controls-main">
             <button class="btn-kinetic btn-circle btn-action-sm" id="btnRepeat" title="Repeat" onclick="action('repeat')">
               <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
             </button>
-            <button class="btn-kinetic btn-circle btn-action-md" id="btnPrev" title="Previous Track (Smart 5-History)" onclick="action('previous')">
+            <button class="btn-kinetic btn-circle btn-action-md" id="btnPrev" title="Previous Track" onclick="action('previous')">
               <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="5" x2="5" y2="19"/></svg>
             </button>
             <button class="btn-kinetic btn-circle btn-action-sm" title="Rewind 10s" onclick="action('seek', {delta: -10})">
@@ -2332,39 +2162,6 @@ HTML_INDEX = """<!DOCTYPE html>
               <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               <span>Lyrics</span>
             </button>
-          </div>
-
-          <!-- Track Metadata & JuiceVault Favorite Heart -->
-          <div class="track-meta" id="trackMetaContainer" style="margin-top:10px;">
-            <div class="track-title-row" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-              <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
-                <div class="soundwave-box" id="soundwaveBox">
-                  <span class="wave-bar"></span>
-                  <span class="wave-bar"></span>
-                  <span class="wave-bar"></span>
-                  <span class="wave-bar"></span>
-                </div>
-                <div class="track-title" id="trackTitle" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Connecting…</div>
-              </div>
-              <button class="btn-kinetic btn-fav" id="btnFavoriteSong" onclick="toggleCurrentSongFavorite()" title="Favorite this track on JuiceVault">
-                <svg class="icon-svg fav-icon" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              </button>
-            </div>
-            <div class="track-artist" id="trackArtist">Please wait</div>
-            <div class="pill-row">
-              <span class="pill-tag accent" id="categoryBadge">All Music</span>
-              <span class="pill-tag" id="sourceBadge">Archive</span>
-              <span class="pill-tag" id="eqBadge">Flat</span>
-            </div>
-          </div>
-
-          <!-- Album Cover & Ambient Visualizer Aura -->
-          <div class="player-visual-wrap" style="margin-top:10px;">
-            <div class="player-visual-ambient" id="artAmbient"></div>
-            <div class="cover-visualizer-aura" id="coverVisualizerAura"></div>
-            <div class="player-visual" id="artContainer">
-              <img src="https://api.juicevault.xyz/favicon.ico" class="player-cover" id="coverImg" alt="Album Cover">
-            </div>
           </div>
 
           <!-- Listen Together Studio Stream Card -->
@@ -2494,20 +2291,6 @@ HTML_INDEX = """<!DOCTYPE html>
             </div>
             <div class="track-list" id="upcomingList">
               <div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Loading queue…</div>
-            </div>
-          </div>
-
-          <!-- Recently Played (Last 5 History) -->
-          <div class="ui-card" style="margin-top:14px;">
-            <div class="section-header">
-              <span class="section-title">
-                <svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                Recently Played (<span id="historyCount">0</span>)
-              </span>
-              <span style="font-size:0.72rem; color:var(--text-sub);">Last 5 tracks • Tap to Replay</span>
-            </div>
-            <div class="track-list" id="historyList">
-              <div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No recently played tracks yet.</div>
             </div>
           </div>
         </div>
@@ -3048,74 +2831,6 @@ HTML_INDEX = """<!DOCTYPE html>
           </div>
           <pre id="lyricsPreviewText" style="font-family:inherit; font-size:0.8rem; color:var(--text-muted); line-height:1.5; white-space:pre-wrap; margin:0;"></pre>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- JuiceVault User Modal Sheet -->
-  <div class="sheet-backdrop" id="userSheet" onclick="if(event.target===this) closeUserModal()">
-    <div class="sheet-panel" style="max-width:480px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <div class="brand-logo-disc" style="width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #ec4899, #a855f7);">
-            <svg class="icon-svg" style="width:18px;height:18px;color:#fff;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          </div>
-          <div>
-            <div style="font-weight:700; font-size:0.95rem; color:#fff;">JuiceVault.xyz Account</div>
-            <div style="font-size:0.73rem; color:var(--text-muted); margin-top:1px;">Sync profile &amp; save favorite tracks</div>
-          </div>
-        </div>
-        <button class="btn-kinetic btn-circle btn-action-sm" onclick="closeUserModal()">
-          <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-
-      <div id="userProfileView" style="display:none;">
-        <div class="jv-profile-card">
-          <img id="userCardAvatar" class="jv-profile-avatar" src="" alt="Avatar">
-          <div class="jv-profile-info">
-            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-              <span id="userCardDisplayName" class="jv-profile-name">Username</span>
-              <span id="userCardBadges"></span>
-            </div>
-            <div id="userCardHandle" class="jv-profile-handle">@username</div>
-            <div id="userCardBio" class="jv-profile-bio"></div>
-          </div>
-        </div>
-        <div class="jv-stats-row">
-          <div class="jv-stat-tile">
-            <span class="jv-stat-val" id="userLikedCount">0</span>
-            <span class="jv-stat-lbl">Likes</span>
-          </div>
-          <div class="jv-stat-tile">
-            <span class="jv-stat-val" id="userListensCount">0</span>
-            <span class="jv-stat-lbl">Listens</span>
-          </div>
-          <div class="jv-stat-tile">
-            <span class="jv-stat-val" id="userStreakCount">0</span>
-            <span class="jv-stat-lbl">Streak</span>
-          </div>
-        </div>
-        <div style="display:flex; gap:8px; margin-top:16px;">
-          <button class="btn-kinetic btn-flat" style="flex:1; justify-content:center; color:#f43f5e;" onclick="viewUserFavorites()">
-            <svg class="icon-svg" style="width:14px;height:14px;fill:#f43f5e;stroke:#f43f5e;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-            Favorites (<span id="userFavsBtnCount">0</span>)
-          </button>
-          <button class="btn-kinetic btn-flat" style="flex:1; justify-content:center; color:var(--text-muted);" onclick="logoutUser()">
-            Disconnect
-          </button>
-        </div>
-      </div>
-
-      <div id="userLoginForm">
-        <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.45; margin-bottom:12px;">
-          Connect your <strong>juicevault.xyz</strong> account to view your public profile, badges, and 1-tap favorite any song currently playing.
-        </div>
-        <div style="display:flex; gap:8px; margin-bottom:8px;">
-          <input type="text" id="jvUsernameInput" class="search-field" placeholder="JuiceVault username (e.g. ajaxfnc)" style="background:rgba(0,0,0,0.5); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 12px; color:#fff;" onkeydown="if(event.key==='Enter') loginJuiceVaultUser()">
-          <button class="btn-kinetic btn-badge" style="padding:10px 16px;" onclick="loginJuiceVaultUser()">Connect</button>
-        </div>
-        <div id="jvLoginError" style="font-size:0.75rem; color:var(--danger); display:none;"></div>
       </div>
     </div>
   </div>
@@ -4309,11 +4024,6 @@ HTML_INDEX = """<!DOCTYPE html>
       if (state.repeat) repeatBtn.classList.add('active');
       else repeatBtn.classList.remove('active');
 
-      const hWave = document.getElementById('headerVisualizerWave');
-      if (hWave) hWave.classList.toggle('playing', !!state.is_playing);
-
-      updateFavoriteButtonState();
-
       document.getElementById('reqCount').innerText = state.requested_size || 0;
       document.getElementById('queueCount').innerText = state.queue_size || 0;
 
@@ -4517,8 +4227,6 @@ HTML_INDEX = """<!DOCTYPE html>
       const filter = queueFilterTerm;
       const reqList = document.getElementById('reqList');
       const upList = document.getElementById('upcomingList');
-      const histList = document.getElementById('historyList');
-      const histCount = document.getElementById('historyCount');
       if (!reqList || !upList) return;
 
       const reqFiltered = filter
@@ -4560,38 +4268,6 @@ HTML_INDEX = """<!DOCTYPE html>
           ? '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No matching archive tracks.</div>'
           : '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">Archive queue empty.</div>';
       }
-
-      // Render Recently Played (Last 5 History)
-      const histData = currentQueueData.history || [];
-      if (histCount) histCount.innerText = histData.length;
-      if (histList) {
-        if (histData.length > 0) {
-          histList.innerHTML = histData.map((t, idx) => `
-            <div class="track-card">
-              <div class="track-meta-col">
-                <div class="track-name">${escapeHtml(t.title || 'Untitled')}</div>
-                <div class="track-desc">${escapeHtml(t.artist || 'Juice WRLD')} • ${escapeHtml(t.length || '—')}</div>
-              </div>
-              <div style="display: flex; gap: 6px;">
-                <button class="btn-kinetic btn-badge" onclick="replayHistoryTrack(${idx})" title="Replay this track">Replay</button>
-                <button class="btn-kinetic btn-badge" onclick="queueHistoryTrack(${idx})" title="Queue track again">+ Add</button>
-              </div>
-            </div>
-          `).join('');
-        } else {
-          histList.innerHTML = '<div class="track-card" style="color: var(--text-sub); font-size: 0.8rem;">No recently played tracks yet.</div>';
-        }
-      }
-    }
-
-    function replayHistoryTrack(idx) {
-      action('replay_history', { index: idx });
-      showToast('Replaying track from history...');
-    }
-
-    function queueHistoryTrack(idx) {
-      const item = (currentQueueData.history || [])[idx];
-      if (item) addToQueue(item, false);
     }
 
     // Load Queue
@@ -4601,258 +4277,12 @@ HTML_INDEX = """<!DOCTYPE html>
         const data = await res.json();
         currentQueueData = {
           requested: data.requested || [],
-          upcoming: data.upcoming || [],
-          history: data.history || []
+          upcoming: data.upcoming || []
         };
         renderQueueLists();
       } catch (e) {
         console.error('Queue load error:', e);
       }
-    }
-
-    // ==========================================
-    // JUICEVAULT.XYZ ACCOUNT & FAVORITES ENGINE
-    // ==========================================
-    let jvUser = null;
-    let jvUserLikes = new Set();
-
-    function initJuiceVaultUser() {
-      try {
-        const cachedUser = localStorage.getItem('jv_user');
-        if (cachedUser) {
-          jvUser = JSON.parse(cachedUser);
-          const cachedLikes = localStorage.getItem('jv_likes');
-          if (cachedLikes) {
-            jvUserLikes = new Set(JSON.parse(cachedLikes));
-          }
-          renderUserProfile();
-          updateUserBadge();
-          if (jvUser && jvUser.username) {
-            refreshUserLikes(jvUser.username);
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load JuiceVault user cache:', e);
-      }
-      updateFavoriteButtonState();
-    }
-
-    function openUserModal() {
-      const sheet = document.getElementById('userSheet');
-      if (sheet) sheet.classList.add('active');
-      if (jvUser) {
-        document.getElementById('userProfileView').style.display = 'block';
-        document.getElementById('userLoginForm').style.display = 'none';
-        renderUserProfile();
-      } else {
-        document.getElementById('userProfileView').style.display = 'none';
-        document.getElementById('userLoginForm').style.display = 'block';
-        const inp = document.getElementById('jvUsernameInput');
-        if (inp) {
-          setTimeout(() => inp.focus(), 120);
-        }
-      }
-      if (navigator.vibrate) navigator.vibrate(8);
-    }
-
-    function closeUserModal() {
-      const sheet = document.getElementById('userSheet');
-      if (sheet) sheet.classList.remove('active');
-    }
-
-    async function loginJuiceVaultUser() {
-      const inp = document.getElementById('jvUsernameInput');
-      const errEl = document.getElementById('jvLoginError');
-      if (!inp) return;
-      const username = inp.value.trim();
-      if (!username) return;
-      if (errEl) { errEl.style.display = 'none'; errEl.innerText = ''; }
-
-      showToast('Connecting to JuiceVault.xyz…');
-      try {
-        const res = await fetch(`/api/user/profile?username=${encodeURIComponent(username)}&${apiQuery()}`, { headers: apiHeaders() });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          const errMsg = data.error || 'User not found on JuiceVault.xyz';
-          if (errEl) {
-            errEl.innerText = errMsg;
-            errEl.style.display = 'block';
-          }
-          showToast(errMsg);
-          return;
-        }
-        jvUser = data.user || { username: username };
-        localStorage.setItem('jv_user', JSON.stringify(jvUser));
-        await refreshUserLikes(username);
-        renderUserProfile();
-        updateUserBadge();
-        document.getElementById('userProfileView').style.display = 'block';
-        document.getElementById('userLoginForm').style.display = 'none';
-        updateFavoriteButtonState();
-        showToast(`Connected as @${jvUser.username}`);
-      } catch (err) {
-        if (errEl) {
-          errEl.innerText = 'Connection error: ' + err.message;
-          errEl.style.display = 'block';
-        }
-        showToast('Login failed: ' + err.message);
-      }
-    }
-
-    async function refreshUserLikes(username) {
-      try {
-        const res = await fetch(`/api/user/likes?username=${encodeURIComponent(username)}&${apiQuery()}`, { headers: apiHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          const likes = Array.isArray(data.likes) ? data.likes : (data.liked_tracks || []);
-          jvUserLikes = new Set(likes.map(t => String(t.id || t.track_id || t.title || '')));
-          localStorage.setItem('jv_likes', JSON.stringify(Array.from(jvUserLikes)));
-          const countEl = document.getElementById('userFavsBtnCount');
-          const likedCountEl = document.getElementById('userLikedCount');
-          if (countEl) countEl.innerText = jvUserLikes.size;
-          if (likedCountEl) likedCountEl.innerText = jvUserLikes.size;
-          updateFavoriteButtonState();
-        }
-      } catch (e) {
-        console.warn('Failed to fetch user likes:', e);
-      }
-    }
-
-    function logoutUser() {
-      jvUser = null;
-      jvUserLikes.clear();
-      localStorage.removeItem('jv_user');
-      localStorage.removeItem('jv_likes');
-      updateUserBadge();
-      updateFavoriteButtonState();
-      document.getElementById('userProfileView').style.display = 'none';
-      document.getElementById('userLoginForm').style.display = 'block';
-      const inp = document.getElementById('jvUsernameInput');
-      if (inp) inp.value = '';
-      showToast('Disconnected from JuiceVault');
-    }
-
-    function updateUserBadge() {
-      const badge = document.getElementById('headerUserBadge');
-      const nameEl = document.getElementById('headerUserName');
-      const avatarEl = document.getElementById('headerUserAvatar');
-      if (!badge) return;
-      if (jvUser) {
-        badge.classList.add('connected');
-        if (nameEl) nameEl.innerText = jvUser.display_name || jvUser.username;
-        if (avatarEl) {
-          avatarEl.src = jvUser.avatar_url || `https://api.juicevault.xyz/cdn/avatars/${encodeURIComponent(jvUser.username)}.png`;
-          avatarEl.onerror = () => { avatarEl.src = 'https://api.juicevault.xyz/favicon.ico'; };
-        }
-      } else {
-        badge.classList.remove('connected');
-        if (nameEl) nameEl.innerText = 'Sign In';
-        if (avatarEl) avatarEl.src = 'https://api.juicevault.xyz/favicon.ico';
-      }
-    }
-
-    function renderUserProfile() {
-      if (!jvUser) return;
-      const nameEl = document.getElementById('userCardDisplayName');
-      const handleEl = document.getElementById('userCardHandle');
-      const avatarEl = document.getElementById('userCardAvatar');
-      const bioEl = document.getElementById('userCardBio');
-      const badgesEl = document.getElementById('userCardBadges');
-      const likesEl = document.getElementById('userLikedCount');
-      const listensEl = document.getElementById('userListensCount');
-      const streakEl = document.getElementById('userStreakCount');
-      const favsBtnEl = document.getElementById('userFavsBtnCount');
-
-      if (nameEl) nameEl.innerText = jvUser.display_name || jvUser.username;
-      if (handleEl) handleEl.innerText = `@${jvUser.username}`;
-      if (avatarEl) {
-        avatarEl.src = jvUser.avatar_url || `https://api.juicevault.xyz/cdn/avatars/${encodeURIComponent(jvUser.username)}.png`;
-        avatarEl.onerror = () => { avatarEl.src = 'https://api.juicevault.xyz/favicon.ico'; };
-      }
-      if (bioEl) bioEl.innerText = jvUser.bio || 'Juice WRLD Archive Listener';
-      if (badgesEl) {
-        const badges = jvUser.badges || [];
-        if (Array.isArray(badges) && badges.length > 0) {
-          badgesEl.innerHTML = badges.map(b => `<span class="jv-badge-pill">${escapeHtml(b)}</span>`).join('');
-        } else {
-          badgesEl.innerHTML = '<span class="jv-badge-pill">MEMBER</span>';
-        }
-      }
-      const stats = jvUser.stats || {};
-      if (likesEl) likesEl.innerText = jvUserLikes.size || stats.likes || 0;
-      if (listensEl) listensEl.innerText = stats.listens || stats.play_count || '0';
-      if (streakEl) streakEl.innerText = (stats.streak != null ? stats.streak + 'd' : '1d');
-      if (favsBtnEl) favsBtnEl.innerText = jvUserLikes.size;
-    }
-
-    function isTrackFavorited(track) {
-      if (!track) return false;
-      const key = String(track.id || track.title || '');
-      return jvUserLikes.has(key);
-    }
-
-    function updateFavoriteButtonState() {
-      const btn = document.getElementById('btnFavoriteSong');
-      if (!btn) return;
-      const track = currentState ? currentState.track : null;
-      if (!track) {
-        btn.classList.remove('is-favorite');
-        btn.disabled = true;
-        return;
-      }
-      btn.disabled = false;
-      const fav = isTrackFavorited(track);
-      btn.classList.toggle('is-favorite', fav);
-      btn.title = fav ? 'Favorited on JuiceVault (tap to remove)' : 'Favorite this track on JuiceVault';
-    }
-
-    async function toggleCurrentSongFavorite() {
-      if (!jvUser) {
-        openUserModal();
-        showToast('Sign in with JuiceVault to favorite songs');
-        return;
-      }
-      const track = currentState ? currentState.track : null;
-      if (!track) return;
-      const key = String(track.id || track.title || '');
-      const currentlyFav = jvUserLikes.has(key);
-      if (currentlyFav) {
-        jvUserLikes.delete(key);
-      } else {
-        jvUserLikes.add(key);
-      }
-      localStorage.setItem('jv_likes', JSON.stringify(Array.from(jvUserLikes)));
-      updateFavoriteButtonState();
-      renderUserProfile();
-
-      showToast(currentlyFav ? 'Removed from favorites' : 'Added to favorites ❤️');
-      if (navigator.vibrate) navigator.vibrate([15, 30, 20]);
-
-      try {
-        await fetch(`/api/user/favorite?${apiQuery()}`, {
-          method: 'POST',
-          headers: apiHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({
-            username: jvUser.username,
-            track: track,
-            action: currentlyFav ? 'remove' : 'add',
-            guild_id: currentGuildId
-          })
-        });
-      } catch (e) {
-        console.warn('Failed to sync favorite with server', e);
-      }
-    }
-
-    function viewUserFavorites() {
-      closeUserModal();
-      switchTab('search');
-      const input = document.getElementById('searchInput');
-      if (input) {
-        input.value = 'likes';
-        executeSearch();
-      }
-      showToast(`Viewing ${jvUserLikes.size} favorites`);
     }
 
     // Search Helpers & Debouncing
@@ -6022,12 +5452,11 @@ HTML_INDEX = """<!DOCTYPE html>
           bins[i] = Math.max(0, Math.floor(8 + Math.sin(visSimTime + i * 0.2) * 5));
           continue;
         }
-        // Smooth sine harmonics without harsh kick bursts
+        // Smooth serene wave harmonics without aggressive kick pulses
         const wave1 = Math.sin(visSimTime * 1.0 + i * 0.09) * 0.5 + 0.5;
         const wave2 = Math.cos(visSimTime * 0.6 + i * 0.15) * 0.5 + 0.5;
         const breathing = Math.sin(visSimTime * 0.45) * 0.15 + 0.85;
         let v = (wave1 * 0.65 + wave2 * 0.35) * breathing;
-        // Calm amplitude capped at ~110 for a relaxing, beautiful backdrop
         bins[i] = Math.min(130, Math.floor(v * 105 * visSensitivity));
       }
       return bins;
@@ -6539,7 +5968,6 @@ HTML_INDEX = """<!DOCTYPE html>
         closeLyricsModal();
         closeGuildModal();
         closeStatsModal();
-        closeUserModal();
       }
     });
 
@@ -6572,7 +6000,6 @@ HTML_INDEX = """<!DOCTYPE html>
     visAnimFrame = requestAnimationFrame(renderVisualizerLoop);
 
     // Startup
-    initJuiceVaultUser();
     fetchTelemetry();
     if (!token) {
       document.getElementById('authBox').classList.add('active');
