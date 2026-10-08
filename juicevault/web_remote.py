@@ -2054,21 +2054,32 @@ class JuiceVaultWebRemote:
             return web.Response(status=503, text="JuiceVault cog unavailable", headers=cors_headers)
         gid = guild.id
         current_file = None
+        requested_t = str(request.query.get("t", "")).strip()
 
         # Check immediately and wait up to 12 seconds for the audio file to become ready
         for _ in range(60):
+            cur = getattr(main, "current", {}).get(gid)
+            cur_key = ""
+            if cur:
+                cur_key = str(cur.get("id") or cur.get("title") or "").strip()
+
+            # If client requested a specific track but current track hasn't updated yet, wait for transition
+            if requested_t and cur_key and requested_t != cur_key:
+                await asyncio.sleep(0.2)
+                continue
+
             cf = getattr(main, "current_files", {}).get(gid)
             if cf and os.path.isfile(cf) and os.path.getsize(cf) > 1024:
                 current_file = cf
                 break
-            cur = getattr(main, "current", {}).get(gid)
             if cur and cur.get("_cached_file") and os.path.isfile(cur["_cached_file"]) and os.path.getsize(cur["_cached_file"]) > 1024:
                 current_file = cur["_cached_file"]
                 break
-            lf = getattr(main, "_last_played_files", {}).get(gid)
-            if lf and os.path.isfile(lf) and os.path.getsize(lf) > 1024:
-                current_file = lf
-                break
+            if not requested_t or not cur_key or requested_t == cur_key:
+                lf = getattr(main, "_last_played_files", {}).get(gid)
+                if lf and os.path.isfile(lf) and os.path.getsize(lf) > 1024:
+                    current_file = lf
+                    break
             await asyncio.sleep(0.2)
 
         if not current_file or not os.path.isfile(current_file):

@@ -175,6 +175,9 @@ HTML_INDEX = """<!DOCTYPE html>
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--border);
     }
+    .header-nav-wrap {
+      display: none;
+    }
     .header-meta {
       display: flex;
       align-items: center;
@@ -266,15 +269,45 @@ HTML_INDEX = """<!DOCTYPE html>
         gap: 24px;
         align-items: start;
       }
-      .desktop-segment {
+      .header-nav-wrap {
         display: flex !important;
-        position: sticky;
-        top: 76px;
-        z-index: 25;
-        background: rgba(13, 13, 18, 0.94);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        margin-bottom: 10px !important;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        max-width: 580px;
+        margin: 0 16px;
+      }
+      .header-nav-wrap .desktop-segment {
+        display: flex !important;
+        align-items: center;
+        position: static !important;
+        width: 100%;
+        margin: 0 !important;
+        background: rgba(18, 18, 24, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        padding: 3px 4px;
+        gap: 3px;
+      }
+      .header-nav-wrap .segment-btn {
+        padding: 6px 12px;
+        font-size: 0.76rem;
+        border-radius: 16px;
+        white-space: nowrap;
+        color: var(--text-muted);
+        border: 1px solid transparent;
+        transition: all 0.18s ease;
+      }
+      .header-nav-wrap .segment-btn:hover {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .header-nav-wrap .segment-btn.active {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #fff;
+        font-weight: 700;
+        box-shadow: 0 0 12px rgba(168, 85, 247, 0.22);
       }
       .mobile-nav {
         display: none !important;
@@ -335,6 +368,7 @@ HTML_INDEX = """<!DOCTYPE html>
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .header-nav-wrap,
       .desktop-segment {
         display: none !important;
       }
@@ -1722,69 +1756,41 @@ HTML_INDEX = """<!DOCTYPE html>
     .stat-pop {
       animation: statNumPop 0.32s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    /* Harmonious Neon Colors for Dock Tiles */
-    /* 1. Total Views: Royal Violet */
-    .telemetry-dock-tile.tile-views {
-      background: rgba(192, 132, 252, 0.05);
-      border-color: rgba(192, 132, 252, 0.18);
-    }
-    .telemetry-dock-tile.tile-views .t-dock-ico { color: #c084fc; }
-    .telemetry-dock-tile.tile-views .t-dock-val { color: #e9d5ff; }
-    .telemetry-dock-tile.tile-views:hover {
-      background: rgba(192, 132, 252, 0.1);
-      border-color: rgba(192, 132, 252, 0.4);
-      box-shadow: 0 4px 14px rgba(192, 132, 252, 0.2);
-    }
-    /* 2. Today's Visits: Neon Rose / Fuchsia */
+    /* Unified 2-Color Palette: Purple & White (matching the website) */
+    .telemetry-dock-tile,
+    .telemetry-dock-tile.tile-views,
     .telemetry-dock-tile.tile-today,
-    .telemetry-dock-tile.highlight-rose {
-      background: rgba(244, 63, 94, 0.05);
-      border-color: rgba(244, 63, 94, 0.18);
-    }
-    .telemetry-dock-tile.tile-today .t-dock-ico,
-    .telemetry-dock-tile.highlight-rose .t-dock-ico { color: #f43f5e; }
-    .telemetry-dock-tile.tile-today .t-dock-val,
-    .telemetry-dock-tile.highlight-rose .t-dock-val {
-      color: #fda4af;
-      text-shadow: 0 0 12px rgba(244, 63, 94, 0.3);
-    }
-    .telemetry-dock-tile.tile-today:hover,
-    .telemetry-dock-tile.highlight-rose:hover {
-      background: rgba(244, 63, 94, 0.1);
-      border-color: rgba(244, 63, 94, 0.4);
-      box-shadow: 0 4px 14px rgba(244, 63, 94, 0.2);
-    }
-    /* 3. Stream Time: Electric Purple */
     .telemetry-dock-tile.tile-time,
-    .telemetry-dock-tile.highlight-cyan {
-      background: rgba(168, 85, 247, 0.05);
+    .telemetry-dock-tile.tile-tracks,
+    .telemetry-dock-tile.highlight-rose,
+    .telemetry-dock-tile.highlight-cyan,
+    .telemetry-dock-tile.highlight-green {
+      background: rgba(168, 85, 247, 0.04);
       border-color: rgba(168, 85, 247, 0.18);
     }
+    .telemetry-dock-tile .t-dock-ico,
+    .telemetry-dock-tile.tile-views .t-dock-ico,
+    .telemetry-dock-tile.tile-today .t-dock-ico,
     .telemetry-dock-tile.tile-time .t-dock-ico,
-    .telemetry-dock-tile.highlight-cyan .t-dock-ico { color: #a855f7; }
+    .telemetry-dock-tile.tile-tracks .t-dock-ico {
+      color: var(--accent);
+    }
+    .telemetry-dock-tile .t-dock-val,
+    .telemetry-dock-tile.tile-views .t-dock-val,
+    .telemetry-dock-tile.tile-today .t-dock-val,
     .telemetry-dock-tile.tile-time .t-dock-val,
-    .telemetry-dock-tile.highlight-cyan .t-dock-val { color: #d8b4fe; }
+    .telemetry-dock-tile.tile-tracks .t-dock-val {
+      color: #ffffff;
+      text-shadow: 0 0 10px rgba(168, 85, 247, 0.25);
+    }
+    .telemetry-dock-tile:hover,
+    .telemetry-dock-tile.tile-views:hover,
+    .telemetry-dock-tile.tile-today:hover,
     .telemetry-dock-tile.tile-time:hover,
-    .telemetry-dock-tile.highlight-cyan:hover {
+    .telemetry-dock-tile.tile-tracks:hover {
       background: rgba(168, 85, 247, 0.1);
-      border-color: rgba(168, 85, 247, 0.4);
-      box-shadow: 0 4px 14px rgba(168, 85, 247, 0.2);
-    }
-    /* 4. Tracks Played: Hot Orchid */
-    .telemetry-dock-tile.tile-tracks,
-    .telemetry-dock-tile.highlight-green {
-      background: rgba(236, 72, 153, 0.05);
-      border-color: rgba(236, 72, 153, 0.18);
-    }
-    .telemetry-dock-tile.tile-tracks .t-dock-ico,
-    .telemetry-dock-tile.highlight-green .t-dock-ico { color: #ec4899; }
-    .telemetry-dock-tile.tile-tracks .t-dock-val,
-    .telemetry-dock-tile.highlight-green .t-dock-val { color: #f472b6; }
-    .telemetry-dock-tile.tile-tracks:hover,
-    .telemetry-dock-tile.highlight-green:hover {
-      background: rgba(236, 72, 153, 0.1);
-      border-color: rgba(236, 72, 153, 0.4);
-      box-shadow: 0 4px 14px rgba(236, 72, 153, 0.2);
+      border-color: rgba(168, 85, 247, 0.45);
+      box-shadow: 0 4px 16px rgba(168, 85, 247, 0.22);
     }
     @media (max-width: 440px) {
       .telemetry-dock-grid {
@@ -1995,13 +2001,13 @@ HTML_INDEX = """<!DOCTYPE html>
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 16px rgba(168, 85, 247, 0.14);
     }
     .telemetry-card.highlight-card {
-      background: linear-gradient(135deg, rgba(244, 63, 94, 0.08) 0%, rgba(18, 18, 24, 0.95) 100%);
-      border-color: rgba(244, 63, 94, 0.35);
-      box-shadow: 0 4px 20px rgba(244, 63, 94, 0.1);
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(18, 18, 24, 0.95) 100%);
+      border-color: rgba(168, 85, 247, 0.4);
+      box-shadow: 0 4px 20px rgba(168, 85, 247, 0.14);
     }
     .telemetry-card.highlight-card:hover {
-      border-color: rgba(244, 63, 94, 0.55);
-      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5), 0 0 20px rgba(244, 63, 94, 0.22);
+      border-color: rgba(168, 85, 247, 0.65);
+      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5), 0 0 20px rgba(168, 85, 247, 0.25);
     }
     .t-card-header {
       display: flex;
@@ -2031,25 +2037,14 @@ HTML_INDEX = """<!DOCTYPE html>
       width: 14px;
       height: 14px;
     }
-    .t-card-icon.purple {
-      background: rgba(192, 132, 252, 0.15);
-      color: #c084fc;
-      border: 1px solid rgba(192, 132, 252, 0.32);
-    }
-    .t-card-icon.pink {
-      background: rgba(244, 63, 94, 0.15);
-      color: #fb7185;
-      border: 1px solid rgba(244, 63, 94, 0.32);
-    }
-    .t-card-icon.blue {
-      background: rgba(168, 85, 247, 0.15);
-      color: #a855f7;
-      border: 1px solid rgba(168, 85, 247, 0.32);
-    }
+    .t-card-icon,
+    .t-card-icon.purple,
+    .t-card-icon.pink,
+    .t-card-icon.blue,
     .t-card-icon.green {
-      background: rgba(236, 72, 153, 0.15);
-      color: #ec4899;
-      border: 1px solid rgba(236, 72, 153, 0.32);
+      background: rgba(168, 85, 247, 0.14);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
     }
     .t-card-val {
       font-size: 1.45rem;
@@ -2059,8 +2054,8 @@ HTML_INDEX = """<!DOCTYPE html>
       letter-spacing: -0.02em;
     }
     .t-card-val.accent-val {
-      color: #f43f5e;
-      text-shadow: 0 0 16px rgba(244, 63, 94, 0.4);
+      color: #fff;
+      text-shadow: 0 0 16px rgba(168, 85, 247, 0.5);
     }
     .t-card-footer {
       display: flex;
@@ -2069,18 +2064,20 @@ HTML_INDEX = """<!DOCTYPE html>
       gap: 6px;
       font-size: 0.7rem;
     }
-    .t-tag {
+    .t-tag,
+    .t-tag.purple,
+    .t-tag.pink,
+    .t-tag.blue,
+    .t-tag.green {
       padding: 1px 6px;
       border-radius: 4px;
       font-weight: 700;
       font-size: 0.62rem;
       letter-spacing: 0.02em;
       text-transform: uppercase;
+      background: rgba(168, 85, 247, 0.14);
+      color: #d8b4fe;
     }
-    .t-tag.purple { background: rgba(192, 132, 252, 0.15); color: #e9d5ff; }
-    .t-tag.pink { background: rgba(244, 63, 94, 0.15); color: #fda4af; }
-    .t-tag.blue { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; }
-    .t-tag.green { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
     .t-sub {
       color: var(--text-sub);
       font-family: 'JetBrains Mono', monospace;
@@ -2139,11 +2136,11 @@ HTML_INDEX = """<!DOCTYPE html>
       background: linear-gradient(180deg, #c084fc 0%, #6b21a8 100%);
     }
     .activity-bar.high {
-      background: linear-gradient(180deg, #f43f5e 0%, #a855f7 100%);
-      box-shadow: 0 0 8px rgba(244, 63, 94, 0.35);
+      background: linear-gradient(180deg, #ffffff 0%, #a855f7 100%);
+      box-shadow: 0 0 8px rgba(168, 85, 247, 0.45);
     }
     .activity-bar.current {
-      background: linear-gradient(180deg, #38bdf8 0%, var(--accent) 100%);
+      background: linear-gradient(180deg, #ffffff 0%, var(--accent) 100%);
       box-shadow: 0 0 10px var(--accent-glow);
       animation: pulseNeon 1.5s infinite;
     }
@@ -2189,8 +2186,8 @@ HTML_INDEX = """<!DOCTYPE html>
       font-weight: 800;
       letter-spacing: 0.05em;
       color: var(--accent);
-      background: rgba(235, 47, 150, 0.12);
-      border: 1px solid rgba(235, 47, 150, 0.3);
+      background: rgba(168, 85, 247, 0.14);
+      border: 1px solid rgba(168, 85, 247, 0.35);
       padding: 2px 7px;
       border-radius: 12px;
     }
@@ -2836,6 +2833,37 @@ HTML_INDEX = """<!DOCTYPE html>
         <span class="h-wave-bar"></span>
       </div>
     </div>
+
+    <!-- Desktop Navigation Pill Bar (Combined Pic 2 & Pic 3 in Header) -->
+    <div class="header-nav-wrap">
+      <div class="segment-bar desktop-segment">
+        <button class="segment-btn active" onclick="switchTab('queue')">
+          <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span>Queue</span>
+        </button>
+        <button class="segment-btn" onclick="switchTab('search')">
+          <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Search</span>
+        </button>
+        <button class="segment-btn" onclick="switchTab('categories')">
+          <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          <span>Library</span>
+        </button>
+        <button class="segment-btn" onclick="switchTab('soundboard')">
+          <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span>Sounds</span>
+        </button>
+        <button class="segment-btn" onclick="switchTab('shortcuts')">
+          <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Shortcuts</span>
+        </button>
+        <button class="segment-btn" onclick="switchTab('settings')">
+          <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Settings</span>
+        </button>
+      </div>
+    </div>
+
     <div class="header-meta">
       <div class="status-badge header-user-badge" id="headerUserBadge" onclick="openUserModal()" title="JuiceVault.xyz Account — Tap to Connect">
         <img id="headerUserAvatar" class="header-user-avatar" src="https://api.juicevault.xyz/favicon.ico" alt="Avatar">
@@ -3079,28 +3107,28 @@ HTML_INDEX = """<!DOCTYPE html>
             <div class="telemetry-dock-grid">
               <div class="telemetry-dock-tile tile-views">
                 <div class="t-dock-head">
-                  <span class="t-dock-lbl">Total Views</span>
+                  <span class="t-dock-lbl">Views</span>
                   <svg class="t-dock-ico" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </div>
                 <span class="t-dock-val" id="quickTotalViews">--</span>
               </div>
-              <div class="telemetry-dock-tile tile-today highlight-rose">
+              <div class="telemetry-dock-tile tile-today">
                 <div class="t-dock-head">
                   <span class="t-dock-lbl">Today</span>
                   <svg class="t-dock-ico" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
                 </div>
                 <span class="t-dock-val" id="quickDailyViews">--</span>
               </div>
-              <div class="telemetry-dock-tile tile-time highlight-cyan">
+              <div class="telemetry-dock-tile tile-time">
                 <div class="t-dock-head">
-                  <span class="t-dock-lbl">Stream Time</span>
+                  <span class="t-dock-lbl">Time</span>
                   <svg class="t-dock-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 </div>
                 <span class="t-dock-val" id="quickDailyTime">--</span>
               </div>
-              <div class="telemetry-dock-tile tile-tracks highlight-green">
+              <div class="telemetry-dock-tile tile-tracks">
                 <div class="t-dock-head">
-                  <span class="t-dock-lbl">Tracks Played</span>
+                  <span class="t-dock-lbl">Tracks</span>
                   <svg class="t-dock-ico" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
                 </div>
                 <span class="t-dock-val" id="quickDailyTracks">--</span>
@@ -3112,34 +3140,6 @@ HTML_INDEX = """<!DOCTYPE html>
 
       <!-- RIGHT COLUMN: TABS (Queue, Search, Collections, Shortcuts) -->
       <div class="card-content-wrap">
-        <!-- Segment Bar Switcher for Desktop Only -->
-        <div class="segment-bar desktop-segment">
-          <button class="segment-btn active" onclick="switchTab('queue')">
-            <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            <span>Queue</span>
-          </button>
-          <button class="segment-btn" onclick="switchTab('search')">
-            <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span>Search</span>
-          </button>
-          <button class="segment-btn" onclick="switchTab('categories')">
-            <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-            <span>Library</span>
-          </button>
-          <button class="segment-btn" onclick="switchTab('soundboard')">
-            <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
-            <span>Sounds</span>
-          </button>
-          <button class="segment-btn" onclick="switchTab('shortcuts')">
-            <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            <span>Shortcuts</span>
-          </button>
-          <button class="segment-btn" onclick="switchTab('settings')">
-            <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            <span>Settings</span>
-          </button>
-        </div>
-
         <!-- TAB: QUEUE -->
         <div class="tab-content active" id="tab-queue">
           <div class="ui-card" style="margin-bottom:14px;">
@@ -4683,8 +4683,22 @@ HTML_INDEX = """<!DOCTYPE html>
       } else if (name === 'skip') {
         showToast('Skipping track…');
         if (liveStreamActive) {
+          currentLiveTrackId = null;
+          isAudioLoading = true;
+          aligningStuckStartTime = null;
           const a = document.getElementById('liveAudio');
-          if (a && !a.paused) a.pause();
+          if (a) {
+            try { a.pause(); a.currentTime = 0; } catch (_) {}
+          }
+          const statusText = document.getElementById('ltStatusText');
+          if (statusText) statusText.innerText = 'Aligning...';
+          const statusInd = document.getElementById('ltStatusInd');
+          if (statusInd) statusInd.className = 'lt-status-indicator buffering';
+          const badge = document.getElementById('liveSyncBadge');
+          if (badge) {
+            badge.innerText = 'BUFFERING';
+            badge.className = 'lt-sync-badge connecting';
+          }
         }
         const nextTrack = (currentQueueData.requested && currentQueueData.requested.length > 0)
           ? currentQueueData.requested[0]
@@ -4700,8 +4714,22 @@ HTML_INDEX = """<!DOCTYPE html>
       } else if (name === 'previous') {
         showToast('Playing previous track…');
         if (liveStreamActive) {
+          currentLiveTrackId = null;
+          isAudioLoading = true;
+          aligningStuckStartTime = null;
           const a = document.getElementById('liveAudio');
-          if (a && !a.paused) a.pause();
+          if (a) {
+            try { a.pause(); a.currentTime = 0; } catch (_) {}
+          }
+          const statusText = document.getElementById('ltStatusText');
+          if (statusText) statusText.innerText = 'Aligning...';
+          const statusInd = document.getElementById('ltStatusInd');
+          if (statusInd) statusInd.className = 'lt-status-indicator buffering';
+          const badge = document.getElementById('liveSyncBadge');
+          if (badge) {
+            badge.innerText = 'BUFFERING';
+            badge.className = 'lt-sync-badge connecting';
+          }
         }
         document.getElementById('trackTitle').innerText = 'Loading previous track…';
         currentElapsed = 0;
@@ -5238,10 +5266,8 @@ HTML_INDEX = """<!DOCTYPE html>
       if (audio.paused && currentState.is_playing) {
         try {
           if (Math.abs(audio.currentTime - currentElapsed) > 0.4) {
-            if (!(currentElapsed < 1.0 && audio.currentTime > 2.0)) {
-              const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
-              audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek));
-            }
+            const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
+            audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek));
           }
         } catch (e) {}
         audio.play().catch(() => {});
@@ -5286,10 +5312,8 @@ HTML_INDEX = """<!DOCTYPE html>
 
         if (Math.abs(drift) > hardSeekThreshold) {
           // Large drift -> Hard seek directly to Discord master position
-          if (!(currentElapsed < 1.0 && audio.currentTime > 2.5)) {
-            const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
-            try { audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek)); } catch (e) {}
-          }
+          const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
+          try { audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek)); } catch (e) {}
           if (Math.abs(audio.playbackRate - speed) > 0.005) {
             audio.playbackRate = speed;
           }
@@ -7190,7 +7214,7 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     function checkAligningWatchdog() {
-      if (!liveStreamActive || !currentState || !currentState.is_playing) {
+      if (!liveStreamActive) {
         aligningStuckStartTime = null;
         return;
       }
@@ -7216,7 +7240,9 @@ HTML_INDEX = """<!DOCTYPE html>
       // Soft recovery at ~2.5s: fetch status in case track changed on Discord
       if (stuckDuration >= 2500 && (Date.now() - lastAligningRecoveryTime > 2500)) {
         lastAligningRecoveryTime = Date.now();
-        fetchStatus();
+        fetchStatus().then(() => {
+          if (liveStreamActive) syncLiveAudio(true);
+        });
       }
 
       // Hard refresh at 5 seconds: exact user requirement
