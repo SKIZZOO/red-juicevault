@@ -2103,7 +2103,7 @@ class JuiceVaultWebRemote:
                                 out_headers = {
                                     "Content-Type": c_type,
                                     "Accept-Ranges": "bytes",
-                                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                                    "Cache-Control": "private, no-cache",
                                     **cors_headers
                                 }
                                 if "Content-Range" in r_resp.headers:
@@ -2128,7 +2128,7 @@ class JuiceVaultWebRemote:
 
         resp_headers = {
             "Accept-Ranges": "bytes",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Cache-Control": "private, no-cache",
             "Content-Type": content_type,
             **cors_headers,
         }
