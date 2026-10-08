@@ -461,7 +461,7 @@ class JuiceVaultWebRemote:
         self._stats_dirty = True
 
     def get_telemetry_stats(self, guild_id=None):
-        """Return a structured dictionary with live views, today's usage, and all-time totals for both the individual guild and global network."""
+        """Return a structured dictionary with live global telemetry."""
         today = self._ensure_today()
         day_stats = self._daily_history.get(today, {})
         today_views = day_stats.get("views", 0)
@@ -504,65 +504,11 @@ class JuiceVaultWebRemote:
                 "listening_formatted": _fmt_time(all_sec),
                 "remote_actions": all_actions,
             },
+            "hourly_activity": day_stats.get("hourly_activity", [0] * 24),
         }
-
-        server_stats = None
-        if guild_id:
-            gid_str = str(guild_id)
-            guild_obj = None
-            try:
-                guild_obj = self.bot.get_guild(int(guild_id))
-            except Exception:
-                pass
-            g_name = guild_obj.name if guild_obj else f"Server {gid_str}"
-            g_entry = self._guild_stats.get(gid_str, {})
-            g_views = g_entry.get("total_views", 0)
-            g_daily = g_entry.get("daily_history", {}).get(today, {})
-            g_today_views = g_daily.get("views", 0)
-            g_today_sec = g_daily.get("seconds", 0)
-            g_today_tracks = g_daily.get("tracks", 0)
-            g_today_actions = g_daily.get("actions", 0)
-            g_today_reqs = g_daily.get("requests", 0)
-
-            g_all = g_entry.get("all_time", {})
-            g_all_sec = g_all.get("listening_seconds", 0)
-            g_all_tracks = g_all.get("tracks_played", 0)
-            g_all_actions = g_all.get("remote_actions", 0)
-
-            # Count WebSocket clients actively viewing this guild
-            g_active = sum(1 for ws in self.ws_clients if str(getattr(ws, "_guild_id", "")) == gid_str)
-
-            server_stats = {
-                "guild": {
-                    "id": gid_str,
-                    "name": g_name,
-                },
-                "views": {
-                    "total": g_views,
-                    "today": g_today_views,
-                    "unique_today": max(1 if g_today_views > 0 else 0, g_today_views),
-                    "active_sessions": g_active,
-                },
-                "daily_usage": {
-                    "date": today,
-                    "listening_seconds": g_today_sec,
-                    "listening_formatted": _fmt_time(g_today_sec),
-                    "tracks_played": g_today_tracks,
-                    "requests_queued": g_today_reqs,
-                    "remote_actions": g_today_actions,
-                },
-                "all_time": {
-                    "tracks_played": g_all_tracks,
-                    "listening_seconds": g_all_sec,
-                    "listening_formatted": _fmt_time(g_all_sec),
-                    "remote_actions": g_all_actions,
-                },
-            }
 
         result = dict(global_stats)
         result["global"] = global_stats
-        result["server"] = server_stats
-        result["guild"] = server_stats["guild"] if server_stats else None
         return result
 
     async def _stats_saver_loop(self):
@@ -1579,7 +1525,7 @@ class JuiceVaultWebRemote:
     async def _api_search(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        query = request.query.get("q", "").strip()
+        query = request.query.get("q", "").strip()[:500]
         source = request.query.get("source", "vault").lower()
         if not query:
             return web.json_response({"results": []})
@@ -1694,8 +1640,34 @@ class JuiceVaultWebRemote:
 
         play_now = bool(data.get("play_now", False))
 
+        def _clean_track(raw):
+            if not isinstance(raw, dict):
+                return None
+            clean = {
+                "id": str(raw.get("id") or "")[:100],
+                "title": str(raw.get("title") or "Untitled Track")[:200],
+                "artist": str(raw.get("artist") or "Juice WRLD")[:200],
+                "length": str(raw.get("length") or "—")[:30],
+                "category": str(raw.get("category") or "archive")[:50],
+            }
+            if raw.get("cover_url"):
+                clean["cover_url"] = str(raw["cover_url"])[:500]
+            if raw.get("url"):
+                u = str(raw["url"])
+                # Security: Strictly allow only HTTP and HTTPS protocols
+                if u.startswith(("http://", "https://")):
+                    clean["url"] = u[:1000]
+            if raw.get("_external"):
+                clean["_external"] = True
+                if raw.get("_source"):
+                    clean["_source"] = str(raw["_source"])[:50]
+                if raw.get("_webpage_url") and str(raw["_webpage_url"]).startswith(("http://", "https://")):
+                    clean["_webpage_url"] = str(raw["_webpage_url"])[:1000]
+            # Strip _cached_file and internal filesystem paths to prevent arbitrary file reading
+            return clean
+
         if tracks and isinstance(tracks, list):
-            valid_tracks = [t for t in tracks if isinstance(t, dict)]
+            valid_tracks = [t for t in (_clean_track(x) for x in tracks[:250]) if t]
             if not valid_tracks:
                 return web.json_response({"error": "No valid tracks provided"}, status=400)
 
@@ -1711,15 +1683,18 @@ class JuiceVaultWebRemote:
                 queue.extend(valid_tracks)
                 msg = f"Added {len(valid_tracks)} tracks to Requested queue!"
         else:
+            clean_t = _clean_track(track)
+            if not clean_t:
+                return web.json_response({"error": "Invalid track data"}, status=400)
             if play_now:
-                main.manual_queues.setdefault(gid, []).insert(0, track)
+                main.manual_queues.setdefault(gid, []).insert(0, clean_t)
                 voice = guild.voice_client
                 if voice and (voice.is_playing() or voice.is_paused()):
                     voice.stop()
-                msg = f"Playing now: '{track.get('title')}'"
+                msg = f"Playing now: '{clean_t.get('title')}'"
             else:
-                main.manual_queues.setdefault(gid, []).append(track)
-                msg = f"Added '{track.get('title')}' to Requested queue!"
+                main.manual_queues.setdefault(gid, []).append(clean_t)
+                msg = f"Added '{clean_t.get('title')}' to Requested queue!"
 
         self.record_action("queue_add", guild_id=gid)
         ui = self._get_ui_cog()
@@ -1788,7 +1763,12 @@ class JuiceVaultWebRemote:
         if not guild:
             return web.json_response({"error": "No active voice guild found"}, status=404)
         channel_id = data.get("channel_id")
-        channel = guild.get_channel(int(channel_id)) if channel_id else None
+        channel = None
+        if channel_id is not None:
+            try:
+                channel = guild.get_channel(int(channel_id))
+            except (ValueError, TypeError):
+                pass
         if not channel:
             return web.json_response({"error": "Channel not found"}, status=404)
 
@@ -1884,31 +1864,44 @@ class JuiceVaultWebRemote:
 
     async def _api_stream(self, request):
         """Stream current playing audio track live to the browser with Range request support."""
+        cors_headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Range, Authorization, Content-Type",
+            "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
+        }
         if not await self._authenticate(request):
-            return web.Response(status=401, text="Unauthorized")
+            return web.Response(status=401, text="Unauthorized", headers=cors_headers)
         guild = self._resolve_guild(request)
         if not guild:
-            return web.Response(status=404, text="No active guild")
+            return web.Response(status=404, text="No active guild", headers=cors_headers)
         main = self._get_main_cog()
         if not main:
-            return web.Response(status=503, text="JuiceVault cog unavailable")
+            return web.Response(status=503, text="JuiceVault cog unavailable", headers=cors_headers)
         gid = guild.id
         current_file = None
 
-        # If a track is switching, seeked, or downloading, wait up to 8 seconds for the audio file to become ready
-        for _ in range(40):
+        # Check immediately and wait up to 10 seconds for the audio file to become ready
+        for _ in range(50):
             cf = getattr(main, "current_files", {}).get(gid)
-            if cf and os.path.isfile(cf):
+            if cf and os.path.isfile(cf) and os.path.getsize(cf) > 1024:
                 current_file = cf
                 break
             cur = getattr(main, "current", {}).get(gid)
-            if cur and cur.get("_cached_file") and os.path.isfile(cur["_cached_file"]):
+            if cur and cur.get("_cached_file") and os.path.isfile(cur["_cached_file"]) and os.path.getsize(cur["_cached_file"]) > 1024:
                 current_file = cur["_cached_file"]
+                break
+            lf = getattr(main, "_last_played_files", {}).get(gid)
+            if lf and os.path.isfile(lf) and os.path.getsize(lf) > 1024:
+                current_file = lf
                 break
             await asyncio.sleep(0.2)
 
         if not current_file or not os.path.isfile(current_file):
-            return web.Response(status=404, text="No track currently playing or audio not ready")
+            # Check if there is a direct playable stream URL on the current track (e.g. JuiceVault CDN)
+            cur = getattr(main, "current", {}).get(gid)
+            if cur and cur.get("url") and str(cur["url"]).startswith(("http://", "https://")):
+                raise web.HTTPTemporaryRedirect(location=cur["url"], headers=cors_headers)
+            return web.Response(status=404, text="No track currently playing or audio not ready", headers=cors_headers)
 
         ext = os.path.splitext(current_file)[1].lower()
         content_type = {
@@ -1922,14 +1915,16 @@ class JuiceVaultWebRemote:
             ".opus": "audio/opus",
         }.get(ext, "audio/mpeg")
 
+        resp_headers = {
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Content-Type": content_type,
+            **cors_headers,
+        }
+
         return web.FileResponse(
             current_file,
-            headers={
-                "Accept-Ranges": "bytes",
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Content-Type": content_type,
-                "Access-Control-Allow-Origin": "*",
-            },
+            headers=resp_headers,
         )
 
 

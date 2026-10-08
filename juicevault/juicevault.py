@@ -60,6 +60,7 @@ class JuiceVault(commands.Cog):
         self.manual_queues = {}
         self.current = {}
         self.current_files = {}
+        self._last_played_files = {}
         self.last_error = {}
         self.search_results = {}
         self.failure_counts = {}
@@ -503,6 +504,23 @@ class JuiceVault(commands.Cog):
             except OSError:
                 pass
 
+    def _schedule_file_removal(self, path, delay=25):
+        if not path or "juicevault_soundboard" in path or "juicevault_vip" in path:
+            return
+        async def _remover():
+            try:
+                await asyncio.sleep(delay)
+                other_playing = any(p == path for p in getattr(self, "current_files", {}).values())
+                other_prefetched = any(p == path for p in getattr(self, "_prefetched", {}).values())
+                if not other_playing and not other_prefetched:
+                    self._remove_file(path)
+            except Exception:
+                pass
+        try:
+            self.bot.loop.create_task(_remover())
+        except Exception:
+            self._remove_file(path)
+
     @staticmethod
     def _parse_duration(value):
         try:
@@ -745,20 +763,28 @@ class JuiceVault(commands.Cog):
                         pass
                 if not explicit_seek:
                     self.current_files.pop(gid, None)
+                    if not hasattr(self, "_last_played_files"):
+                        self._last_played_files = {}
+                    if local_path and os.path.isfile(local_path):
+                        self._last_played_files[gid] = local_path
                     if local_path and local_path not in getattr(self, "_preserved_files", set()):
                         other_playing = any(p == local_path for g, p in self.current_files.items() if g != gid)
                         other_prefetched = any(p == local_path for p in self._prefetched.values())
                         if not other_playing and not other_prefetched:
-                            self._remove_file(local_path)
+                            self._schedule_file_removal(local_path, 25)
                     elif local_path:
                         self._preserved_files.discard(local_path)
                 if stop.is_set() or self.tasks.get(gid) is not task:
                     if explicit_seek:
                         self.current_files.pop(gid, None)
+                        if not hasattr(self, "_last_played_files"):
+                            self._last_played_files = {}
+                        if local_path and os.path.isfile(local_path):
+                            self._last_played_files[gid] = local_path
                         other_playing = any(p == local_path for g, p in self.current_files.items() if g != gid)
                         other_prefetched = any(p == local_path for p in self._prefetched.values())
                         if not other_playing and not other_prefetched:
-                            self._remove_file(local_path)
+                            self._schedule_file_removal(local_path, 25)
                     return
                 if explicit_seek:
                     seek.clear()

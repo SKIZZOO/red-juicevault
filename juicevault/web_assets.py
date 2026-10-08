@@ -1067,60 +1067,25 @@ HTML_INDEX = """<!DOCTYPE html>
       transform: translate(2px, -2px);
     }
 
-    /* Telemetry Scope Switcher (Server Individual vs Network Global) */
-    .telemetry-scope-selector {
+    /* Global Network Telemetry Header Bar */
+    .telemetry-global-banner {
       display: flex;
-      gap: 6px;
-      background: rgba(0, 0, 0, 0.45);
-      padding: 4px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
-      margin-bottom: 14px;
-    }
-    .telemetry-scope-btn {
-      flex: 1;
-      display: inline-flex;
       align-items: center;
-      justify-content: center;
-      gap: 6px;
+      justify-content: space-between;
+      background: rgba(168, 85, 247, 0.08);
+      border: 1px solid rgba(168, 85, 247, 0.22);
+      border-radius: var(--radius-sm);
       padding: 8px 12px;
-      border-radius: 8px;
-      border: 1px solid transparent;
-      background: transparent;
+      margin-bottom: 14px;
+      font-size: 0.76rem;
       color: var(--text-sub);
-      font-size: 0.78rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.18s ease;
     }
-    .telemetry-scope-btn.active {
-      background: rgba(255, 0, 85, 0.16);
-      color: #fff;
-      border-color: rgba(255, 0, 85, 0.45);
-      box-shadow: 0 0 12px rgba(255, 0, 85, 0.2);
-    }
-    .telemetry-scope-btn:hover:not(.active) {
-      background: rgba(255, 255, 255, 0.05);
-      color: #fff;
-    }
-    .telemetry-scope-pill {
-      font-size: 0.62rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 2px 7px;
-      border-radius: 6px;
-      background: rgba(255, 0, 85, 0.16);
-      border: 1px solid rgba(255, 0, 85, 0.35);
+    .telemetry-global-banner .tag-lead {
       color: var(--accent);
-      margin-left: auto;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      flex-shrink: 0;
-    }
-    .telemetry-scope-pill:hover {
-      background: var(--accent);
-      color: #fff;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      font-size: 0.7rem;
     }
 
     /* Telemetry Grid & Hero Cards */
@@ -1684,7 +1649,6 @@ HTML_INDEX = """<!DOCTYPE html>
                 <span class="telemetry-q-num" id="quickDailyTracks">--</span>
               </div>
             </div>
-            <span class="telemetry-scope-pill" id="quickScopePill" onclick="toggleQuickStatsScope(event)" title="Click to toggle Server / Global stats">Server</span>
             <span class="telemetry-q-more">↗</span>
           </div>
         </div>
@@ -2268,17 +2232,6 @@ HTML_INDEX = """<!DOCTYPE html>
       </div>
 
       <!-- Scope Selector: Current Server vs All Servers (Global) -->
-      <div class="telemetry-scope-selector">
-        <button id="scopeBtnServer" class="telemetry-scope-btn active" onclick="switchStatsScope('server')">
-          <svg class="icon-svg" style="width:13px;height:13px;color:var(--accent);" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <span id="scopeServerLabel">Current Server</span>
-        </button>
-        <button id="scopeBtnGlobal" class="telemetry-scope-btn" onclick="switchStatsScope('global')">
-          <svg class="icon-svg" style="width:13px;height:13px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-          <span>All Servers (Global)</span>
-        </button>
-      </div>
-
       <div class="telemetry-grid">
         <div class="telemetry-card">
           <div class="t-card-header">
@@ -2346,12 +2299,8 @@ HTML_INDEX = """<!DOCTYPE html>
       <!-- Breakdown Details Card -->
       <div class="telemetry-breakdown-card">
         <div class="t-detail-row">
-          <span class="t-detail-label">Active Stats Scope:</span>
-          <span class="t-detail-value" id="statsScopeBadge" style="color:var(--accent); font-weight:700;">This Server</span>
-        </div>
-        <div class="t-detail-row">
-          <span class="t-detail-label">Active Remote Listeners / Sessions:</span>
-          <span class="t-detail-value"><span class="status-dot"></span> <span id="statsWsCount">1</span> active now</span>
+          <span class="t-detail-label">Active Listeners / Sessions:</span>
+          <span class="t-detail-value"><span class="status-dot"></span> <span id="statsWsCount">1</span> connected now</span>
         </div>
         <div class="t-detail-row">
           <span class="t-detail-label">Remote Commands Executed Today:</span>
@@ -2362,9 +2311,18 @@ HTML_INDEX = """<!DOCTYPE html>
           <span class="t-detail-value" id="statsAllTimeActions">--</span>
         </div>
         <div class="t-detail-row">
-          <span class="t-detail-label">Live Domain:</span>
+          <span class="t-detail-label">Audio Pipeline:</span>
+          <span class="t-detail-value" style="color:var(--accent);">24/7 Lossless PCM • 1:1 Live Sync</span>
+        </div>
+        <div class="t-detail-row">
+          <span class="t-detail-label">Live Gateway:</span>
           <span class="t-detail-value" style="color:var(--accent);">remote.juicevault.space</span>
         </div>
+      </div>
+
+      <div style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.06); font-size:0.75rem; color:var(--text-sub); display:flex; justify-content:space-between; align-items:center;">
+        <span>Bot made by <a href="https://sosocial.lol/ski" target="_blank" rel="noopener" class="credit-author">SKIZZOO</a></span>
+        <span>Domain by <a href="https://sosocial.lol/spinti" target="_blank" rel="noopener" class="credit-partner">Spinti</a></span>
       </div>
 
       <button class="btn-kinetic btn-flat" style="padding:12px; margin-top:14px; width:100%; justify-content:center;" onclick="closeStatsModal()">
@@ -2373,7 +2331,7 @@ HTML_INDEX = """<!DOCTYPE html>
     </div>
   </div>
 
-  <audio id="liveAudio" preload="auto" playsinline style="display:none;"></audio>
+  <audio id="liveAudio" crossorigin="anonymous" preload="auto" playsinline style="display:none;"></audio>
   <audio id="silentAudio" preload="auto" playsinline loop style="display:none;"></audio>
 
   <script>
@@ -2895,6 +2853,21 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     let liveSyncInterval = null;
+    let isAudioPrimed = false;
+
+    function primeLiveAudio(audio) {
+      if (!audio) return;
+      try {
+        audio.crossOrigin = 'anonymous';
+        audio.preload = 'auto';
+        audio.playsInline = true;
+        const p = audio.play();
+        if (p !== undefined) {
+          p.catch(() => {});
+        }
+        isAudioPrimed = true;
+      } catch (e) {}
+    }
 
     function toggleLiveAudio() {
       const audio = document.getElementById('liveAudio');
@@ -2906,20 +2879,25 @@ HTML_INDEX = """<!DOCTYPE html>
 
       if (liveStreamActive) {
         initWebAudio();
+        primeLiveAudio(audio);
+
         const silent = document.getElementById('silentAudio');
         if (silent) silent.pause();
-        btn.classList.add('active');
-        btn.innerHTML = '<span>Stop Listening</span>';
-        controls.style.display = 'flex';
-        title.innerText = 'Listen Together: Active';
-        if (badge) badge.innerText = '1:1 Sync';
+        if (btn) {
+          btn.classList.add('active');
+          btn.innerHTML = '<span>Stop Listening</span>';
+        }
+        if (controls) controls.style.display = 'flex';
+        if (title) title.innerText = 'Listen Together: Connecting...';
+        if (badge) badge.innerText = 'Connecting';
+
         syncLiveAudio(true);
         setupMediaSession();
         if (liveSyncInterval) clearInterval(liveSyncInterval);
         liveSyncInterval = setInterval(() => {
           if (liveStreamActive) syncLiveAudio(false);
         }, 250);
-        showToast('Listen Together: 1:1 sync connected');
+        showToast('Listen Together connecting stream...');
       } else {
         if (liveSyncInterval) {
           clearInterval(liveSyncInterval);
@@ -2929,12 +2907,17 @@ HTML_INDEX = """<!DOCTYPE html>
           cancelAnimationFrame(pannerAnimFrame);
           pannerAnimFrame = null;
         }
-        audio.pause();
-        audio.removeAttribute('src');
-        btn.classList.remove('active');
-        btn.innerHTML = '<span>Listen Together</span>';
-        controls.style.display = 'none';
-        title.innerText = 'Listen Together';
+        if (audio) {
+          audio.pause();
+          audio.removeAttribute('src');
+          audio.load();
+        }
+        if (btn) {
+          btn.classList.remove('active');
+          btn.innerHTML = '<span>Listen Together</span>';
+        }
+        if (controls) controls.style.display = 'none';
+        if (title) title.innerText = 'Listen Together';
         if (badge) badge.innerText = '1:1 Sync';
         currentLiveTrackId = null;
         isAudioLoading = false;
@@ -2963,9 +2946,12 @@ HTML_INDEX = """<!DOCTYPE html>
       const audio = document.getElementById('liveAudio');
       if (!audio) return;
       const t = currentState.track;
+      const title = document.getElementById('liveStatusTitle');
+      const badge = document.getElementById('liveSyncBadge');
 
       if (!t || !currentState.is_running) {
         if (!audio.paused) audio.pause();
+        if (badge) badge.innerText = 'Paused';
         return;
       }
 
@@ -2984,49 +2970,73 @@ HTML_INDEX = """<!DOCTYPE html>
         const gid = (currentState && currentState.guild && currentState.guild.id) ? currentState.guild.id : '';
         const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&guild_id=${encodeURIComponent(gid)}&t=${encodeURIComponent(trackKey)}`;
         
+        audio.crossOrigin = 'anonymous';
         audio.src = streamUrl;
         audio.load();
 
-        audio.onerror = () => {
-          if (!liveStreamActive || !currentState || !currentState.is_playing) return;
-          console.warn('Live audio stream error, auto-retrying in 1s...');
-          if (audioRetryTimer) clearTimeout(audioRetryTimer);
-          audioRetryTimer = setTimeout(() => {
-            if (liveStreamActive && currentState && currentState.is_playing) {
-              syncLiveAudio(true);
-            }
-          }, 1000);
+        if (title) title.innerText = 'Listen Together: Buffering...';
+        if (badge) badge.innerText = 'Buffering';
+
+        audio.onwaiting = () => {
+          if (badge) badge.innerText = 'Buffering';
         };
 
-        const onCanPlay = () => {
+        audio.onplaying = () => {
+          isAudioLoading = false;
+          if (badge) badge.innerText = '1:1 Sync';
+          if (title) title.innerText = 'Listen Together: Live';
+        };
+
+        const onReady = () => {
           isAudioLoading = false;
           try {
-            if (currentElapsed > 0.05) {
+            if (currentElapsed > 0.1 && Math.abs(audio.currentTime - currentElapsed) > 0.4) {
               audio.currentTime = currentElapsed;
             }
           } catch (e) {}
           applyLiveEQ(currentState.effect);
           if (currentState && currentState.is_playing) {
-            audio.play().catch(e => console.log('Live playback play error:', e));
+            audio.play().catch(e => console.warn('Live playback play error:', e));
           }
+          if (badge) badge.innerText = '1:1 Sync';
+          if (title) title.innerText = 'Listen Together: Live';
         };
-        audio.addEventListener('canplay', onCanPlay, { once: true });
+
+        audio.onloadedmetadata = onReady;
+        audio.oncanplay = onReady;
+
+        audio.onerror = (e) => {
+          isAudioLoading = false;
+          if (!liveStreamActive || !currentState || !currentState.is_playing) return;
+          console.warn('Live audio stream error, auto-retrying in 1.2s...', e);
+          if (badge) badge.innerText = 'Retrying...';
+          if (audioRetryTimer) clearTimeout(audioRetryTimer);
+          audioRetryTimer = setTimeout(() => {
+            if (liveStreamActive && currentState && currentState.is_playing) {
+              syncLiveAudio(true);
+            }
+          }, 1200);
+        };
         return;
       }
 
-      if (isAudioLoading) return;
+      if (isAudioLoading) {
+        if (audio.readyState >= 2) isAudioLoading = false;
+        else return;
+      }
 
       applyLiveEQ(currentState.effect);
 
       if (!currentState.is_playing) {
         if (!audio.paused) audio.pause();
+        if (badge) badge.innerText = 'Paused';
         return;
       }
 
       if (audio.paused && currentState.is_playing) {
         try {
-          if (Math.abs(audio.currentTime - currentElapsed) > 0.3) {
-            if (!(currentElapsed < 0.5 && audio.currentTime > 2.0)) {
+          if (Math.abs(audio.currentTime - currentElapsed) > 0.4) {
+            if (!(currentElapsed < 1.0 && audio.currentTime > 2.0)) {
               audio.currentTime = Math.max(0, currentElapsed);
             }
           }
@@ -3035,7 +3045,7 @@ HTML_INDEX = """<!DOCTYPE html>
       }
 
       // High-precision 1:1 Phase-Locked Loop (PLL) clock sync with Discord
-      if (!audio.paused && audio.duration > 0) {
+      if (!audio.paused && audio.duration > 0 && audio.readyState >= 2) {
         const drift = audio.currentTime - currentElapsed;
         const driftMs = Math.round(drift * 1000);
         const driftLabel = document.getElementById('syncDriftLabel');
@@ -3043,24 +3053,18 @@ HTML_INDEX = """<!DOCTYPE html>
           driftLabel.innerText = (driftMs >= 0 ? `+${driftMs}ms` : `${driftMs}ms`);
         }
 
-        if (Math.abs(drift) > 0.35) {
-          // Large drift (>350ms) -> Hard seek directly to Discord master position
-          if (!(currentElapsed < 0.5 && audio.currentTime > 2.0)) {
+        if (Math.abs(drift) > 1.2) {
+          // Large drift (>1.2s) -> Hard seek directly to Discord master position
+          if (!(currentElapsed < 1.0 && audio.currentTime > 2.5)) {
             try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
           }
           audio.playbackRate = speed;
-        } else if (Math.abs(drift) > 0.02) {
-          // Micro-drift (20ms - 350ms): Proportional rate steering for ultra-smooth, click-free sync
-          const steer = Math.min(0.08, Math.max(0.015, Math.abs(drift) * 0.25));
-          if (drift < 0) {
-            // Audio lagging behind Discord -> accelerate proportionally
-            audio.playbackRate = speed * (1 + steer);
-          } else {
-            // Audio ahead of Discord -> decelerate proportionally
-            audio.playbackRate = speed * (1 - steer);
-          }
+        } else if (Math.abs(drift) > 0.03) {
+          // Micro-drift (30ms - 1200ms): Proportional rate steering for ultra-smooth, click-free sync
+          const steer = Math.min(0.06, Math.max(0.015, Math.abs(drift) * 0.12));
+          audio.playbackRate = (drift < 0) ? (speed * (1 + steer)) : (speed * (1 - steer));
         } else {
-          // Locked in exact 1:1 sync (within ±20ms)
+          // Locked in exact 1:1 sync (within ±30ms)
           audio.playbackRate = speed;
         }
       }
@@ -4173,29 +4177,8 @@ HTML_INDEX = """<!DOCTYPE html>
       fetchTelemetry();
     }
 
-    // Live Telemetry & Daily Usage Engine
+    // Live Global Telemetry & Daily Usage Engine
     let cachedTelemetryData = null;
-    let currentStatsScope = localStorage.getItem('jv_stats_scope') || 'server';
-
-    function switchStatsScope(scope) {
-      currentStatsScope = scope;
-      try { localStorage.setItem('jv_stats_scope', scope); } catch (e) {}
-      const btnServer = document.getElementById('scopeBtnServer');
-      const btnGlobal = document.getElementById('scopeBtnGlobal');
-      if (btnServer) btnServer.classList.toggle('active', scope === 'server');
-      if (btnGlobal) btnGlobal.classList.toggle('active', scope === 'global');
-      const qPill = document.getElementById('quickScopePill');
-      if (qPill) qPill.innerText = (scope === 'server' ? 'Server' : 'Global');
-      if (cachedTelemetryData) {
-        updateTelemetryUI(cachedTelemetryData);
-      }
-    }
-
-    function toggleQuickStatsScope(e) {
-      if (e) e.stopPropagation();
-      switchStatsScope(currentStatsScope === 'server' ? 'global' : 'server');
-      showToast(currentStatsScope === 'server' ? 'Showing Server stats' : 'Showing Global network stats');
-    }
 
     function openStatsModal() {
       const s = document.getElementById('statsSheet');
@@ -4226,31 +4209,7 @@ HTML_INDEX = """<!DOCTYPE html>
       if (!stats) return;
       cachedTelemetryData = stats;
 
-      const hasServer = !!(stats.server && stats.server.guild);
-      const activeScope = (currentStatsScope === 'server' && hasServer) ? 'server' : 'global';
-      const target = (activeScope === 'server') ? stats.server : (stats.global || stats);
-      const gName = (stats.server && stats.server.guild && stats.server.guild.name)
-        ? stats.server.guild.name
-        : (currentState && currentState.guild ? currentState.guild.name : 'Server');
-
-      const sLabel = document.getElementById('scopeServerLabel');
-      if (sLabel) sLabel.innerText = `${gName} (Server)`;
-      const qPill = document.getElementById('quickScopePill');
-      if (qPill) qPill.innerText = (activeScope === 'server' ? 'Server' : 'Global');
-      const scopeBadge = document.getElementById('statsScopeBadge');
-      if (scopeBadge) scopeBadge.innerText = (activeScope === 'server' ? `${gName} (This Server)` : 'All Servers (Global)');
-      const subTitle = document.getElementById('statsSubtitle');
-      if (subTitle) {
-        subTitle.innerText = (activeScope === 'server'
-          ? `Individual server statistics for ${gName}`
-          : 'Real-time web traffic, unique visitors & 24/7 stream statistics network-wide');
-      }
-
-      const btnServer = document.getElementById('scopeBtnServer');
-      const btnGlobal = document.getElementById('scopeBtnGlobal');
-      if (btnServer) btnServer.classList.toggle('active', activeScope === 'server');
-      if (btnGlobal) btnGlobal.classList.toggle('active', activeScope === 'global');
-
+      const target = stats.global || stats;
       const views = target.views || {};
       const daily = target.daily_usage || {};
       const allTime = target.all_time || {};
@@ -4261,7 +4220,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const hCount = document.getElementById('headerViewsCount');
       if (hCount) hCount.innerText = fmt(views.total) + ' views';
       const hDaily = document.getElementById('headerDailyCount');
-      if (hDaily) hDaily.innerText = fmt(views.today) + (activeScope === 'server' ? ' srv' : ' today');
+      if (hDaily) hDaily.innerText = fmt(views.today) + ' today';
 
       // Compact quick bar
       const qTot = document.getElementById('quickTotalViews');
@@ -4319,11 +4278,11 @@ HTML_INDEX = """<!DOCTYPE html>
       const cAllTracks = document.getElementById('cardAllTimeTracks');
       if (cAllTracks) cAllTracks.innerText = fmt(allTime.tracks_played) + ' total';
 
-      renderActivityBars('statsActivityBars', daily.tracks_played || 1, views.today || 1);
-      renderActivityBars('cardActivityBars', daily.tracks_played || 1, views.today || 1);
+      renderActivityBars('statsActivityBars', daily.tracks_played || 1, views.today || 1, target.hourly_activity);
+      renderActivityBars('cardActivityBars', daily.tracks_played || 1, views.today || 1, target.hourly_activity);
     }
 
-    function renderActivityBars(containerId, tracksCount, viewsCount) {
+    function renderActivityBars(containerId, tracksCount, viewsCount, hourlyData) {
       const container = document.getElementById(containerId);
       if (!container) return;
       const currentHour = new Date().getUTCHours();
@@ -4331,19 +4290,22 @@ HTML_INDEX = """<!DOCTYPE html>
       for (let h = 0; h < 24; h++) {
         let cls = 'activity-bar';
         let pct = 8;
+        if (Array.isArray(hourlyData) && hourlyData.length === 24) {
+          const val = hourlyData[h] || 0;
+          pct = Math.min(100, Math.max(8, val * 12));
+        } else {
+          const wave = Math.sin((h + 2) / 3.2) * 35 + 45;
+          pct = Math.max(12, Math.min(95, Math.round(wave + ((h * 7) % 20))));
+        }
         if (h === currentHour) {
           cls += ' current';
-          pct = Math.min(100, Math.max(35, (tracksCount * 3 + viewsCount * 2) % 65 + 35));
+          pct = Math.max(pct, 40);
         } else if (h < currentHour) {
           cls += ' active';
-          const wave = Math.sin((h + 2) / 3.2) * 35 + 45;
-          pct = Math.max(15, Math.min(95, Math.round(wave + ((h * 7) % 20))));
           if (pct > 65) cls += ' high';
-        } else {
-          pct = 8;
         }
         const hourLabel = String(h).padStart(2, '0') + ':00 UTC';
-        html += `<div class="activity-bar-slot" title="${hourLabel}"><div class="${cls}" style="height:${pct}%;"></div></div>`;
+        html += `<div class="activity-bar-slot" title="${hourLabel} • ${pct}% activity"><div class="${cls}" style="height:${pct}%;"></div></div>`;
       }
       container.innerHTML = html;
     }
