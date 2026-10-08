@@ -4840,7 +4840,6 @@ HTML_INDEX = """<!DOCTYPE html>
         if (liveStreamActive) {
           const a = document.getElementById('liveAudio');
           if (a) {
-            isAudioSeeking = true;
             lastAudioSeekTime = Date.now();
             try { a.currentTime = currentElapsed; } catch (e) {}
           }
@@ -4853,7 +4852,6 @@ HTML_INDEX = """<!DOCTYPE html>
         if (liveStreamActive) {
           const a = document.getElementById('liveAudio');
           if (a) {
-            isAudioSeeking = true;
             lastAudioSeekTime = Date.now();
             try { a.currentTime = currentElapsed; } catch (e) {}
           }
@@ -4869,13 +4867,12 @@ HTML_INDEX = """<!DOCTYPE html>
       } else if (name === 'skip') {
         showToast('Skipping track…');
         skipPendingTrackId = currentTrackKey;
-        skipPendingUntil = Date.now() + 4000;
+        skipPendingUntil = Date.now() + 2500;
         currentElapsed = 0;
         updateScrubberUI();
         if (liveStreamActive) {
           currentLiveTrackId = null;
           isAudioLoading = true;
-          isAudioSeeking = false;
           aligningStuckStartTime = null;
           const a = document.getElementById('liveAudio');
           if (a) {
@@ -4903,13 +4900,12 @@ HTML_INDEX = """<!DOCTYPE html>
       } else if (name === 'previous') {
         showToast('Playing previous track…');
         skipPendingTrackId = currentTrackKey;
-        skipPendingUntil = Date.now() + 4000;
+        skipPendingUntil = Date.now() + 2500;
         currentElapsed = 0;
         updateScrubberUI();
         if (liveStreamActive) {
           currentLiveTrackId = null;
           isAudioLoading = true;
-          isAudioSeeking = false;
           aligningStuckStartTime = null;
           const a = document.getElementById('liveAudio');
           if (a) {
@@ -4956,7 +4952,6 @@ HTML_INDEX = """<!DOCTYPE html>
     let currentLiveTrackId = null;
     let skipPendingTrackId = null;
     let skipPendingUntil = 0;
-    let isAudioSeeking = false;
     let lastAudioSeekTime = 0;
     let waitingDebounceTimer = null;
     let audioCtx = null;
@@ -5384,7 +5379,6 @@ HTML_INDEX = """<!DOCTYPE html>
       if (force || currentLiveTrackId !== trackKey) {
         currentLiveTrackId = trackKey;
         isAudioLoading = true;
-        isAudioSeeking = false;
         if (waitingDebounceTimer) {
           clearTimeout(waitingDebounceTimer);
           waitingDebounceTimer = null;
@@ -5395,9 +5389,12 @@ HTML_INDEX = """<!DOCTYPE html>
         }
 
         const gid = (currentState && currentState.guild && currentState.guild.id) ? currentState.guild.id : '';
-        const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&guild_id=${encodeURIComponent(gid)}&t=${encodeURIComponent(trackKey)}${force ? `&_cb=${Date.now()}` : ''}`;
+        const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&guild_id=${encodeURIComponent(gid)}&t=${encodeURIComponent(trackKey)}&_cb=${Date.now()}`;
         
         audio.crossOrigin = 'anonymous';
+        audio.preservesPitch = false;
+        if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = false;
+        if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = false;
         audio.src = streamUrl;
         audio.load();
 
@@ -5407,19 +5404,16 @@ HTML_INDEX = """<!DOCTYPE html>
           badge.className = 'lt-sync-badge connecting';
         }
 
-        audio.onseeking = () => {
-          isAudioSeeking = true;
-        };
+        audio.onseeking = () => {};
 
         audio.onseeked = () => {
-          isAudioSeeking = false;
           lastAudioSeekTime = Date.now();
         };
 
         audio.onwaiting = () => {
           if (waitingDebounceTimer) clearTimeout(waitingDebounceTimer);
           waitingDebounceTimer = setTimeout(() => {
-            if (!audio.paused && (audio.seeking || isAudioSeeking || audio.readyState < 3)) {
+            if (!audio.paused && (audio.seeking || audio.readyState < 3)) {
               if (badge) {
                 badge.innerText = 'BUFFERING';
                 badge.className = 'lt-sync-badge connecting';
@@ -5438,16 +5432,10 @@ HTML_INDEX = """<!DOCTYPE html>
             waitingDebounceTimer = null;
           }
           isAudioLoading = false;
-          isAudioSeeking = false;
           aligningStuckStartTime = null;
-          if (badge) {
-            badge.innerText = '1:1 SYNC';
-            badge.className = 'lt-sync-badge live';
-          }
           if (title) title.innerText = 'Listen Together';
-          const statusText = document.getElementById('ltStatusText');
-          if (statusText) statusText.innerText = 'Phase-Locked';
-          if (statusInd) statusInd.className = 'lt-status-indicator locked';
+          // Immediately perform drift check and set accurate status
+          syncLiveAudio(false);
         };
 
         let readyHandled = false;
@@ -5459,12 +5447,10 @@ HTML_INDEX = """<!DOCTYPE html>
             waitingDebounceTimer = null;
           }
           isAudioLoading = false;
-          isAudioSeeking = false;
           try {
-            if (audio.readyState >= 1 && currentElapsed > 0.1 && Math.abs(audio.currentTime - currentElapsed) > 1.2) {
-              const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
+            if (currentElapsed > 0.08) {
+              const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.25) : currentElapsed;
               const target = Math.max(0, Math.min(currentElapsed, maxSeek));
-              isAudioSeeking = true;
               lastAudioSeekTime = Date.now();
               audio.currentTime = target;
             }
@@ -5473,14 +5459,6 @@ HTML_INDEX = """<!DOCTYPE html>
           if (currentState && currentState.is_playing) {
             audio.play().catch(e => console.warn('Live playback play error:', e));
           }
-          if (badge) {
-            badge.innerText = '1:1 SYNC';
-            badge.className = 'lt-sync-badge live';
-          }
-          if (title) title.innerText = 'Listen Together';
-          const statusText = document.getElementById('ltStatusText');
-          if (statusText) statusText.innerText = 'Phase-Locked';
-          if (statusInd) statusInd.className = 'lt-status-indicator locked';
           aligningStuckStartTime = null;
         };
 
@@ -5489,7 +5467,6 @@ HTML_INDEX = """<!DOCTYPE html>
 
         audio.onerror = (e) => {
           isAudioLoading = false;
-          isAudioSeeking = false;
           currentLiveTrackId = null;
           const statusText = document.getElementById('ltStatusText');
           if (statusText) statusText.innerText = 'Reconnecting';
@@ -5522,29 +5499,24 @@ HTML_INDEX = """<!DOCTYPE html>
 
       if (!currentState.is_playing) {
         if (!audio.paused) audio.pause();
-        if (badge) badge.innerText = 'Paused';
+        if (badge) {
+          badge.innerText = 'PAUSED';
+          badge.className = 'lt-sync-badge paused';
+        }
         aligningStuckStartTime = null;
         return;
       }
 
       // Resume playback if paused
       if (audio.paused && currentState.is_playing) {
-        if (!audio.seeking && !isAudioSeeking && (Date.now() - lastAudioSeekTime >= 1800)) {
-          try {
-            if (Math.abs(audio.currentTime - currentElapsed) > 1.5) {
-              const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
-              isAudioSeeking = true;
-              lastAudioSeekTime = Date.now();
-              audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek));
-            }
-          } catch (e) {}
-        }
+        try {
+          if (Math.abs(audio.currentTime - currentElapsed) > 0.8) {
+            const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.25) : currentElapsed;
+            audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek));
+            lastAudioSeekTime = Date.now();
+          }
+        } catch (e) {}
         audio.play().catch(() => {});
-        return;
-      }
-
-      // Seeking active or within cooldown: DO NOT touch currentTime or trigger seeks
-      if (audio.seeking || isAudioSeeking || (Date.now() - lastAudioSeekTime < 1800)) {
         return;
       }
 
@@ -5552,62 +5524,67 @@ HTML_INDEX = """<!DOCTYPE html>
       if (!audio.paused && audio.duration > 0 && audio.readyState >= 2) {
         const drift = audio.currentTime - currentElapsed;
         const driftMs = Math.round(drift * 1000);
+        const absDriftMs = Math.abs(driftMs);
         const driftLabel = document.getElementById('syncDriftLabel');
         if (driftLabel) {
           driftLabel.innerText = (driftMs >= 0 ? `+${driftMs}ms` : `${driftMs}ms`);
         }
 
-        let deadband = 0.20;
-        let hardSeekThreshold = 3.5;
-        let maxSteer = 0.06;
-
-        if (currentLatencyMode === 'low') {
-          deadband = 0.10;
-          hardSeekThreshold = 2.5;
-          maxSteer = 0.08;
-        } else if (currentLatencyMode === 'stable' || isGecko) {
-          deadband = 0.35;
-          hardSeekThreshold = 4.5;
-          maxSteer = 0.04;
-        }
+        // TIGHT, ZERO-LAG DRIFT THRESHOLDS:
+        // deadband: 0.08s (80ms). Inside 80ms is true 1:1 lock-step sync.
+        // hardSeekThreshold: 1.0s (1000ms). Desync > 1.0s immediately hard-seeks to master.
+        // maxSteer: ±10% rate adjustment to smoothly close 80ms-1000ms drift without pauses.
+        const deadband = 0.08;
+        const hardSeekThreshold = 1.0;
+        const maxSteer = 0.10;
 
         const statusText = document.getElementById('ltStatusText');
-        const absDriftMs = Math.abs(driftMs);
 
-        if (absDriftMs <= 350) {
+        if (absDriftMs <= 80) {
           if (statusText) statusText.innerText = 'Phase-Locked';
           if (statusInd) statusInd.className = 'lt-status-indicator locked';
+          if (badge) {
+            badge.innerText = '1:1 SYNC';
+            badge.className = 'lt-sync-badge live';
+          }
           aligningStuckStartTime = null;
-        } else if (absDriftMs <= Math.round(hardSeekThreshold * 1000)) {
-          if (statusText) statusText.innerText = 'Locking...';
+        } else if (absDriftMs <= 1000) {
+          if (statusText) statusText.innerText = driftMs < 0 ? `Behind ${Math.abs(driftMs)}ms` : `Ahead +${driftMs}ms`;
           if (statusInd) statusInd.className = 'lt-status-indicator locked';
-          aligningStuckStartTime = null; // Actively playing and steering — not stuck!
+          if (badge) {
+            badge.innerText = 'LOCKING';
+            badge.className = 'lt-sync-badge live';
+          }
+          aligningStuckStartTime = null;
         } else {
           if (statusText) statusText.innerText = 'Aligning...';
           if (statusInd) statusInd.className = 'lt-status-indicator buffering';
+          if (badge) {
+            badge.innerText = 'ALIGNING';
+            badge.className = 'lt-sync-badge connecting';
+          }
           if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
         }
 
         const nowMs = performance.now();
         if (Math.abs(drift) > hardSeekThreshold) {
-          // Large drift -> Hard seek directly to Discord master position
-          if (!audio.seeking && !isAudioSeeking && (Date.now() - lastAudioSeekTime >= 1800)) {
-            const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 1.0) ? Math.max(0, audio.duration - 0.6) : currentElapsed;
+          // Large drift (> 1.0s) -> Hard seek directly to Discord master position
+          if (!audio.seeking && (Date.now() - lastAudioSeekTime >= 700)) {
+            const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.25) : currentElapsed;
             const targetSeek = Math.max(0, Math.min(currentElapsed, maxSeek));
-            if (Math.abs(audio.currentTime - targetSeek) > 1.5) {
-              isAudioSeeking = true;
-              lastAudioSeekTime = Date.now();
-              try { audio.currentTime = targetSeek; } catch (e) {}
-            }
+            lastAudioSeekTime = Date.now();
+            try { 
+              audio.currentTime = targetSeek; 
+            } catch (e) {}
             if (Math.abs(audio.playbackRate - speed) > 0.003) {
               audio.playbackRate = speed;
             }
             lastRateSteerTime = nowMs;
           }
         } else if (Math.abs(drift) > deadband) {
-          // Micro-drift: Gentle proportional steering without seek interruption
-          if (nowMs - lastRateSteerTime > 600) {
-            const steer = Math.min(maxSteer, Math.max(0.008, Math.abs(drift) * 0.035));
+          // Micro-drift (80ms - 1000ms): Proportional rate steering to close gap in 2-4 seconds
+          if (nowMs - lastRateSteerTime > 250) {
+            const steer = Math.min(maxSteer, Math.max(0.015, Math.abs(drift) * 0.12));
             const targetRate = (drift < 0) ? (speed * (1 + steer)) : (speed * (1 - steer));
             if (Math.abs(audio.playbackRate - targetRate) > 0.003) {
               audio.playbackRate = targetRate;
@@ -5615,7 +5592,7 @@ HTML_INDEX = """<!DOCTYPE html>
             }
           }
         } else {
-          // In exact sync: settle cleanly onto nominal speed
+          // In exact sync (<= 80ms): settle cleanly onto nominal speed
           if (Math.abs(audio.playbackRate - speed) > 0.003) {
             audio.playbackRate = speed;
             lastRateSteerTime = nowMs;
@@ -5772,11 +5749,11 @@ HTML_INDEX = """<!DOCTYPE html>
         const speed = (t && t.effect_speed) || 1.0;
 
         const isSkipPending = skipPendingUntil && Date.now() < skipPendingUntil;
-        if (isSkipPending && trackKey === skipPendingTrackId) {
+        if (isSkipPending && trackKey === skipPendingTrackId && serverPos > 2.0) {
           // Skip was requested, Discord hasn't switched to new track yet. Keep elapsed at 0.
           currentElapsed = 0;
         } else {
-          if (isSkipPending && trackKey !== skipPendingTrackId) {
+          if (isSkipPending) {
             skipPendingUntil = 0;
             skipPendingTrackId = null;
           }
@@ -5784,18 +5761,18 @@ HTML_INDEX = """<!DOCTYPE html>
             currentTrackKey = trackKey;
             currentElapsed = serverPos;
           } else if (!isScrubbing) {
-            const wasRecentUserSeek = (Date.now() - lastUserSeekTimestamp) < 3000;
+            const wasRecentUserSeek = (Date.now() - lastUserSeekTimestamp) < 1500;
             if (wasRecentUserSeek) {
               // User manually scrubbed recently: preserve client position
-            } else if (serverPos < currentElapsed - 2.5) {
+            } else if (serverPos < currentElapsed - 1.0) {
               // Track restarted, looped, or reset to 0: ALWAYS accept the reset!
               currentElapsed = serverPos;
-            } else if (Math.abs(currentElapsed - serverPos) > 2.5) {
-              // Large desync or external Discord seek -> snap position
+            } else if (Math.abs(currentElapsed - serverPos) > 0.35) {
+              // Desync > 350ms -> snap immediately so scrubber NEVER stays behind Discord!
               currentElapsed = serverPos;
             } else {
-              // Smooth exponential convergence: completely eliminates jitter / jumping ms!
-              currentElapsed += (serverPos - currentElapsed) * 0.12;
+              // Smooth exponential convergence to eliminate micro-jitter
+              currentElapsed += (serverPos - currentElapsed) * 0.35;
             }
           }
         }
@@ -7531,7 +7508,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // If audio is actively playing, clear watchdog immediately
       const audio = document.getElementById('liveAudio');
-      if (audio && !audio.paused && audio.readyState >= 2 && !audio.seeking && !isAudioSeeking) {
+      if (audio && !audio.paused && audio.readyState >= 2 && !audio.seeking) {
         aligningStuckStartTime = null;
         return;
       }
@@ -8296,6 +8273,9 @@ HTML_INDEX = """<!DOCTYPE html>
         try { ws.send(JSON.stringify({ action: 'ping' })); } catch (e) {}
       }
       fetchStatus();
+      if (liveStreamActive) {
+        syncLiveAudio(false);
+      }
       armBackgroundMediaSession();
     }
 
