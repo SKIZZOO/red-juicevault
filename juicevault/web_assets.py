@@ -89,7 +89,7 @@ HTML_INDEX = """<!DOCTYPE html>
       display: flex;
       flex-direction: column;
       padding-top: var(--safe-top);
-      padding-bottom: calc(72px + var(--safe-bottom));
+      padding-bottom: var(--safe-bottom);
       position: relative;
     }
     /* Ambient radial glow backdrop (OriginKit / Kinetics style) */
@@ -290,7 +290,9 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     @media (max-width: 859px) {
       header.app-header {
-        padding: 10px 12px !important;
+        height: 50px;
+        min-height: 50px;
+        padding: 0 12px !important;
         gap: 6px;
       }
       .header-meta {
@@ -340,7 +342,7 @@ HTML_INDEX = """<!DOCTYPE html>
         display: none;
       }
       .app-container {
-        padding: 10px 12px calc(72px + var(--safe-bottom)) !important;
+        padding: 10px 12px calc(80px + var(--safe-bottom)) !important;
       }
       .ui-card {
         padding: 14px 14px 12px !important;
@@ -1044,7 +1046,7 @@ HTML_INDEX = """<!DOCTYPE html>
       position: fixed;
       left: 12px;
       right: 12px;
-      bottom: calc(70px + var(--safe-bottom));
+      bottom: calc(12px + var(--safe-bottom));
       height: 56px;
       background: rgba(18, 18, 24, 0.94);
       backdrop-filter: blur(20px);
@@ -1124,40 +1126,68 @@ HTML_INDEX = """<!DOCTYPE html>
       width: 34px;
       height: 34px;
     }
-    /* Bottom Navigation Bar for Mobile */
+    /* Top Navigation Bar for Mobile */
     nav.mobile-nav {
-      position: fixed;
-      bottom: 0;
+      position: sticky;
+      top: 50px;
       left: 0;
       width: 100%;
-      height: calc(64px + var(--safe-bottom));
-      padding-bottom: var(--safe-bottom);
-      background: rgba(9, 9, 13, 0.94);
+      height: 46px;
+      padding: 0 10px;
+      background: rgba(10, 10, 15, 0.95);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
       display: flex;
-      justify-content: space-around;
       align-items: center;
-      z-index: 100;
+      gap: 6px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      z-index: 45;
+    }
+    nav.mobile-nav::-webkit-scrollbar {
+      display: none;
     }
     .nav-btn {
-      display: flex;
-      flex-direction: column;
+      display: inline-flex;
+      flex-direction: row;
       align-items: center;
-      gap: 4px;
-      font-size: 0.68rem;
-      color: var(--text-sub);
-      background: none;
-      border: none;
-      cursor: pointer;
+      gap: 6px;
       padding: 6px 12px;
-      transition: color 0.15s ease;
-      font-weight: 500;
+      border-radius: 20px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      color: var(--text-sub);
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+      user-select: none;
+    }
+    .nav-btn .icon-svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text-main);
     }
     .nav-btn.active {
-      color: var(--accent);
+      background: rgba(168, 85, 247, 0.18);
+      border-color: rgba(168, 85, 247, 0.5);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(168, 85, 247, 0.28);
       font-weight: 700;
+    }
+    .nav-btn.active .icon-svg {
+      color: var(--accent);
+    }
+    .nav-btn:active {
+      transform: scale(0.96);
     }
     /* Modal / Bottom Sheet */
     .sheet-backdrop {
@@ -1530,10 +1560,10 @@ HTML_INDEX = """<!DOCTYPE html>
       line-height: 1.4;
     }
 
-    /* Studio Telemetry Dock */
+    /* Studio Telemetry Dock & Harmonious Neon Animations */
     .telemetry-dock {
       margin-top: 10px;
-      background: linear-gradient(180deg, rgba(20, 20, 28, 0.9), rgba(14, 14, 20, 0.95));
+      background: linear-gradient(180deg, rgba(20, 20, 28, 0.92), rgba(14, 14, 20, 0.96));
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: var(--radius-md);
       padding: 10px 12px;
@@ -1542,14 +1572,16 @@ HTML_INDEX = """<!DOCTYPE html>
       flex-direction: column;
       gap: 8px;
       box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
-      transition: all 0.22s var(--spring);
+      transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
       user-select: none;
+      position: relative;
+      overflow: hidden;
     }
     .telemetry-dock:hover {
-      background: linear-gradient(180deg, rgba(26, 26, 36, 0.95), rgba(18, 18, 25, 0.98));
-      border-color: rgba(168, 85, 247, 0.3);
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 16px rgba(168, 85, 247, 0.12);
-      transform: translateY(-1px);
+      background: linear-gradient(180deg, rgba(26, 26, 38, 0.96), rgba(18, 18, 26, 0.98));
+      border-color: rgba(168, 85, 247, 0.35);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 20px rgba(168, 85, 247, 0.16);
+      transform: translateY(-2px);
     }
     .telemetry-dock:active {
       transform: scale(0.99);
@@ -1565,12 +1597,33 @@ HTML_INDEX = """<!DOCTYPE html>
     .telemetry-dock-tag {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 7px;
       font-size: 0.62rem;
       font-weight: 700;
       letter-spacing: 0.08em;
       color: var(--text-sub);
       text-transform: uppercase;
+    }
+    /* Animated Live Equalizer Bars in Dock Tag */
+    .telemetry-live-bars {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 12px;
+      padding-bottom: 1px;
+    }
+    .tl-bar {
+      width: 2.5px;
+      background: linear-gradient(180deg, #c084fc, #a855f7);
+      border-radius: 1px;
+      animation: tlBarPulse 1s ease-in-out infinite alternate;
+    }
+    .tl-bar:nth-child(1) { height: 4px; animation-duration: 0.75s; }
+    .tl-bar:nth-child(2) { height: 10px; animation-duration: 1.1s; animation-delay: 0.15s; }
+    .tl-bar:nth-child(3) { height: 6px; animation-duration: 0.85s; animation-delay: 0.3s; }
+    @keyframes tlBarPulse {
+      0% { height: 3px; opacity: 0.5; }
+      100% { height: 11px; opacity: 1; filter: drop-shadow(0 0 4px rgba(168, 85, 247, 0.8)); }
     }
     .telemetry-dock-link {
       font-size: 0.65rem;
@@ -1590,19 +1643,64 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .telemetry-dock-tile {
       background: rgba(255, 255, 255, 0.025);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       border-radius: var(--radius-sm);
-      padding: 6px 8px;
+      padding: 7px 9px;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
       justify-content: center;
       min-width: 0;
-      transition: background 0.18s ease, border-color 0.18s ease;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .telemetry-dock:hover .telemetry-dock-tile {
-      background: rgba(255, 255, 255, 0.04);
-      border-color: rgba(255, 255, 255, 0.08);
+    .telemetry-dock-tile::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -120%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+      transition: left 0.55s ease;
+      pointer-events: none;
+    }
+    .telemetry-dock:hover .telemetry-dock-tile::after {
+      left: 120%;
+    }
+    .telemetry-dock-tile:hover {
+      transform: translateY(-2px) scale(1.02);
+    }
+    .t-dock-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 2px;
+    }
+    .t-dock-lbl {
+      font-size: 0.58rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .t-dock-ico {
+      width: 12px;
+      height: 12px;
+      stroke: currentColor;
+      fill: none;
+      flex-shrink: 0;
+      opacity: 0.75;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    .telemetry-dock-tile:hover .t-dock-ico {
+      transform: scale(1.15);
+      opacity: 1;
     }
     .t-dock-val {
       font-size: 0.88rem;
@@ -1614,27 +1712,79 @@ HTML_INDEX = """<!DOCTYPE html>
       overflow: hidden;
       text-overflow: ellipsis;
       width: 100%;
+      transition: color 0.18s ease;
     }
+    /* Stat Number Pop Animation */
+    @keyframes statNumPop {
+      0% { transform: scale(1.14); filter: brightness(1.35); }
+      100% { transform: scale(1); filter: brightness(1); }
+    }
+    .stat-pop {
+      animation: statNumPop 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    /* Harmonious Neon Colors for Dock Tiles */
+    /* 1. Total Views: Royal Violet */
+    .telemetry-dock-tile.tile-views {
+      background: rgba(192, 132, 252, 0.05);
+      border-color: rgba(192, 132, 252, 0.18);
+    }
+    .telemetry-dock-tile.tile-views .t-dock-ico { color: #c084fc; }
+    .telemetry-dock-tile.tile-views .t-dock-val { color: #e9d5ff; }
+    .telemetry-dock-tile.tile-views:hover {
+      background: rgba(192, 132, 252, 0.1);
+      border-color: rgba(192, 132, 252, 0.4);
+      box-shadow: 0 4px 14px rgba(192, 132, 252, 0.2);
+    }
+    /* 2. Today's Visits: Neon Rose / Fuchsia */
+    .telemetry-dock-tile.tile-today,
+    .telemetry-dock-tile.highlight-rose {
+      background: rgba(244, 63, 94, 0.05);
+      border-color: rgba(244, 63, 94, 0.18);
+    }
+    .telemetry-dock-tile.tile-today .t-dock-ico,
+    .telemetry-dock-tile.highlight-rose .t-dock-ico { color: #f43f5e; }
+    .telemetry-dock-tile.tile-today .t-dock-val,
     .telemetry-dock-tile.highlight-rose .t-dock-val {
-      color: #fb7185;
+      color: #fda4af;
+      text-shadow: 0 0 12px rgba(244, 63, 94, 0.3);
     }
-    .telemetry-dock-tile.highlight-cyan .t-dock-val {
-      color: #38bdf8;
+    .telemetry-dock-tile.tile-today:hover,
+    .telemetry-dock-tile.highlight-rose:hover {
+      background: rgba(244, 63, 94, 0.1);
+      border-color: rgba(244, 63, 94, 0.4);
+      box-shadow: 0 4px 14px rgba(244, 63, 94, 0.2);
     }
-    .telemetry-dock-tile.highlight-green .t-dock-val {
-      color: #34d399;
+    /* 3. Stream Time: Electric Purple */
+    .telemetry-dock-tile.tile-time,
+    .telemetry-dock-tile.highlight-cyan {
+      background: rgba(168, 85, 247, 0.05);
+      border-color: rgba(168, 85, 247, 0.18);
     }
-    .t-dock-lbl {
-      font-size: 0.58rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-sub);
-      margin-top: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      width: 100%;
+    .telemetry-dock-tile.tile-time .t-dock-ico,
+    .telemetry-dock-tile.highlight-cyan .t-dock-ico { color: #a855f7; }
+    .telemetry-dock-tile.tile-time .t-dock-val,
+    .telemetry-dock-tile.highlight-cyan .t-dock-val { color: #d8b4fe; }
+    .telemetry-dock-tile.tile-time:hover,
+    .telemetry-dock-tile.highlight-cyan:hover {
+      background: rgba(168, 85, 247, 0.1);
+      border-color: rgba(168, 85, 247, 0.4);
+      box-shadow: 0 4px 14px rgba(168, 85, 247, 0.2);
+    }
+    /* 4. Tracks Played: Hot Orchid */
+    .telemetry-dock-tile.tile-tracks,
+    .telemetry-dock-tile.highlight-green {
+      background: rgba(236, 72, 153, 0.05);
+      border-color: rgba(236, 72, 153, 0.18);
+    }
+    .telemetry-dock-tile.tile-tracks .t-dock-ico,
+    .telemetry-dock-tile.highlight-green .t-dock-ico { color: #ec4899; }
+    .telemetry-dock-tile.tile-tracks .t-dock-val,
+    .telemetry-dock-tile.highlight-green .t-dock-val { color: #f472b6; }
+    .telemetry-dock-tile.tile-tracks:hover,
+    .telemetry-dock-tile.highlight-green:hover {
+      background: rgba(236, 72, 153, 0.1);
+      border-color: rgba(236, 72, 153, 0.4);
+      box-shadow: 0 4px 14px rgba(236, 72, 153, 0.2);
     }
     @media (max-width: 440px) {
       .telemetry-dock-grid {
@@ -1837,16 +1987,21 @@ HTML_INDEX = """<!DOCTYPE html>
       gap: 6px;
       position: relative;
       overflow: hidden;
-      transition: transform 0.2s ease, border-color 0.2s ease;
+      transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .telemetry-card:hover {
-      border-color: rgba(255, 255, 255, 0.2);
+      border-color: rgba(168, 85, 247, 0.35);
       transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 16px rgba(168, 85, 247, 0.14);
     }
     .telemetry-card.highlight-card {
-      background: linear-gradient(135deg, rgba(235, 47, 150, 0.1) 0%, rgba(18, 18, 24, 0.95) 100%);
-      border-color: rgba(235, 47, 150, 0.35);
-      box-shadow: 0 4px 20px rgba(235, 47, 150, 0.08);
+      background: linear-gradient(135deg, rgba(244, 63, 94, 0.08) 0%, rgba(18, 18, 24, 0.95) 100%);
+      border-color: rgba(244, 63, 94, 0.35);
+      box-shadow: 0 4px 20px rgba(244, 63, 94, 0.1);
+    }
+    .telemetry-card.highlight-card:hover {
+      border-color: rgba(244, 63, 94, 0.55);
+      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5), 0 0 20px rgba(244, 63, 94, 0.22);
     }
     .t-card-header {
       display: flex;
@@ -1867,30 +2022,34 @@ HTML_INDEX = """<!DOCTYPE html>
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: transform 0.2s ease;
+    }
+    .telemetry-card:hover .t-card-icon {
+      transform: scale(1.1);
     }
     .t-card-icon svg {
       width: 14px;
       height: 14px;
     }
     .t-card-icon.purple {
-      background: rgba(168, 85, 247, 0.15);
+      background: rgba(192, 132, 252, 0.15);
       color: #c084fc;
-      border: 1px solid rgba(168, 85, 247, 0.3);
+      border: 1px solid rgba(192, 132, 252, 0.32);
     }
     .t-card-icon.pink {
       background: rgba(244, 63, 94, 0.15);
       color: #fb7185;
-      border: 1px solid rgba(244, 63, 94, 0.3);
+      border: 1px solid rgba(244, 63, 94, 0.32);
     }
     .t-card-icon.blue {
-      background: rgba(56, 189, 248, 0.15);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.3);
+      background: rgba(168, 85, 247, 0.15);
+      color: #a855f7;
+      border: 1px solid rgba(168, 85, 247, 0.32);
     }
     .t-card-icon.green {
-      background: rgba(16, 185, 129, 0.15);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      background: rgba(236, 72, 153, 0.15);
+      color: #ec4899;
+      border: 1px solid rgba(236, 72, 153, 0.32);
     }
     .t-card-val {
       font-size: 1.45rem;
@@ -1918,10 +2077,10 @@ HTML_INDEX = """<!DOCTYPE html>
       letter-spacing: 0.02em;
       text-transform: uppercase;
     }
-    .t-tag.purple { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; }
+    .t-tag.purple { background: rgba(192, 132, 252, 0.15); color: #e9d5ff; }
     .t-tag.pink { background: rgba(244, 63, 94, 0.15); color: #fda4af; }
-    .t-tag.blue { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; }
-    .t-tag.green { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+    .t-tag.blue { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; }
+    .t-tag.green { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
     .t-sub {
       color: var(--text-sub);
       font-family: 'JetBrains Mono', monospace;
@@ -2704,6 +2863,38 @@ HTML_INDEX = """<!DOCTYPE html>
     </div>
   </header>
 
+  <!-- Mobile Top Navigation Bar (Phone view) -->
+  <nav class="mobile-nav" id="mobileNav">
+    <button class="nav-btn active" onclick="switchMobileNav('player')">
+      <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <span>Player</span>
+    </button>
+    <button class="nav-btn" onclick="switchMobileNav('queue')">
+      <svg class="icon-svg" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg>
+      <span>Queue</span>
+    </button>
+    <button class="nav-btn" onclick="switchMobileNav('search')">
+      <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Search</span>
+    </button>
+    <button class="nav-btn" onclick="switchMobileNav('categories')">
+      <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+      <span>Library</span>
+    </button>
+    <button class="nav-btn" onclick="switchMobileNav('soundboard')">
+      <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>Sounds</span>
+    </button>
+    <button class="nav-btn" onclick="switchMobileNav('shortcuts')">
+      <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      <span>Shortcuts</span>
+    </button>
+    <button class="nav-btn" onclick="switchMobileNav('settings')">
+      <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
   <div class="toast-pill" id="toast">
     <svg class="icon-svg" style="width:15px;height:15px;color:var(--accent);" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
     <span id="toastMsg">Action applied</span>
@@ -2876,27 +3067,43 @@ HTML_INDEX = """<!DOCTYPE html>
           <div class="telemetry-dock" id="telemetryDock" onclick="openStatsModal()" title="Open detailed global telemetry and playback metrics">
             <div class="telemetry-dock-header">
               <div class="telemetry-dock-tag">
-                <span class="telemetry-live-dot"></span>
+                <div class="telemetry-live-bars">
+                  <span class="tl-bar"></span>
+                  <span class="tl-bar"></span>
+                  <span class="tl-bar"></span>
+                </div>
                 <span>GLOBAL TELEMETRY</span>
               </div>
               <span class="telemetry-dock-link">Live Metrics &rsaquo;</span>
             </div>
             <div class="telemetry-dock-grid">
-              <div class="telemetry-dock-tile">
+              <div class="telemetry-dock-tile tile-views">
+                <div class="t-dock-head">
+                  <span class="t-dock-lbl">Total Views</span>
+                  <svg class="t-dock-ico" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </div>
                 <span class="t-dock-val" id="quickTotalViews">--</span>
-                <span class="t-dock-lbl">Total Views</span>
               </div>
-              <div class="telemetry-dock-tile highlight-rose">
+              <div class="telemetry-dock-tile tile-today highlight-rose">
+                <div class="t-dock-head">
+                  <span class="t-dock-lbl">Today</span>
+                  <svg class="t-dock-ico" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+                </div>
                 <span class="t-dock-val" id="quickDailyViews">--</span>
-                <span class="t-dock-lbl">Today</span>
               </div>
-              <div class="telemetry-dock-tile highlight-cyan">
+              <div class="telemetry-dock-tile tile-time highlight-cyan">
+                <div class="t-dock-head">
+                  <span class="t-dock-lbl">Stream Time</span>
+                  <svg class="t-dock-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
                 <span class="t-dock-val" id="quickDailyTime">--</span>
-                <span class="t-dock-lbl">Stream Time</span>
               </div>
-              <div class="telemetry-dock-tile highlight-green">
+              <div class="telemetry-dock-tile tile-tracks highlight-green">
+                <div class="t-dock-head">
+                  <span class="t-dock-lbl">Tracks Played</span>
+                  <svg class="t-dock-ico" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                </div>
                 <span class="t-dock-val" id="quickDailyTracks">--</span>
-                <span class="t-dock-lbl">Tracks Played</span>
               </div>
             </div>
           </div>
@@ -3624,38 +3831,6 @@ HTML_INDEX = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Mobile Bottom Navigation Bar -->
-  <nav class="mobile-nav">
-    <button class="nav-btn active" onclick="switchMobileNav('player')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      <span>Player</span>
-    </button>
-    <button class="nav-btn" onclick="switchMobileNav('queue')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg>
-      <span>Queue</span>
-    </button>
-    <button class="nav-btn" onclick="switchMobileNav('search')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <span>Search</span>
-    </button>
-    <button class="nav-btn" onclick="switchMobileNav('categories')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
-      <span>Library</span>
-    </button>
-    <button class="nav-btn" onclick="switchMobileNav('soundboard')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
-      <span>Sounds</span>
-    </button>
-    <button class="nav-btn" onclick="switchMobileNav('shortcuts')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-      <span>Shortcuts</span>
-    </button>
-    <button class="nav-btn" onclick="switchMobileNav('settings')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      <span>Settings</span>
-    </button>
-  </nav>
-
   <!-- Tab Tutorial / User Onboarding Popup Modal -->
   <div class="tutorial-modal-backdrop" id="tutorialModal" onclick="if(event.target===this) closeTutorialPopup()">
     <div class="tutorial-popup-card">
@@ -4309,6 +4484,16 @@ HTML_INDEX = """<!DOCTYPE html>
         const btns = document.querySelectorAll('.segment-bar.desktop-segment .segment-btn');
         if (btns[idx]) btns[idx].classList.add('active');
       }
+      // Sync mobile top nav pill
+      const mobIdx = ['player', 'queue', 'search', 'categories', 'soundboard', 'shortcuts', 'settings'].indexOf(tabId);
+      if (mobIdx !== -1) {
+        const mobBtns = document.querySelectorAll('.nav-btn');
+        mobBtns.forEach(el => el.classList.remove('active'));
+        if (mobBtns[mobIdx]) {
+          mobBtns[mobIdx].classList.add('active');
+          try { mobBtns[mobIdx].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); } catch (_) {}
+        }
+      }
       if (tabId === 'queue') loadQueue();
       if (tabId === 'categories') { loadCategories(); loadJuiceVaultPlaylists(); }
       if (tabId === 'soundboard') loadSoundboard();
@@ -4324,7 +4509,10 @@ HTML_INDEX = """<!DOCTYPE html>
       const idx = ['player', 'queue', 'search', 'categories', 'soundboard', 'shortcuts', 'settings'].indexOf(tabId);
       if (idx !== -1) {
         const btns = document.querySelectorAll('.nav-btn');
-        if (btns[idx]) btns[idx].classList.add('active');
+        if (btns[idx]) {
+          btns[idx].classList.add('active');
+          try { btns[idx].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); } catch (_) {}
+        }
       }
 
       const playerWrap = document.querySelector('.card-player-wrap');
@@ -7500,6 +7688,16 @@ HTML_INDEX = """<!DOCTYPE html>
       const allTime = target.all_time || {};
 
       const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString() : '--';
+      const setValWithPop = (el, val) => {
+        if (!el) return;
+        const s = String(val);
+        if (el.innerText !== s) {
+          el.innerText = s;
+          el.classList.remove('stat-pop');
+          void el.offsetWidth;
+          el.classList.add('stat-pop');
+        }
+      };
 
       // Active VC session stream time priority
       const streamTimeToday = (stats.session && stats.session.active && stats.session.seconds > 60)
@@ -7508,9 +7706,9 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // Header badge
       const hCount = document.getElementById('headerViewsCount');
-      if (hCount) hCount.innerText = fmt(views.total) + ' views';
+      if (hCount) setValWithPop(hCount, fmt(views.total) + ' views');
       const hDaily = document.getElementById('headerDailyCount');
-      if (hDaily) hDaily.innerText = fmt(views.today) + ' today';
+      if (hDaily) setValWithPop(hDaily, fmt(views.today) + ' today');
 
       const sSubtitle = document.getElementById('statsSubtitle');
       if (sSubtitle && stats.session && stats.session.active && stats.session.formatted) {
@@ -7519,31 +7717,31 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // Compact quick bar
       const qTot = document.getElementById('quickTotalViews');
-      if (qTot) qTot.innerText = fmt(views.total);
+      setValWithPop(qTot, fmt(views.total));
       const qDay = document.getElementById('quickDailyViews');
-      if (qDay) qDay.innerText = fmt(views.today);
+      setValWithPop(qDay, fmt(views.today));
       const qTime = document.getElementById('quickDailyTime');
-      if (qTime) qTime.innerText = streamTimeToday;
+      setValWithPop(qTime, streamTimeToday);
       const qTracks = document.getElementById('quickDailyTracks');
-      if (qTracks) qTracks.innerText = fmt(daily.tracks_played);
+      setValWithPop(qTracks, fmt(daily.tracks_played));
 
       // Modal sheet values
       const sTot = document.getElementById('statsTotalViews');
-      if (sTot) sTot.innerText = fmt(views.total);
+      setValWithPop(sTot, fmt(views.total));
       const sDay = document.getElementById('statsDailyViews');
-      if (sDay) sDay.innerText = fmt(views.today);
+      setValWithPop(sDay, fmt(views.today));
       const sUniq = document.getElementById('statsUniqueViews');
-      if (sUniq) sUniq.innerText = fmt(views.unique_today);
+      setValWithPop(sUniq, fmt(views.unique_today));
       const sSess = document.getElementById('statsSessionsNow');
       if (sSess) sSess.innerText = (views.active_sessions || 1) + ' active now';
       const sTime = document.getElementById('statsDailyTime');
-      if (sTime) sTime.innerText = streamTimeToday;
+      setValWithPop(sTime, streamTimeToday);
       const sAllTime = document.getElementById('statsAllTimeTime');
       if (sAllTime) sAllTime.innerText = (allTime.listening_formatted || '0m') + ' total';
       const sTracks = document.getElementById('statsDailyTracks');
-      if (sTracks) sTracks.innerText = fmt(daily.tracks_played);
+      setValWithPop(sTracks, fmt(daily.tracks_played));
       const sReqs = document.getElementById('statsDailyReqs');
-      if (sReqs) sReqs.innerText = fmt(daily.requests_queued);
+      setValWithPop(sReqs, fmt(daily.requests_queued));
       const sAllTracks = document.getElementById('statsAllTimeTracks');
       if (sAllTracks) sAllTracks.innerText = fmt(allTime.tracks_played) + ' total';
       const sActions = document.getElementById('statsDailyActions');
@@ -7555,21 +7753,21 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // Card in tab-shortcuts
       const cTot = document.getElementById('cardTotalViews');
-      if (cTot) cTot.innerText = fmt(views.total);
+      setValWithPop(cTot, fmt(views.total));
       const cDay = document.getElementById('cardDailyViews');
-      if (cDay) cDay.innerText = fmt(views.today);
+      setValWithPop(cDay, fmt(views.today));
       const cUniq = document.getElementById('cardUniqueViews');
-      if (cUniq) cUniq.innerText = fmt(views.unique_today);
+      setValWithPop(cUniq, fmt(views.unique_today));
       const cSess = document.getElementById('cardSessionsNow');
       if (cSess) cSess.innerText = (views.active_sessions || 1) + ' active';
       const cTime = document.getElementById('cardDailyTime');
-      if (cTime) cTime.innerText = streamTimeToday;
+      setValWithPop(cTime, streamTimeToday);
       const cAllTime = document.getElementById('cardAllTimeTime');
       if (cAllTime) cAllTime.innerText = (allTime.listening_formatted || '0m') + ' total';
       const cTracks = document.getElementById('cardDailyTracks');
-      if (cTracks) cTracks.innerText = fmt(daily.tracks_played);
+      setValWithPop(cTracks, fmt(daily.tracks_played));
       const cReqs = document.getElementById('cardDailyReqs');
-      if (cReqs) cReqs.innerText = fmt(daily.requests_queued);
+      setValWithPop(cReqs, fmt(daily.requests_queued));
       const cAllTracks = document.getElementById('cardAllTimeTracks');
       if (cAllTracks) cAllTracks.innerText = fmt(allTime.tracks_played) + ' total';
 
