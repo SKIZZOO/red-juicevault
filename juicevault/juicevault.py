@@ -741,6 +741,7 @@ class JuiceVault(commands.Cog):
                     if track.get("_clip_duration"):
                         options += f" -t {float(track['_clip_duration']):.3f}"
                     source = discord.FFmpegPCMAudio(local_path, executable=self._ffmpeg_executable(), before_options=before, options=options, stderr=log_file)
+                    await self._wait_for_voice_idle(voice)
                     voice.play(source, after=after)
                     voice._jv_started_at = time.monotonic()
                     self.play_positions[gid] = start_offset
@@ -864,9 +865,16 @@ class JuiceVault(commands.Cog):
                     err = playback_error["value"]
                     print(f"[JuiceVault] playback worker error on {self._track_text(track)}: {err}")
                     self.last_error[gid] = f"Playback: {err}"
-                    if source_type != "external":
-                        target = self.manual_queues if source_type == "manual" else self.queues
-                        target.setdefault(gid, []).insert(0, track)
+                    retries = track.get("_retry_count", 0) + 1
+                    track["_retry_count"] = retries
+                    if retries >= self.MAX_TRACK_RETRIES:
+                        self.last_error[gid] = f"Playback: skipped unplayable track {self._track_text(track)}"
+                        self._append_dead_track(track)
+                        print(f"[JuiceVault] dropping unplayable track after {retries} retries: {self._track_text(track)}")
+                    else:
+                        if source_type != "external":
+                            target = self.manual_queues if source_type == "manual" else self.queues
+                            target.setdefault(gid, []).insert(0, track)
                     await asyncio.sleep(self.FAILURE_BACKOFF_SECONDS)
                     continue
                 self.play_positions.pop(gid, None)

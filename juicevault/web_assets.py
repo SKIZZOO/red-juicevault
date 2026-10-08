@@ -452,6 +452,45 @@ HTML_INDEX = """<!DOCTYPE html>
       gap: 8px;
       margin-bottom: 4px;
     }
+    .btn-fav {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      padding: 3px;
+      border-radius: 50%;
+      transition: transform 0.2s var(--spring), color 0.15s ease;
+      flex-shrink: 0;
+    }
+    .btn-fav:hover {
+      color: #fff;
+      transform: scale(1.18);
+    }
+    .btn-fav:active {
+      transform: scale(0.9);
+    }
+    .btn-fav.is-favorite {
+      color: #f43f5e !important;
+    }
+    .btn-fav.is-favorite svg path {
+      fill: #f43f5e !important;
+      stroke: #f43f5e !important;
+    }
+    .jv-badge-pill {
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--accent-muted);
+      color: var(--accent);
+      border: 1px solid var(--border-accent);
+      font-family: 'JetBrains Mono', monospace;
+    }
     .track-title {
       font-size: 1.15rem;
       font-weight: 700;
@@ -2092,6 +2131,9 @@ HTML_INDEX = """<!DOCTYPE html>
                 <span class="wave-bar"></span>
               </div>
               <div class="track-title" id="trackTitle">Connecting…</div>
+              <button class="btn-fav" id="btnFavoriteSong" onclick="toggleCurrentSongFavorite()" title="Favorite track on JuiceVault">
+                <svg class="icon-svg fav-icon" style="width:16px;height:16px;" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </button>
             </div>
             <div class="track-artist" id="trackArtist">Please wait</div>
             <div class="pill-row">
@@ -2162,10 +2204,14 @@ HTML_INDEX = """<!DOCTYPE html>
               <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               <span>Lyrics</span>
             </button>
+            <button class="btn-kinetic btn-flat" id="userBtn" onclick="openUserModal()">
+              <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span id="userBtnLabel">Account</span>
+            </button>
           </div>
 
           <!-- Listen Together Studio Stream Card -->
-          <div class="listen-together-card" id="liveAudioBanner">
+          <div class="listen-together-card" id="liveAudioBanner" onwheel="handleVolumeWheel(event)">
             <div class="lt-header-row">
               <div class="lt-info-left">
                 <div class="lt-icon-capsule">
@@ -2189,10 +2235,10 @@ HTML_INDEX = """<!DOCTYPE html>
                 </button>
               </div>
             </div>
-            <div class="lt-controls-drawer" id="liveAudioControls" style="display:none;">
+            <div class="lt-controls-drawer" id="liveAudioControls" style="display:none;" onwheel="handleVolumeWheel(event)">
               <div class="lt-slider-wrap">
                 <svg class="icon-svg lt-vol-icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-                <input type="range" min="0" max="1" step="0.05" value="1" id="liveVolumeSlider" class="lt-volume-slider" oninput="updateLiveVolume(this.value)" aria-label="Stream volume">
+                <input type="range" min="0" max="1" step="0.01" value="1" id="liveVolumeSlider" class="lt-volume-slider" oninput="updateLiveVolume(this.value)" onwheel="handleVolumeWheel(event)" aria-label="Stream volume">
                 <span id="liveVolPercent" class="lt-vol-val">100%</span>
               </div>
               <div class="lt-drift-pill" title="Phase-Locked Loop clock offset vs Discord master audio">
@@ -2595,7 +2641,7 @@ HTML_INDEX = """<!DOCTYPE html>
               <!-- Options Bar -->
               <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:0.75rem; color:var(--text-sub);">
                 <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
-                  <input type="checkbox" id="sbPreviewToggle" checked style="accent-color:var(--accent);">
+                  <input type="checkbox" id="sbPreviewToggle" checked style="accent-color:var(--accent);" onchange="try{localStorage.setItem('jv_sb_preview', this.checked ? 'true' : 'false')}catch(e){}">
                   <span>Play audio preview locally in browser too</span>
                 </label>
                 <span id="sbFilteredCount" style="font-family:'JetBrains Mono',monospace;">50 sounds</span>
@@ -2831,6 +2877,75 @@ HTML_INDEX = """<!DOCTYPE html>
           </div>
           <pre id="lyricsPreviewText" style="font-family:inherit; font-size:0.8rem; color:var(--text-muted); line-height:1.5; white-space:pre-wrap; margin:0;"></pre>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JuiceVault User Modal Sheet -->
+  <div class="sheet-backdrop" id="userSheet" onclick="if(event.target===this) closeUserModal()">
+    <div class="sheet-panel" style="max-width:440px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="brand-logo-disc" style="width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg, #ec4899, #a855f7); display:flex; align-items:center; justify-content:center;">
+            <svg class="icon-svg" style="width:16px;height:16px;color:#fff;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:0.92rem; color:#fff;">JuiceVault.xyz Account</div>
+            <div style="font-size:0.72rem; color:var(--text-muted);">Sync profile &amp; save favorite tracks</div>
+          </div>
+        </div>
+        <button class="btn-kinetic btn-circle btn-action-sm" onclick="closeUserModal()">
+          <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Profile View (when logged in) -->
+      <div id="userProfileView" style="display:none;">
+        <div style="display:flex; align-items:center; gap:12px; padding:12px; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:var(--radius-md); margin-bottom:12px;">
+          <img id="userCardAvatar" src="https://api.juicevault.xyz/favicon.ico" style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:2px solid var(--border-accent);" alt="Avatar">
+          <div style="min-width:0; flex:1;">
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              <span id="userCardDisplayName" style="font-weight:700; font-size:0.95rem; color:#fff;">User</span>
+              <span id="userCardBadges" style="display:inline-flex; gap:4px; flex-wrap:wrap;"></span>
+            </div>
+            <div id="userCardHandle" style="font-size:0.75rem; color:var(--text-sub); font-family:'JetBrains Mono',monospace;">@username</div>
+            <div id="userCardBio" style="font-size:0.72rem; color:var(--text-muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-bottom:14px; text-align:center;">
+          <div style="padding:8px 4px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:var(--radius-sm);">
+            <div id="userLikedCount" style="font-weight:700; font-size:0.9rem; color:#f43f5e;">0</div>
+            <div style="font-size:0.65rem; color:var(--text-sub); text-transform:uppercase;">Likes</div>
+          </div>
+          <div style="padding:8px 4px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:var(--radius-sm);">
+            <div id="userListensCount" style="font-weight:700; font-size:0.9rem; color:var(--accent);">0</div>
+            <div style="font-size:0.65rem; color:var(--text-sub); text-transform:uppercase;">Listens</div>
+          </div>
+          <div style="padding:8px 4px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:var(--radius-sm);">
+            <div id="userStreakCount" style="font-weight:700; font-size:0.9rem; color:#38bdf8;">0d</div>
+            <div style="font-size:0.65rem; color:var(--text-sub); text-transform:uppercase;">Streak</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-kinetic btn-flat" style="flex:1; justify-content:center; color:#f43f5e;" onclick="viewUserFavorites()">
+            Favorites (<span id="userFavsBtnCount">0</span>)
+          </button>
+          <button class="btn-kinetic btn-flat" style="flex:1; justify-content:center; color:var(--text-muted);" onclick="logoutUser()">
+            Disconnect
+          </button>
+        </div>
+      </div>
+
+      <!-- Login Form (when not logged in) -->
+      <div id="userLoginForm">
+        <p style="font-size:0.78rem; color:var(--text-muted); line-height:1.45; margin-bottom:12px;">
+          Enter your <strong>juicevault.xyz</strong> username to connect your profile, display your badges, and save your liked songs.
+        </p>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <input type="text" id="jvUsernameInput" class="search-field" placeholder="Username (e.g. ajaxfnc)" style="background:rgba(0,0,0,0.5); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 12px; color:#fff;" onkeydown="if(event.key==='Enter') loginJuiceVaultUser()">
+          <button class="btn-kinetic btn-badge" style="padding:8px 14px;" onclick="loginJuiceVaultUser()">Connect</button>
+        </div>
+        <div id="jvLoginError" style="font-size:0.74rem; color:var(--danger); display:none; margin-top:4px;"></div>
       </div>
     </div>
   </div>
@@ -3427,7 +3542,8 @@ HTML_INDEX = """<!DOCTYPE html>
       try {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!AudioContextClass) return;
-        audioCtx = new AudioContextClass();
+        const isGecko = navigator.userAgent.toLowerCase().includes('firefox') || navigator.userAgent.toLowerCase().includes('zen');
+        audioCtx = new AudioContextClass(isGecko ? { latencyHint: 'playback' } : {});
         const audio = document.getElementById('liveAudio');
         if (!audio) return;
         audioSourceNode = audioCtx.createMediaElementSource(audio);
@@ -3573,6 +3689,9 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function toggleLockScreenControls() {
       lockScreenControlsEnabled = !lockScreenControlsEnabled;
+      try {
+        localStorage.setItem('jv_lock_screen', lockScreenControlsEnabled ? 'true' : 'false');
+      } catch (e) {}
       const btn = document.getElementById('btnLockScreen');
       const label = document.getElementById('lockScreenBtnLabel');
       if (lockScreenControlsEnabled) {
@@ -3635,10 +3754,11 @@ HTML_INDEX = """<!DOCTYPE html>
 
         syncLiveAudio(true);
         setupMediaSession();
+        const isGecko = navigator.userAgent.toLowerCase().includes('firefox') || navigator.userAgent.toLowerCase().includes('zen');
         if (liveSyncInterval) clearInterval(liveSyncInterval);
         liveSyncInterval = setInterval(() => {
           if (liveStreamActive) syncLiveAudio(false);
-        }, 250);
+        }, isGecko ? 750 : 250);
         showToast('Connecting 1:1 stream...');
       } else {
         if (liveSyncInterval) {
@@ -3678,6 +3798,36 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
+    let lastVolWheelTime = 0;
+    let volWheelVelocity = 1.0;
+
+    function handleVolumeWheel(e) {
+      e.preventDefault();
+      const slider = document.getElementById('liveVolumeSlider');
+      if (!slider) return;
+
+      const now = performance.now();
+      const dt = now - lastVolWheelTime;
+      lastVolWheelTime = now;
+
+      // Accelerated wheel scrolling:
+      // Scrolling slowly moves by 1% (0.01).
+      // Scrolling faster ramps up velocity smoothly up to 5x.
+      if (dt < 160) {
+        volWheelVelocity = Math.min(5.0, volWheelVelocity + 0.35);
+      } else {
+        volWheelVelocity = 1.0;
+      }
+
+      const step = 0.01 * volWheelVelocity;
+      const dir = (e.deltaY < 0) ? 1 : -1;
+      let newVol = parseFloat(slider.value) + (dir * step);
+      newVol = Math.max(0, Math.min(1, Math.round(newVol * 100) / 100));
+
+      slider.value = newVol;
+      updateLiveVolume(newVol);
+    }
+
     function updateLiveVolume(val) {
       const v = parseFloat(val);
       const audio = document.getElementById('liveAudio');
@@ -3685,6 +3835,9 @@ HTML_INDEX = """<!DOCTYPE html>
       if (masterGainNode) masterGainNode.gain.value = v;
       const pctEl = document.getElementById('liveVolPercent');
       if (pctEl) pctEl.innerText = `${Math.round(v * 100)}%`;
+      try {
+        localStorage.setItem('jv_live_volume', String(v));
+      } catch (e) {}
     }
 
     function syncLiveAudio(force = false) {
@@ -3811,19 +3964,34 @@ HTML_INDEX = """<!DOCTYPE html>
           driftLabel.innerText = (driftMs >= 0 ? `+${driftMs}ms` : `${driftMs}ms`);
         }
 
-        if (Math.abs(drift) > 1.2) {
-          // Large drift (>1.2s) -> Hard seek directly to Discord master position
+        // Gecko / Firefox / Zen Browser PLL dampening:
+        // Frequent playbackRate adjustments cause Gecko's Cubeb resampler buffer to flush & click/stutter.
+        // Also Gecko timer precision jitter (20-40ms) creates false micro-drifts.
+        const isGecko = navigator.userAgent.toLowerCase().includes('firefox') || navigator.userAgent.toLowerCase().includes('zen');
+        const deadband = isGecko ? 0.22 : 0.035;
+        const hardSeekThreshold = isGecko ? 2.5 : 1.2;
+
+        if (Math.abs(drift) > hardSeekThreshold) {
+          // Large drift -> Hard seek directly to Discord master position
           if (!(currentElapsed < 1.0 && audio.currentTime > 2.5)) {
             try { audio.currentTime = Math.max(0, currentElapsed); } catch (e) {}
           }
-          audio.playbackRate = speed;
-        } else if (Math.abs(drift) > 0.03) {
-          // Micro-drift (30ms - 1200ms): Proportional rate steering for ultra-smooth, click-free sync
-          const steer = Math.min(0.06, Math.max(0.015, Math.abs(drift) * 0.12));
-          audio.playbackRate = (drift < 0) ? (speed * (1 + steer)) : (speed * (1 - steer));
+          if (Math.abs(audio.playbackRate - speed) > 0.005) {
+            audio.playbackRate = speed;
+          }
+        } else if (Math.abs(drift) > deadband) {
+          // Micro-drift: Proportional rate steering with rate hysteresis to avoid buffer churn
+          const maxSteer = isGecko ? 0.035 : 0.06;
+          const steer = Math.min(maxSteer, Math.max(0.012, Math.abs(drift) * 0.10));
+          const targetRate = (drift < 0) ? (speed * (1 + steer)) : (speed * (1 - steer));
+          if (Math.abs(audio.playbackRate - targetRate) > (isGecko ? 0.015 : 0.004)) {
+            audio.playbackRate = targetRate;
+          }
         } else {
-          // Locked in exact 1:1 sync (within ±30ms)
-          audio.playbackRate = speed;
+          // Locked in exact 1:1 sync (within deadband)
+          if (Math.abs(audio.playbackRate - speed) > 0.008) {
+            audio.playbackRate = speed;
+          }
         }
       }
     }
@@ -4030,6 +4198,7 @@ HTML_INDEX = """<!DOCTYPE html>
       updateMediaSession();
       syncLiveAudio();
       applyLiveEQ(state.effect);
+      updateFavoriteButtonState();
       const qTab = document.getElementById('tab-queue');
       const actionSheet = document.getElementById('trackActionSheet');
       const isModalOpen = actionSheet && actionSheet.classList.contains('active');
@@ -4912,6 +5081,297 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function copyShortcut(url) {
       navigator.clipboard.writeText(url).then(() => showToast('Shortcut URL copied'));
+    }
+
+    // ==========================================
+    // JuiceVault.xyz Account & Favorites Engine
+    // ==========================================
+    let currentJvUser = null;
+    let userLikesCache = [];
+    let userLikesSet = new Set();
+
+    function initJuiceVaultUser() {
+      try {
+        const savedUserStr = localStorage.getItem('jv_user');
+        if (savedUserStr) {
+          const user = JSON.parse(savedUserStr);
+          renderUserProfile(user);
+        }
+        const savedLikesStr = localStorage.getItem('jv_likes');
+        if (savedLikesStr) {
+          userLikesCache = JSON.parse(savedLikesStr);
+          userLikesSet = new Set(userLikesCache.map(x => String(x.id || x.songId || x.title).toLowerCase()));
+          const favCountEl = document.getElementById('userFavsBtnCount');
+          if (favCountEl) favCountEl.innerText = userLikesCache.length;
+        }
+        const username = localStorage.getItem('jv_username');
+        if (username) {
+          refreshJuiceVaultUserData(username);
+        }
+      } catch (e) {
+        console.warn('JuiceVault user init failed:', e);
+      }
+      updateFavoriteButtonState();
+    }
+
+    function openUserModal() {
+      const sheet = document.getElementById('userSheet');
+      if (sheet) sheet.classList.add('active');
+      const err = document.getElementById('jvLoginError');
+      if (err) err.style.display = 'none';
+      const input = document.getElementById('jvUsernameInput');
+      if (input && !currentJvUser) {
+        setTimeout(() => input.focus(), 100);
+      }
+    }
+
+    function closeUserModal() {
+      const sheet = document.getElementById('userSheet');
+      if (sheet) sheet.classList.remove('active');
+    }
+
+    async function loginJuiceVaultUser() {
+      const input = document.getElementById('jvUsernameInput');
+      const errEl = document.getElementById('jvLoginError');
+      const username = (input ? input.value : '').trim();
+      if (!username) {
+        if (errEl) {
+          errEl.innerText = 'Please enter a JuiceVault.xyz username';
+          errEl.style.display = 'block';
+        }
+        return;
+      }
+      if (errEl) errEl.style.display = 'none';
+      showToast(`Connecting @${username}...`);
+
+      try {
+        const res = await fetch(`/api/user/profile?username=${encodeURIComponent(username)}&${apiQuery()}`, { headers: apiHeaders() });
+        const data = await res.json();
+        const user = data.user || data.data;
+        if (data.error || !user) {
+          if (errEl) {
+            errEl.innerText = data.error || 'User not found on JuiceVault.xyz';
+            errEl.style.display = 'block';
+          }
+          return;
+        }
+        localStorage.setItem('jv_username', username);
+        localStorage.setItem('jv_user', JSON.stringify(user));
+        renderUserProfile(user);
+        showToast(`Connected as @${user.username || username}`);
+
+        await refreshJuiceVaultLikes(username);
+      } catch (err) {
+        if (errEl) {
+          errEl.innerText = `Connection failed: ${err.message}`;
+          errEl.style.display = 'block';
+        }
+      }
+    }
+
+    async function refreshJuiceVaultUserData(username) {
+      try {
+        const res = await fetch(`/api/user/profile?username=${encodeURIComponent(username)}&${apiQuery()}`, { headers: apiHeaders() });
+        const data = await res.json();
+        const user = data.user || data.data;
+        if (user) {
+          localStorage.setItem('jv_user', JSON.stringify(user));
+          renderUserProfile(user);
+        }
+        await refreshJuiceVaultLikes(username);
+      } catch (e) {}
+    }
+
+    async function refreshJuiceVaultLikes(username) {
+      try {
+        const res = await fetch(`/api/user/likes?username=${encodeURIComponent(username)}&${apiQuery()}`, { headers: apiHeaders() });
+        const data = await res.json();
+        const likes = data.likes || data.data;
+        if (likes && Array.isArray(likes)) {
+          userLikesCache = likes;
+          userLikesSet = new Set(userLikesCache.map(x => String(x.id || x.songId || x.title).toLowerCase()));
+          localStorage.setItem('jv_likes', JSON.stringify(userLikesCache));
+          const favCountEl = document.getElementById('userFavsBtnCount');
+          if (favCountEl) favCountEl.innerText = userLikesCache.length;
+          updateFavoriteButtonState();
+        }
+      } catch (e) {}
+    }
+
+    function renderUserProfile(user) {
+      currentJvUser = user;
+      const profileView = document.getElementById('userProfileView');
+      const loginForm = document.getElementById('userLoginForm');
+      if (profileView) profileView.style.display = 'block';
+      if (loginForm) loginForm.style.display = 'none';
+
+      const avatar = document.getElementById('userCardAvatar');
+      if (avatar) avatar.src = user.avatar_url || 'https://api.juicevault.xyz/favicon.ico';
+
+      const nameEl = document.getElementById('userCardDisplayName');
+      if (nameEl) nameEl.innerText = user.display_name || user.username || 'User';
+
+      const handleEl = document.getElementById('userCardHandle');
+      if (handleEl) handleEl.innerText = `@${user.username || ''}`;
+
+      const bioEl = document.getElementById('userCardBio');
+      if (bioEl) {
+        bioEl.innerText = user.bio || '';
+        bioEl.style.display = user.bio ? 'block' : 'none';
+      }
+
+      const likesCount = document.getElementById('userLikedCount');
+      if (likesCount) likesCount.innerText = user.likes_count || 0;
+
+      const listensCount = document.getElementById('userListensCount');
+      if (listensCount) listensCount.innerText = user.play_count || 0;
+
+      const streakCount = document.getElementById('userStreakCount');
+      if (streakCount) streakCount.innerText = `${user.streak || 0}d`;
+
+      const favCountEl = document.getElementById('userFavsBtnCount');
+      if (favCountEl) favCountEl.innerText = userLikesCache.length || user.likes_count || 0;
+
+      const badgesContainer = document.getElementById('userCardBadges');
+      if (badgesContainer) {
+        const badges = user.badges || [];
+        badgesContainer.innerHTML = badges.map(b => `<span class="status-badge jv-badge-pill">${escapeHtml(b)}</span>`).join('');
+      }
+
+      const userBtn = document.getElementById('userBtn');
+      if (userBtn) {
+        userBtn.style.color = 'var(--accent)';
+        userBtn.title = `Connected: @${user.username}`;
+      }
+      updateFavoriteButtonState();
+    }
+
+    function logoutUser() {
+      currentJvUser = null;
+      userLikesCache = [];
+      userLikesSet.clear();
+      localStorage.removeItem('jv_username');
+      localStorage.removeItem('jv_user');
+      localStorage.removeItem('jv_likes');
+
+      const profileView = document.getElementById('userProfileView');
+      const loginForm = document.getElementById('userLoginForm');
+      if (profileView) profileView.style.display = 'none';
+      if (loginForm) loginForm.style.display = 'block';
+
+      const input = document.getElementById('jvUsernameInput');
+      if (input) input.value = '';
+
+      const userBtn = document.getElementById('userBtn');
+      if (userBtn) {
+        userBtn.style.color = '';
+        userBtn.title = 'JuiceVault Account';
+      }
+      updateFavoriteButtonState();
+      showToast('JuiceVault account disconnected');
+    }
+
+    function updateFavoriteButtonState() {
+      const favBtn = document.getElementById('btnFavoriteSong');
+      if (!favBtn) return;
+      const t = currentState && currentState.track;
+      if (!t || !currentState.is_running) {
+        favBtn.style.display = 'none';
+        favBtn.classList.remove('is-favorite');
+        return;
+      }
+      favBtn.style.display = 'inline-flex';
+      const tid = String(t.id || t.title || '').toLowerCase();
+      const isFav = userLikesSet.has(tid) || userLikesSet.has(String(t.title || '').toLowerCase());
+      if (isFav) {
+        favBtn.classList.add('is-favorite');
+        favBtn.title = 'Remove from favorites (JuiceVault)';
+      } else {
+        favBtn.classList.remove('is-favorite');
+        favBtn.title = 'Add to favorites (JuiceVault)';
+      }
+    }
+
+    async function toggleCurrentSongFavorite() {
+      if (!currentJvUser) {
+        openUserModal();
+        showToast('Connect your JuiceVault account first to favorite tracks');
+        return;
+      }
+      const t = currentState && currentState.track;
+      if (!t) return;
+
+      const tid = String(t.id || t.title || '').toLowerCase();
+      const isFav = userLikesSet.has(tid) || userLikesSet.has(String(t.title || '').toLowerCase());
+
+      if (isFav) {
+        userLikesSet.delete(tid);
+        userLikesSet.delete(String(t.title || '').toLowerCase());
+        userLikesCache = userLikesCache.filter(x => {
+          const xid = String(x.id || x.songId || x.title || '').toLowerCase();
+          return xid !== tid && xid !== String(t.title || '').toLowerCase();
+        });
+        showToast(`Removed "${t.title}" from favorites`);
+      } else {
+        const newFav = {
+          id: t.id || tid,
+          title: t.title || 'Untitled Track',
+          artist: t.artist || 'Juice WRLD',
+          cover_url: t.cover_url || (t.id ? `https://api.juicevault.xyz/cdn/music/covers/${t.id}` : ''),
+          length: t.length || '—'
+        };
+        userLikesSet.add(tid);
+        if (t.title) userLikesSet.add(String(t.title).toLowerCase());
+        userLikesCache.unshift(newFav);
+        showToast(`Added "${t.title}" to favorites! ❤️`);
+      }
+
+      localStorage.setItem('jv_likes', JSON.stringify(userLikesCache));
+      const favCountEl = document.getElementById('userFavsBtnCount');
+      if (favCountEl) favCountEl.innerText = userLikesCache.length;
+      const likedCountEl = document.getElementById('userLikedCount');
+      if (likedCountEl) likedCountEl.innerText = userLikesCache.length;
+      updateFavoriteButtonState();
+    }
+
+    function viewUserFavorites() {
+      closeUserModal();
+      if (!userLikesCache || userLikesCache.length === 0) {
+        showToast('No favorite songs saved yet');
+        return;
+      }
+      switchTab('search');
+      currentSearchResults = userLikesCache;
+      const resContainer = document.getElementById('searchResults');
+      if (!resContainer) return;
+
+      let html = `
+        <div style="background:linear-gradient(135deg, rgba(244,63,94,0.12), rgba(168,85,247,0.08)); border:1px solid rgba(244,63,94,0.3); border-radius:12px; padding:12px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; color:#f43f5e; font-weight:700;">JuiceVault Favorites</div>
+            <div style="font-weight:700; font-size:0.92rem; color:#fff;">@${escapeHtml(currentJvUser ? currentJvUser.username : 'User')} • ${userLikesCache.length} track${userLikesCache.length === 1 ? '' : 's'}</div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-kinetic btn-badge" style="background:#f43f5e; color:#fff;" onclick="addAllPlaylistTracks(true)">Play All</button>
+            <button class="btn-kinetic btn-badge" onclick="addAllPlaylistTracks(false)">Queue All</button>
+          </div>
+        </div>
+      `;
+
+      html += userLikesCache.map((item, idx) => `
+        <div class="track-card">
+          <div class="track-meta-col">
+            <div class="track-name">${escapeHtml(item.title || 'Untitled')}</div>
+            <div class="track-desc">${escapeHtml(item.artist || 'Juice WRLD')} • ${escapeHtml(item.length || '—')}</div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-kinetic btn-badge" onclick="addSearchResultByIndex(${idx}, true)" title="Play Now">Play</button>
+            <button class="btn-kinetic btn-badge" onclick="addSearchResultByIndex(${idx}, false)" title="Add to Queue">+ Add</button>
+          </div>
+        </div>
+      `).join('');
+
+      resContainer.innerHTML = html;
     }
 
     // Discord Server / Guild Switcher Engine
@@ -5968,6 +6428,7 @@ HTML_INDEX = """<!DOCTYPE html>
         closeLyricsModal();
         closeGuildModal();
         closeStatsModal();
+        closeUserModal();
       }
     });
 
@@ -5998,6 +6459,31 @@ HTML_INDEX = """<!DOCTYPE html>
       visCanvasEl.style.opacity = visOpacity;
     }
     visAnimFrame = requestAnimationFrame(renderVisualizerLoop);
+
+    // Restore persistent user settings
+    try {
+      const savedVol = localStorage.getItem('jv_live_volume');
+      if (savedVol !== null) {
+        const v = parseFloat(savedVol);
+        if (!isNaN(v)) {
+          const slider = document.getElementById('liveVolumeSlider');
+          if (slider) slider.value = v;
+          updateLiveVolume(v);
+        }
+      }
+      const sbPrevVal = localStorage.getItem('jv_sb_preview');
+      if (sbPrevVal !== null) {
+        const sbToggle = document.getElementById('sbPreviewToggle');
+        if (sbToggle) sbToggle.checked = (sbPrevVal === 'true');
+      }
+      const savedLock = localStorage.getItem('jv_lock_screen');
+      if (savedLock === 'true' && !lockScreenControlsEnabled) {
+        toggleLockScreenControls();
+      }
+    } catch (e) {}
+
+    // Initialize JuiceVault account & favorites
+    initJuiceVaultUser();
 
     // Startup
     fetchTelemetry();

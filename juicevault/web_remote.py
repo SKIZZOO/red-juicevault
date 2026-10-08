@@ -1497,6 +1497,7 @@ class JuiceVaultWebRemote:
             sample = tracks[:limit]
             results = [{
                 "id": str(t.get("id")),
+                "file_name": str(t.get("file_name") or ""),
                 "title": str(t.get("title") or t.get("name") or t.get("file_name")),
                 "artist": str(t.get("artist") or "Juice WRLD"),
                 "length": str(t.get("length") or "—"),
@@ -1647,6 +1648,7 @@ class JuiceVaultWebRemote:
             for t in matches:
                 results.append({
                     "id": str(t.get("id")),
+                    "file_name": str(t.get("file_name") or ""),
                     "title": str(t.get("title") or t.get("name") or t.get("file_name")),
                     "artist": str(t.get("artist") or "Juice WRLD"),
                     "length": str(t.get("length") or "—"),
@@ -1743,6 +1745,7 @@ class JuiceVaultWebRemote:
                 return None
             clean = {
                 "id": str(raw.get("id") or "")[:100],
+                "file_name": str(raw.get("file_name") or "")[:250],
                 "title": str(raw.get("title") or "Untitled Track")[:200],
                 "artist": str(raw.get("artist") or "Juice WRLD")[:200],
                 "length": str(raw.get("length") or "—")[:30],
@@ -2141,9 +2144,47 @@ class JuiceVaultWebRemote:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status == 200:
-                        data = await resp.json()
-                        return web.json_response(data)
-                    return web.json_response({"error": f"User profile not found (HTTP {resp.status})"}, status=resp.status)
+                        raw = await resp.json()
+                        user_obj = raw.get("data") if isinstance(raw, dict) and "data" in raw else raw
+                        if not isinstance(user_obj, dict):
+                            return web.json_response({"error": "Invalid profile format"}, status=502)
+                        
+                        avatar = user_obj.get("avatar") or ""
+                        if avatar and avatar.startswith("/"):
+                            avatar = f"https://api.juicevault.xyz{avatar}"
+                        elif not avatar:
+                            avatar = "https://api.juicevault.xyz/favicon.ico"
+
+                        badges_raw = user_obj.get("badges", [])
+                        badges = []
+                        if isinstance(badges_raw, list):
+                            for b in badges_raw:
+                                if isinstance(b, dict):
+                                    badges.append(b.get("label") or b.get("id"))
+                                elif isinstance(b, str):
+                                    badges.append(b)
+
+                        listening = user_obj.get("listening", {}) if isinstance(user_obj.get("listening"), dict) else {}
+                        stats = user_obj.get("stats", {}) if isinstance(user_obj.get("stats"), dict) else {}
+                        streak_data = listening.get("streak", {}) if isinstance(listening.get("streak"), dict) else {}
+
+                        normalized = {
+                            "id": user_obj.get("id"),
+                            "username": user_obj.get("username", username),
+                            "display_name": user_obj.get("displayName") or user_obj.get("username", username),
+                            "avatar_url": avatar,
+                            "bio": user_obj.get("bio", ""),
+                            "badges": badges,
+                            "likes_count": stats.get("likedCount", 0),
+                            "play_count": listening.get("totalListens", 0),
+                            "streak": streak_data.get("current", 0)
+                        }
+                        return web.json_response({
+                            "success": True,
+                            "user": normalized,
+                            "data": normalized
+                        })
+                    return web.json_response({"error": f"User profile '{username}' not found on JuiceVault (HTTP {resp.status})"}, status=resp.status)
         except Exception as e:
             return web.json_response({"error": f"Failed fetching profile: {e}"}, status=500)
 
@@ -2160,8 +2201,27 @@ class JuiceVaultWebRemote:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status == 200:
-                        data = await resp.json()
-                        return web.json_response(data)
+                        raw = await resp.json()
+                        raw_list = raw.get("data", []) if isinstance(raw, dict) and "data" in raw else (raw if isinstance(raw, list) else [])
+                        normalized_likes = []
+                        for item in raw_list:
+                            if isinstance(item, dict):
+                                song = item.get("song") or {}
+                                song_id = item.get("songId") or song.get("id") or item.get("id")
+                                if song_id:
+                                    normalized_likes.append({
+                                        "id": song_id,
+                                        "title": song.get("title") or item.get("title") or "Untitled",
+                                        "artist": song.get("artist") or item.get("artist") or "Juice WRLD",
+                                        "cover_url": f"https://api.juicevault.xyz/cdn/music/covers/{song_id}",
+                                        "length": song.get("length") or item.get("length") or "—"
+                                    })
+                        return web.json_response({
+                            "success": True,
+                            "likes": normalized_likes,
+                            "data": normalized_likes,
+                            "total": len(normalized_likes)
+                        })
                     return web.json_response({"error": f"User likes not found (HTTP {resp.status})"}, status=resp.status)
         except Exception as e:
             return web.json_response({"error": f"Failed fetching likes: {e}"}, status=500)
