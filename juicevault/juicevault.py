@@ -715,7 +715,7 @@ class JuiceVault(commands.Cog):
                             self.pause_after_seek = {}
                         self.pause_after_seek[gid] = True
                 else:
-                    start_offset = max(0.0, float(self.play_positions.get(gid, 0.0)))
+                    start_offset = 0.0
                 self.play_positions[gid] = start_offset
                 duration = self._parse_duration(track.get("length"))
                 if duration is not None:
@@ -945,6 +945,9 @@ class JuiceVault(commands.Cog):
         if guild_id not in self.tasks or not event or not voice or not (voice.is_playing() or voice.is_paused()) or event.is_set():
             return False
         self.skip_counts[guild_id] = max(1, min(int(count), 100))
+        self.play_positions[guild_id] = 0.0
+        if voice:
+            voice._jv_started_at = None
         event.set()
         voice.stop()
         return True

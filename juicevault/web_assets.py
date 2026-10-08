@@ -1160,68 +1160,90 @@ HTML_INDEX = """<!DOCTYPE html>
       width: 34px;
       height: 34px;
     }
-    /* Top Navigation Bar for Mobile */
+    /* Top Navigation Bar for Mobile (Matching Reference UI) */
     nav.mobile-nav {
       position: sticky;
       top: 50px;
       left: 0;
       width: 100%;
-      height: 46px;
-      padding: 0 10px;
-      background: rgba(10, 10, 15, 0.95);
+      height: 58px;
+      padding: 0 8px;
+      background: #09090d;
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       display: flex;
+      flex-direction: row;
+      justify-content: space-around;
       align-items: center;
-      gap: 6px;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
+      gap: 0;
+      overflow-x: hidden;
       z-index: 45;
     }
     nav.mobile-nav::-webkit-scrollbar {
       display: none;
     }
     .nav-btn {
-      display: inline-flex;
-      flex-direction: row;
+      flex: 1;
+      max-width: 76px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 0.74rem;
-      font-weight: 600;
-      white-space: nowrap;
-      flex-shrink: 0;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.07);
-      color: var(--text-sub);
-      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      justify-content: center;
+      gap: 5px;
+      padding: 6px 0 4px;
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      border-radius: 0;
+      color: #8b8b9e;
       cursor: pointer;
       user-select: none;
-    }
-    .nav-btn .icon-svg {
-      width: 14px;
-      height: 14px;
-      flex-shrink: 0;
-    }
-    .nav-btn:hover {
-      background: rgba(255, 255, 255, 0.07);
-      color: var(--text-main);
-    }
-    .nav-btn.active {
-      background: rgba(168, 85, 247, 0.18);
-      border-color: rgba(168, 85, 247, 0.5);
-      color: #fff;
-      box-shadow: 0 0 14px rgba(168, 85, 247, 0.28);
-      font-weight: 700;
-    }
-    .nav-btn.active .icon-svg {
-      color: var(--accent);
+      transition: color 0.16s ease, transform 0.12s ease;
+      -webkit-tap-highlight-color: transparent;
     }
     .nav-btn:active {
-      transform: scale(0.96);
+      transform: scale(0.92);
+    }
+    .nav-btn .icon-svg,
+    .nav-btn .nav-icon-svg {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      color: #8b8b9e;
+      stroke-width: 2.2px;
+      transition: color 0.16s ease, filter 0.16s ease;
+    }
+    .nav-btn span {
+      font-size: 0.72rem;
+      font-weight: 500;
+      line-height: 1;
+      letter-spacing: -0.01em;
+      color: #8b8b9e;
+      transition: color 0.16s ease;
+      white-space: nowrap;
+    }
+    .nav-btn:hover {
+      color: #fff;
+    }
+    .nav-btn:hover .icon-svg,
+    .nav-btn:hover .nav-icon-svg,
+    .nav-btn:hover span {
+      color: #e2e8f0;
+    }
+    .nav-btn.active {
+      color: #c084fc;
+    }
+    .nav-btn.active .icon-svg,
+    .nav-btn.active .nav-icon-svg {
+      color: #c084fc;
+      filter: drop-shadow(0 0 6px rgba(192, 132, 252, 0.45));
+    }
+    .nav-btn.active span {
+      color: #c084fc;
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(192, 132, 252, 0.4);
     }
     /* Modal / Bottom Sheet */
     .sheet-backdrop {
@@ -2952,35 +2974,27 @@ HTML_INDEX = """<!DOCTYPE html>
     </div>
   </header>
 
-  <!-- Mobile Top Navigation Bar (Phone view) -->
+  <!-- Mobile Top Navigation Bar (Phone view - Matches Reference UI) -->
   <nav class="mobile-nav" id="mobileNav">
-    <button class="nav-btn active" onclick="switchMobileNav('player')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    <button class="nav-btn active" id="mobileBtnPlayer" onclick="switchMobileNav('player')">
+      <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
       <span>Player</span>
     </button>
-    <button class="nav-btn" onclick="switchMobileNav('queue')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg>
+    <button class="nav-btn" id="mobileBtnQueue" onclick="switchMobileNav('queue')">
+      <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
       <span>Queue</span>
     </button>
-    <button class="nav-btn" onclick="switchMobileNav('search')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <button class="nav-btn" id="mobileBtnSearch" onclick="switchMobileNav('search')">
+      <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
       <span>Search</span>
     </button>
-    <button class="nav-btn" onclick="switchMobileNav('categories')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+    <button class="nav-btn" id="mobileBtnLibrary" onclick="switchMobileNav('categories')">
+      <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/></svg>
       <span>Library</span>
     </button>
-    <button class="nav-btn" onclick="switchMobileNav('soundboard')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+    <button class="nav-btn" id="mobileBtnSounds" onclick="switchMobileNav('soundboard')">
+      <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/></svg>
       <span>Sounds</span>
-    </button>
-    <button class="nav-btn" onclick="switchMobileNav('shortcuts')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-      <span>Shortcuts</span>
-    </button>
-    <button class="nav-btn" onclick="switchMobileNav('settings')">
-      <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      <span>Settings</span>
     </button>
   </nav>
 
@@ -4644,15 +4658,19 @@ HTML_INDEX = """<!DOCTYPE html>
         const btns = document.querySelectorAll('.segment-bar.desktop-segment .segment-btn');
         if (btns[idx]) btns[idx].classList.add('active');
       }
-      // Sync mobile top nav pill
-      const mobIdx = ['player', 'queue', 'search', 'categories', 'soundboard', 'shortcuts', 'settings'].indexOf(tabId);
-      if (mobIdx !== -1) {
-        const mobBtns = document.querySelectorAll('.nav-btn');
-        mobBtns.forEach(el => el.classList.remove('active'));
-        if (mobBtns[mobIdx]) {
-          mobBtns[mobIdx].classList.add('active');
-          try { mobBtns[mobIdx].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); } catch (_) {}
-        }
+      // Sync mobile top nav
+      const MOBILE_TAB_MAP = {
+        'player': 'mobileBtnPlayer',
+        'queue': 'mobileBtnQueue',
+        'search': 'mobileBtnSearch',
+        'categories': 'mobileBtnLibrary',
+        'soundboard': 'mobileBtnSounds'
+      };
+      const targetMobId = MOBILE_TAB_MAP[tabId];
+      if (targetMobId) {
+        document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+        const btn = document.getElementById(targetMobId);
+        if (btn) btn.classList.add('active');
       }
       if (tabId === 'queue') loadQueue();
       if (tabId === 'categories') { loadCategories(); loadJuiceVaultPlaylists(); }
@@ -4666,13 +4684,17 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function switchMobileNav(tabId) {
       document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-      const idx = ['player', 'queue', 'search', 'categories', 'soundboard', 'shortcuts', 'settings'].indexOf(tabId);
-      if (idx !== -1) {
-        const btns = document.querySelectorAll('.nav-btn');
-        if (btns[idx]) {
-          btns[idx].classList.add('active');
-          try { btns[idx].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); } catch (_) {}
-        }
+      const MOBILE_TAB_MAP = {
+        'player': 'mobileBtnPlayer',
+        'queue': 'mobileBtnQueue',
+        'search': 'mobileBtnSearch',
+        'categories': 'mobileBtnLibrary',
+        'soundboard': 'mobileBtnSounds'
+      };
+      const targetMobId = MOBILE_TAB_MAP[tabId];
+      if (targetMobId) {
+        const btn = document.getElementById(targetMobId);
+        if (btn) btn.classList.add('active');
       }
 
       const playerWrap = document.querySelector('.card-player-wrap');
@@ -4842,6 +4864,10 @@ HTML_INDEX = """<!DOCTYPE html>
         applyLiveEQ(effectName);
       } else if (name === 'skip') {
         showToast('Skipping track…');
+        skipPendingTrackId = currentTrackKey;
+        skipPendingUntil = Date.now() + 3500;
+        currentElapsed = 0;
+        updateScrubberUI();
         if (liveStreamActive) {
           currentLiveTrackId = null;
           isAudioLoading = true;
@@ -4869,10 +4895,12 @@ HTML_INDEX = """<!DOCTYPE html>
         } else {
           document.getElementById('trackTitle').innerText = 'Buffering next track…';
         }
-        currentElapsed = 0;
-        updateScrubberUI();
       } else if (name === 'previous') {
         showToast('Playing previous track…');
+        skipPendingTrackId = currentTrackKey;
+        skipPendingUntil = Date.now() + 3500;
+        currentElapsed = 0;
+        updateScrubberUI();
         if (liveStreamActive) {
           currentLiveTrackId = null;
           isAudioLoading = true;
@@ -4892,8 +4920,6 @@ HTML_INDEX = """<!DOCTYPE html>
           }
         }
         document.getElementById('trackTitle').innerText = 'Loading previous track…';
-        currentElapsed = 0;
-        updateScrubberUI();
       } else if (name === 'shuffle') {
         showToast('Queue shuffled');
       } else if (name === 'repeat') {
@@ -4922,6 +4948,8 @@ HTML_INDEX = """<!DOCTYPE html>
 
     let liveStreamActive = false;
     let currentLiveTrackId = null;
+    let skipPendingTrackId = null;
+    let skipPendingUntil = 0;
     let audioCtx = null;
     let audioSourceNode = null;
     let bassFilterNode = null;
@@ -5487,8 +5515,8 @@ HTML_INDEX = """<!DOCTYPE html>
         }
 
         const statusText = document.getElementById('ltStatusText');
-        const statusInd = document.getElementById('ltStatusInd');
-        if (Math.abs(driftMs) <= Math.round(deadband * 1000) + 40) {
+        const lockThresholdMs = Math.max(300, Math.round(deadband * 1000) + 120);
+        if (Math.abs(driftMs) <= lockThresholdMs) {
           if (statusText) statusText.innerText = 'Phase-Locked';
           if (statusInd) statusInd.className = 'lt-status-indicator locked';
           aligningStuckStartTime = null;
@@ -5501,13 +5529,15 @@ HTML_INDEX = """<!DOCTYPE html>
         const nowMs = performance.now();
         if (Math.abs(drift) > hardSeekThreshold) {
           // Large drift -> Hard seek directly to Discord master position
-          const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 0.5) ? Math.max(0, audio.duration - 0.4) : currentElapsed;
-          try { audio.currentTime = Math.max(0, Math.min(currentElapsed, maxSeek)); } catch (e) {}
+          const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 1.0) ? Math.max(0, audio.duration - 0.6) : currentElapsed;
+          const targetSeek = Math.max(0, Math.min(currentElapsed, maxSeek));
+          if (Math.abs(audio.currentTime - targetSeek) > 1.2) {
+            try { audio.currentTime = targetSeek; } catch (e) {}
+          }
           if (Math.abs(audio.playbackRate - speed) > 0.003) {
             audio.playbackRate = speed;
           }
           lastRateSteerTime = nowMs;
-          if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
         } else if (Math.abs(drift) > deadband) {
           // Micro-drift: Gentle proportional steering with 1.2s cooldown to avoid rate fluttering & click artifacts
           if (nowMs - lastRateSteerTime > 1200) {
@@ -5678,15 +5708,28 @@ HTML_INDEX = """<!DOCTYPE html>
         const speed = (t && t.effect_speed) || 1.0;
         const liveDiscordPos = serverPos + (state.is_playing ? rttOffset * speed : 0);
 
-        if (trackKey !== currentTrackKey) {
-          currentTrackKey = trackKey;
-          currentElapsed = liveDiscordPos;
-        } else if (!isScrubbing) {
-          const wasRecentUserSeek = (Date.now() - lastUserSeekTimestamp) < 3000;
-          if (!wasRecentUserSeek && currentElapsed > 2.0 && liveDiscordPos < 0.6) {
-            // Protect against transient 0-drop glitch while playing the same track
-          } else if (Math.abs(currentElapsed - liveDiscordPos) > 0.35) {
+        const isSkipPending = skipPendingUntil && Date.now() < skipPendingUntil;
+        if (isSkipPending && trackKey === skipPendingTrackId) {
+          // Skip was requested, Discord hasn't switched to new track yet. Keep elapsed at 0.
+          currentElapsed = 0;
+        } else {
+          if (isSkipPending && trackKey !== skipPendingTrackId) {
+            skipPendingUntil = 0;
+            skipPendingTrackId = null;
+          }
+          if (trackKey !== currentTrackKey) {
+            currentTrackKey = trackKey;
             currentElapsed = liveDiscordPos;
+          } else if (!isScrubbing) {
+            const wasRecentUserSeek = (Date.now() - lastUserSeekTimestamp) < 3000;
+            if (wasRecentUserSeek) {
+              // User manually scrubbed recently
+            } else if (liveDiscordPos < currentElapsed - 2.0) {
+              // Track restarted, looped, or reset to 0: ALWAYS accept the reset!
+              currentElapsed = liveDiscordPos;
+            } else if (Math.abs(currentElapsed - liveDiscordPos) > 0.35) {
+              currentElapsed = liveDiscordPos;
+            }
           }
         }
         document.getElementById('timeDuration').innerText = t.length || formatTime(durationSeconds);
@@ -7413,6 +7456,16 @@ HTML_INDEX = """<!DOCTYPE html>
         return;
       }
 
+      // If audio is actively playing within normal drift tolerances, clear watchdog
+      const audio = document.getElementById('liveAudio');
+      if (audio && !audio.paused && audio.readyState >= 3) {
+        const driftSec = Math.abs(audio.currentTime - currentElapsed);
+        if (driftSec < 0.6) {
+          aligningStuckStartTime = null;
+          return;
+        }
+      }
+
       const statusText = document.getElementById('ltStatusText');
       const statusInd = document.getElementById('ltStatusInd');
       const text = (statusText ? statusText.innerText : '').toLowerCase();
@@ -7431,11 +7484,16 @@ HTML_INDEX = """<!DOCTYPE html>
 
       const stuckDuration = Date.now() - aligningStuckStartTime;
 
-      // Soft recovery at ~2.5s: fetch status in case track changed on Discord
+      // Soft recovery at ~2.5s: fetch status in case track changed on Discord without destroying audio stream
       if (stuckDuration >= 2500 && (Date.now() - lastAligningRecoveryTime > 2500)) {
         lastAligningRecoveryTime = Date.now();
         fetchStatus().then(() => {
-          if (liveStreamActive) syncLiveAudio(true);
+          if (!liveStreamActive) return;
+          const a = document.getElementById('liveAudio');
+          if (a && a.paused && currentState && currentState.is_playing) {
+            a.play().catch(() => {});
+          }
+          syncLiveAudio(false);
         });
       }
 
