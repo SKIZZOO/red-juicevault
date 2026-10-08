@@ -7,6 +7,7 @@ endpoints designed for iOS Shortcuts, Siri, and mobile widgets.
 """
 
 import asyncio
+import base64
 import datetime
 import json
 import os
@@ -287,6 +288,8 @@ class JuiceVaultWebRemote:
             app.router.add_get("/api/user/profile", self._api_user_profile)
             app.router.add_get("/api/user/likes", self._api_user_likes)
             app.router.add_post("/api/user/favorite", self._api_user_favorite)
+            app.router.add_post("/api/user/auth", self._api_user_auth)
+            app.router.add_get("/api/user/playlists", self._api_user_playlists)
             app.router.add_get("/api/shortcuts", self._api_shortcuts)
             app.router.add_get("/api/stream", self._api_stream)
             app.router.add_get("/api/channels", self._api_channels)
@@ -501,16 +504,30 @@ class JuiceVaultWebRemote:
         today_reqs = day_stats.get("requests", 0)
         today_uniques = max(len(self._today_ips), 1 if today_views > 0 else 0)
 
-        # Check active voice connection duration
+        # Check active voice connection duration & bot uptime
         active_vc_sec = 0
+        bot_uptime_sec = 0
+        if getattr(self.bot, "uptime", None):
+            try:
+                from datetime import datetime, timezone
+                now_dt = datetime.now(timezone.utc)
+                up_dt = self.bot.uptime
+                if up_dt.tzinfo is None:
+                    up_dt = up_dt.replace(tzinfo=timezone.utc)
+                bot_uptime_sec = int((now_dt - up_dt).total_seconds())
+            except Exception:
+                pass
+
         if self.bot and getattr(self.bot, "voice_clients", None):
             for vc in self.bot.voice_clients:
                 if vc and vc.is_connected():
-                    session_start = self._vc_session_start.get(vc.guild.id)
+                    session_start = self._vc_session_start.get(vc.guild.id) or getattr(vc, "_jv_connected_at", None)
                     if session_start:
                         active_vc_sec = max(active_vc_sec, int(time.time() - session_start))
-                    else:
-                        active_vc_sec = max(active_vc_sec, 57600)
+                    if bot_uptime_sec > 0:
+                        active_vc_sec = max(active_vc_sec, bot_uptime_sec)
+                    if not active_vc_sec:
+                        active_vc_sec = 57600
 
         if active_vc_sec > today_sec:
             today_sec = active_vc_sec
@@ -2038,8 +2055,8 @@ class JuiceVaultWebRemote:
         gid = guild.id
         current_file = None
 
-        # Check immediately and wait up to 10 seconds for the audio file to become ready
-        for _ in range(50):
+        # Check immediately and wait up to 12 seconds for the audio file to become ready
+        for _ in range(60):
             cf = getattr(main, "current_files", {}).get(gid)
             if cf and os.path.isfile(cf) and os.path.getsize(cf) > 1024:
                 current_file = cf
@@ -2058,7 +2075,21 @@ class JuiceVaultWebRemote:
             # Check if there is a direct playable stream URL on the current track (e.g. JuiceVault CDN)
             cur = getattr(main, "current", {}).get(gid)
             if cur and cur.get("url") and str(cur["url"]).startswith(("http://", "https://")):
-                raise web.HTTPTemporaryRedirect(location=cur["url"], headers=cors_headers)
+                remote_url = cur["url"]
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(remote_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=aiohttp.ClientTimeout(total=15)) as r_resp:
+                            if r_resp.status in (200, 206):
+                                data = await r_resp.read()
+                                c_type = r_resp.headers.get("Content-Type", "audio/mpeg")
+                                return web.Response(body=data, headers={
+                                    "Content-Type": c_type,
+                                    "Accept-Ranges": "bytes",
+                                    **cors_headers
+                                })
+                except Exception:
+                    pass
+                raise web.HTTPTemporaryRedirect(location=remote_url, headers=cors_headers)
             return web.Response(status=404, text="No track currently playing or audio not ready", headers=cors_headers)
 
         ext = os.path.splitext(current_file)[1].lower()
@@ -2206,11 +2237,17 @@ class JuiceVaultWebRemote:
                         if isinstance(badges_raw, list):
                             for b in badges_raw:
                                 if isinstance(b, dict):
-                                    badges.append(b.get("label") or b.get("id"))
+                                    badges.append({
+                                        "id": b.get("id"),
+                                        "label": b.get("label") or b.get("id"),
+                                        "tone": b.get("tone") or "purple",
+                                        "icon": b.get("icon") or "badge"
+                                    })
                                 elif isinstance(b, str):
-                                    badges.append(b)
+                                    badges.append({"id": b, "label": b, "tone": "purple", "icon": "badge"})
 
                         listening = user_obj.get("listening", {}) if isinstance(user_obj.get("listening"), dict) else {}
+                        archive = listening.get("archive", {}) if isinstance(listening.get("archive"), dict) else {}
                         stats = user_obj.get("stats", {}) if isinstance(user_obj.get("stats"), dict) else {}
                         streak_data = listening.get("streak", {}) if isinstance(listening.get("streak"), dict) else {}
 
@@ -2220,10 +2257,19 @@ class JuiceVaultWebRemote:
                             "display_name": user_obj.get("displayName") or user_obj.get("username", username),
                             "avatar_url": avatar,
                             "bio": user_obj.get("bio", ""),
+                            "is_owner": bool(user_obj.get("isOwner")),
                             "badges": badges,
                             "likes_count": stats.get("likedCount", 0),
+                            "playlist_count": stats.get("playlistCount", 0),
                             "play_count": listening.get("totalListens", 0),
-                            "streak": streak_data.get("current", 0)
+                            "total_seconds": listening.get("totalDuration", 0),
+                            "unique_songs": listening.get("uniqueSongs", 0),
+                            "completed_songs": archive.get("completedSongs", 0),
+                            "total_songs": archive.get("totalSongs", 0),
+                            "completion_rate": archive.get("completionRate", 0),
+                            "streak": streak_data.get("current", 0),
+                            "longest_streak": streak_data.get("longest", 0),
+                            "created_at": user_obj.get("createdAt")
                         }
                         return web.json_response({
                             "success": True,
@@ -2304,6 +2350,125 @@ class JuiceVaultWebRemote:
             "total_favorites": len(fav_list),
             "favorites": fav_list[:100]
         })
+
+    async def _api_user_auth(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        data = await request.json()
+        login = str(data.get("login") or data.get("username") or "").strip()
+        password = str(data.get("password") or "").strip()
+        provided_token = str(data.get("token") or "").strip()
+
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        try:
+            async with aiohttp.ClientSession() as session:
+                if provided_token:
+                    auth_headers = {**headers, "Authorization": f"Bearer {provided_token}"}
+                    async with session.get("https://api.juicevault.xyz/user/auth/me", headers=auth_headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                        if resp.status == 200:
+                            me_data = await resp.json()
+                            user_obj = me_data.get("data") or me_data
+                            return web.json_response({"success": True, "user": user_obj, "accessToken": provided_token})
+                        return web.json_response({"error": f"Token verification failed (HTTP {resp.status})"}, status=400)
+
+                if not login or not password:
+                    return web.json_response({"error": "Login and password required"}, status=400)
+
+                # 1. Obtain login token & captcha challenge
+                async with session.post("https://api.juicevault.xyz/user/auth/token", headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as t_resp:
+                    if t_resp.status != 200:
+                        return web.json_response({"error": "Failed getting login challenge from JuiceVault"}, status=502)
+                    t_json = await t_resp.json()
+                    login_token = (t_json.get("data") or {}).get("token")
+                    if not login_token:
+                        return web.json_response({"error": "Invalid token response"}, status=502)
+
+                # 2. Extract captcha grant 'ca' from JWT
+                ca = None
+                try:
+                    parts = login_token.split(".")
+                    if len(parts) >= 2:
+                        payload_str = parts[1] + "=="
+                        decoded = base64.urlsafe_b64decode(payload_str.encode("utf-8"))
+                        payload_json = json.loads(decoded)
+                        ca = payload_json.get("ca")
+                except Exception:
+                    pass
+
+                login_headers = {**headers, "Content-Type": "application/json"}
+                if ca:
+                    login_headers["X-CA"] = str(ca)
+
+                # 3. Authenticate with JuiceVault
+                login_body = {"login": login, "password": password, "loginToken": login_token}
+                async with session.post("https://api.juicevault.xyz/user/auth/login", headers=login_headers, json=login_body, timeout=aiohttp.ClientTimeout(total=12)) as l_resp:
+                    l_json = await l_resp.json()
+                    if l_resp.status == 200 and l_json.get("success"):
+                        resp_data = l_json.get("data") or {}
+                        return web.json_response({
+                            "success": True,
+                            "user": resp_data.get("user"),
+                            "accessToken": resp_data.get("accessToken"),
+                            "refreshToken": resp_data.get("refreshToken")
+                        })
+                    err_msg = l_json.get("error") or f"Invalid login credentials (HTTP {l_resp.status})"
+                    return web.json_response({"error": err_msg}, status=401)
+        except Exception as e:
+            return web.json_response({"error": f"JuiceVault auth error: {e}"}, status=500)
+
+    async def _api_user_playlists(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        username = request.query.get("username", "").strip()
+        auth_token = request.headers.get("X-JuiceVault-Token") or request.query.get("auth_token", "")
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+        playlists = []
+        try:
+            async with aiohttp.ClientSession() as session:
+                # 1. If authorized token exists, fetch real user playlists
+                if auth_token:
+                    auth_headers = {**headers, "Authorization": f"Bearer {auth_token}"}
+                    async with session.get("https://api.juicevault.xyz/user/playlists", headers=auth_headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                        if resp.status == 200:
+                            p_data = await resp.json()
+                            raw_p = (p_data.get("data") or []) + (p_data.get("collaborated") or [])
+                            for p in raw_p:
+                                playlists.append({
+                                    "id": p.get("id"),
+                                    "name": p.get("name") or "Playlist",
+                                    "description": p.get("description") or "",
+                                    "song_count": p.get("songCount") or len(p.get("songs") or []),
+                                    "cover_url": p.get("coverImage") or "https://api.juicevault.xyz/favicon.ico",
+                                    "is_public": p.get("isPublic", True)
+                                })
+
+                # 2. Also fetch public likes for the user as a primary playlist
+                if username:
+                    safe_user = quote(username, safe="")
+                    async with session.get(f"https://api.juicevault.xyz/user/likes/public/{safe_user}", headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                        if resp.status == 200:
+                            l_data = await resp.json()
+                            likes_list = l_data.get("data") or []
+                            playlists.insert(0, {
+                                "id": "liked",
+                                "name": "Liked Songs",
+                                "description": f"Songs favorited by @{username} on JuiceVault.xyz",
+                                "song_count": len(likes_list),
+                                "cover_url": "https://api.juicevault.xyz/favicon.ico",
+                                "is_liked_playlist": True,
+                                "songs": [{
+                                    "id": x.get("songId") or (x.get("song") or {}).get("id"),
+                                    "title": (x.get("song") or {}).get("title") or "Untitled",
+                                    "artist": (x.get("song") or {}).get("artist") or "Juice WRLD",
+                                    "length": (x.get("song") or {}).get("length") or "—",
+                                    "cover_url": f"https://api.juicevault.xyz/cdn/music/covers/{x.get('songId') or (x.get('song') or {}).get('id')}"
+                                } for x in likes_list]
+                            })
+            return web.json_response({"success": True, "playlists": playlists})
+        except Exception as e:
+            return web.json_response({"error": str(e), "playlists": []}, status=500)
+
 
 
 def patch_web_remote(JuiceVault, JuiceVaultUI):

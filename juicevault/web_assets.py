@@ -250,7 +250,7 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     /* Layout Container: Responsive Mobile -> Desktop */
     .app-container {
-      max-width: 1040px;
+      max-width: 1140px;
       width: 100%;
       margin: 0 auto;
       padding: 20px;
@@ -262,7 +262,7 @@ HTML_INDEX = """<!DOCTYPE html>
       }
       .app-grid {
         display: grid;
-        grid-template-columns: 360px 1fr;
+        grid-template-columns: 420px minmax(0, 1fr);
         gap: 24px;
         align-items: start;
       }
@@ -2168,6 +2168,300 @@ HTML_INDEX = """<!DOCTYPE html>
       color: var(--text-muted);
       font-family: 'JetBrains Mono', monospace;
     }
+
+    /* Dynamic Theme Palettes */
+    body.theme-cyan {
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.4);
+      --accent-muted: rgba(56, 189, 248, 0.15);
+      --border-accent: rgba(56, 189, 248, 0.35);
+      --border-focus: #38bdf8;
+    }
+    body.theme-rose {
+      --accent: #f43f5e;
+      --accent-glow: rgba(244, 63, 94, 0.4);
+      --accent-muted: rgba(244, 63, 94, 0.15);
+      --border-accent: rgba(244, 63, 94, 0.35);
+      --border-focus: #f43f5e;
+    }
+    body.theme-green {
+      --accent: #10b981;
+      --accent-glow: rgba(16, 185, 129, 0.4);
+      --accent-muted: rgba(16, 185, 129, 0.15);
+      --border-accent: rgba(16, 185, 129, 0.35);
+      --border-focus: #10b981;
+    }
+    body.theme-gold {
+      --accent: #f59e0b;
+      --accent-glow: rgba(245, 158, 11, 0.4);
+      --accent-muted: rgba(245, 158, 11, 0.15);
+      --border-accent: rgba(245, 158, 11, 0.35);
+      --border-focus: #f59e0b;
+    }
+
+    /* Album Art Geometry Shapes */
+    body.cover-shape-squircle .player-cover {
+      border-radius: 28px !important;
+    }
+    body.cover-shape-circle .player-cover {
+      border-radius: 50% !important;
+    }
+
+    /* Glassmorphism Blur Levels */
+    body.blur-none .ui-card, body.blur-none header.app-header, body.blur-none .desktop-segment {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      background: #111116 !important;
+    }
+    body.blur-frosted .ui-card, body.blur-frosted header.app-header, body.blur-frosted .desktop-segment {
+      backdrop-filter: blur(28px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+    }
+
+    /* Listen Together Two-Row Studio Layout */
+    .lt-vol-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+    }
+    .lt-telemetry-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      padding-top: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.68rem;
+      color: var(--text-sub);
+    }
+    .lt-status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .lt-status-indicator.locked {
+      color: var(--success);
+    }
+    .lt-status-indicator.buffering {
+      color: #eab308;
+    }
+    .lt-telemetry-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      padding: 2px 7px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    /* Settings Tab Styles */
+    .settings-group {
+      margin-bottom: 20px;
+    }
+    .settings-group:last-child {
+      margin-bottom: 0;
+    }
+    .settings-group-title {
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .settings-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .setting-row:last-child {
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    .setting-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .setting-label {
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .setting-desc {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.35;
+    }
+    .setting-action {
+      flex-shrink: 0;
+    }
+    .color-swatch-row {
+      display: flex;
+      gap: 8px;
+    }
+    .color-swatch {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    .color-swatch:hover {
+      transform: scale(1.15);
+    }
+    .color-swatch.active {
+      border-color: #fff;
+      box-shadow: 0 0 10px currentColor;
+    }
+    .pill-selector {
+      display: inline-flex;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .pill-opt {
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-radius: 6px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .pill-opt:hover {
+      color: #fff;
+    }
+    .pill-opt.active {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+    .switch-toggle {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 24px;
+    }
+    .switch-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .switch-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      transition: 0.25s;
+    }
+    .switch-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    input:checked + .switch-slider {
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    input:checked + .switch-slider:before {
+      transform: translateX(18px);
+    }
+
+    /* JuiceVault Playlists Section in Library */
+    .jv-playlists-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .jv-playlist-card {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: all 0.18s ease;
+    }
+    .jv-playlist-card:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--border-accent);
+      transform: translateY(-1px);
+    }
+    .jv-playlist-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .jv-playlist-disc {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(236, 72, 153, 0.3));
+      border: 1px solid var(--border-accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .jv-playlist-meta {
+      min-width: 0;
+    }
+    .jv-playlist-title {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .jv-playlist-sub {
+      font-size: 0.7rem;
+      color: var(--text-sub);
+    }
+    .jv-playlist-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -2371,15 +2665,23 @@ HTML_INDEX = """<!DOCTYPE html>
                 </button>
               </div>
             </div>
-            <div class="lt-controls-drawer" id="liveAudioControls" style="display:none;">
-              <div class="lt-slider-wrap">
+            <div class="lt-controls-drawer" id="liveAudioControls" style="display:none; flex-direction:column; gap:8px;">
+              <div class="lt-vol-row">
                 <svg class="icon-svg lt-vol-icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
                 <input type="range" min="0" max="1" step="any" value="1" id="liveVolumeSlider" class="lt-volume-slider" oninput="updateLiveVolume(this.value)" aria-label="Stream volume">
                 <span id="liveVolPercent" class="lt-vol-val">100%</span>
               </div>
-              <div class="lt-drift-pill" title="Phase-Locked Loop clock offset vs Discord master audio">
-                <span class="lt-drift-dot"></span>
-                <span id="syncDriftLabel">±0ms</span>
+              <div class="lt-telemetry-row">
+                <div class="lt-status-indicator locked" id="ltStatusInd">
+                  <span class="lt-drift-dot" style="width:6px; height:6px;"></span>
+                  <span id="ltStatusText">Phase-Locked</span>
+                </div>
+                <div class="lt-telemetry-pill" title="PLL Clock Drift vs Discord Bot Master">
+                  <span id="syncDriftLabel">±0ms</span>
+                </div>
+                <div class="lt-telemetry-pill" title="Audio Stream Quality">
+                  <span>320 kbps Studio</span>
+                </div>
               </div>
             </div>
           </div>
@@ -2438,6 +2740,10 @@ HTML_INDEX = """<!DOCTYPE html>
           <button class="segment-btn" onclick="switchTab('shortcuts')">
             <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             <span>Shortcuts</span>
+          </button>
+          <button class="segment-btn" onclick="switchTab('settings')">
+            <svg class="icon-svg" style="width:15px;height:15px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>Settings</span>
           </button>
         </div>
 
@@ -2562,6 +2868,26 @@ HTML_INDEX = """<!DOCTYPE html>
             </div>
             <div class="grid-categories" id="catGrid">
               <!-- Populated dynamically by loadCategories() -->
+            </div>
+          <!-- JuiceVault.xyz Account Playlists & Liked Songs -->
+          <div class="ui-card" id="jvPlaylistsCard" style="margin-bottom:14px;">
+            <div class="section-header">
+              <span class="section-title">
+                <svg class="icon-svg" style="color:#ec4899;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                My JuiceVault.xyz Playlists &amp; Likes
+              </span>
+              <button class="btn-kinetic btn-flat" style="font-size:0.72rem; padding:4px 8px;" onclick="loadJuiceVaultPlaylists(true)">
+                <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span>Sync</span>
+              </button>
+            </div>
+            <div id="jvPlaylistsContent">
+              <div style="font-size:0.78rem; color:var(--text-sub); text-align:center; padding:16px 8px;">
+                Connect your JuiceVault.xyz account to access your personal playlists and liked songs.
+                <div style="margin-top:10px;">
+                  <button class="btn-kinetic btn-primary" style="padding:6px 14px; font-size:0.75rem;" onclick="openUserModal()">Connect Account</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2818,6 +3144,224 @@ HTML_INDEX = """<!DOCTYPE html>
             </div>
           </div>
         </div>
+
+        <!-- TAB: SETTINGS -->
+        <div class="tab-content" id="tab-settings">
+          <div class="ui-card" style="margin-bottom:14px;">
+            <div class="section-header">
+              <span class="section-title">
+                <svg class="icon-svg" style="color:var(--accent);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Remote &amp; Studio Settings
+              </span>
+              <span class="btn-badge" style="font-size:0.68rem; padding:2px 8px;">Auto-Saved</span>
+            </div>
+
+            <!-- Group 1: Audio & Studio Streaming -->
+            <div class="settings-group">
+              <div class="settings-group-title">
+                <svg class="icon-svg" style="width:13px;height:13px;" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                Audio &amp; Synchronization
+              </div>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Listen Together Buffer Latency</div>
+                    <div class="setting-desc">Adaptive PLL clock buffer mode. Gecko/Zen and Firefox users should keep Stable to prevent audio clicks.</div>
+                  </div>
+                  <div class="setting-action">
+                    <div class="pill-selector" id="settingLatencySelector">
+                      <button class="pill-opt" data-val="low" onclick="setLatencyMode('low')">Ultra (250ms)</button>
+                      <button class="pill-opt" data-val="balanced" onclick="setLatencyMode('balanced')">Balanced</button>
+                      <button class="pill-opt active" data-val="stable" onclick="setLatencyMode('stable')">Stable (Gecko)</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Volume Wheel Velocity Curve</div>
+                    <div class="setting-desc">1% per deliberate scroll notch. Flicking fast accelerates dynamically to 2%–5% with gradual smoothing.</div>
+                  </div>
+                  <div class="setting-action">
+                    <div class="pill-selector" id="settingVolCurveSelector">
+                      <button class="pill-opt active" data-val="adaptive" onclick="setVolWheelCurve('adaptive')">Adaptive (1%–5%)</button>
+                      <button class="pill-opt" data-val="linear" onclick="setVolWheelCurve('linear')">Fixed 1%</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Soundboard Browser Preview</div>
+                    <div class="setting-desc">Audition meme sound clips directly in your browser before triggering on Discord.</div>
+                  </div>
+                  <div class="setting-action">
+                    <label class="switch-toggle">
+                      <input type="checkbox" id="settingSbPreviewToggle" onchange="setSoundboardPreview(this.checked)">
+                      <span class="switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="setting-row" id="settingSbVolRow">
+                  <div class="setting-info">
+                    <div class="setting-label">Soundboard Preview Volume</div>
+                    <div class="setting-desc">Volume gain applied to local in-browser soundboard previews.</div>
+                  </div>
+                  <div class="setting-action" style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" min="0" max="1" step="0.05" value="0.75" id="settingSbVolSlider" style="width:100px; accent-color:var(--accent);" oninput="setSoundboardPreviewVol(this.value)">
+                    <span id="settingSbVolPct" style="font-size:0.75rem; color:var(--text-muted); font-family:'JetBrains Mono',monospace; min-width:32px;">75%</span>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Hardware Media Keys &amp; Lockscreen</div>
+                    <div class="setting-desc">Allows keyboard media keys, headphone controls, and gaming mouse buttons to control playback.</div>
+                  </div>
+                  <div class="setting-action">
+                    <label class="switch-toggle">
+                      <input type="checkbox" id="settingMediaSessionToggle" checked onchange="setLockScreenControls(this.checked)">
+                      <span class="switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Group 2: Theme & Visual Appearance -->
+            <div class="settings-group">
+              <div class="settings-group-title">
+                <svg class="icon-svg" style="width:13px;height:13px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/></svg>
+                Theme &amp; Visual Appearance
+              </div>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Accent Theme Palette</div>
+                    <div class="setting-desc">Custom neon highlight and glow color across cards, sliders, and buttons.</div>
+                  </div>
+                  <div class="setting-action">
+                    <div class="color-swatch-row">
+                      <div class="color-swatch active" style="background:#a855f7; color:#a855f7;" data-theme="purple" onclick="setThemeAccent('purple')" title="Neon Purple (Default)"></div>
+                      <div class="color-swatch" style="background:#38bdf8; color:#38bdf8;" data-theme="cyan" onclick="setThemeAccent('cyan')" title="Electric Cyan"></div>
+                      <div class="color-swatch" style="background:#f43f5e; color:#f43f5e;" data-theme="rose" onclick="setThemeAccent('rose')" title="Rose Pink"></div>
+                      <div class="color-swatch" style="background:#10b981; color:#10b981;" data-theme="green" onclick="setThemeAccent('green')" title="Emerald Green"></div>
+                      <div class="color-swatch" style="background:#f59e0b; color:#f59e0b;" data-theme="gold" onclick="setThemeAccent('gold')" title="Cyber Gold"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Album Art Geometry</div>
+                    <div class="setting-desc">Shape geometry for current song artwork on the main player card.</div>
+                  </div>
+                  <div class="setting-action">
+                    <div class="pill-selector" id="settingCoverShapeSelector">
+                      <button class="pill-opt active" data-val="modern" onclick="setCoverShape('modern')">Modern (16px)</button>
+                      <button class="pill-opt" data-val="squircle" onclick="setCoverShape('squircle')">Squircle (28px)</button>
+                      <button class="pill-opt" data-val="circle" onclick="setCoverShape('circle')">Vinyl Disc</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Glassmorphism Blur Filter</div>
+                    <div class="setting-desc">Backdrop blur intensity for navigation headers and cards. Turn off for maximum FPS on low-power devices.</div>
+                  </div>
+                  <div class="setting-action">
+                    <div class="pill-selector" id="settingGlassSelector">
+                      <button class="pill-opt" data-val="none" onclick="setGlassBlur('none')">Flat (0px)</button>
+                      <button class="pill-opt active" data-val="frosted" onclick="setGlassBlur('frosted')">Frosted (16px)</button>
+                      <button class="pill-opt" data-val="deep" onclick="setGlassBlur('deep')">Deep (28px)</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Dynamic Ambient Aurora Waves</div>
+                    <div class="setting-desc">Default backdrop effect initialized when remote opens. Seamless reactive audio pulse.</div>
+                  </div>
+                  <div class="setting-action">
+                    <label class="switch-toggle">
+                      <input type="checkbox" id="settingAuroraToggle" checked onchange="setAuroraDefaultToggle(this.checked)">
+                      <span class="switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Group 3: JuiceVault.xyz Account Integration -->
+            <div class="settings-group">
+              <div class="settings-group-title">
+                <svg class="icon-svg" style="width:13px;height:13px;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                JuiceVault.xyz Account Sync
+              </div>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label" id="settingUserStatusLabel">Account Status</div>
+                    <div class="setting-desc" id="settingUserStatusDesc">Not signed in. Connect to sync your playlists and liked tracks.</div>
+                  </div>
+                  <div class="setting-action">
+                    <button class="btn-kinetic btn-primary" id="settingUserActionBtn" style="padding:6px 12px; font-size:0.75rem;" onclick="openUserModal()">
+                      Connect Account
+                    </button>
+                  </div>
+                </div>
+
+                <div class="setting-row" id="settingUserSyncRow" style="display:none;">
+                  <div class="setting-info">
+                    <div class="setting-label">Sync Playlists &amp; Likes</div>
+                    <div class="setting-desc">Fetch and refresh your custom playlists and library from the official API.</div>
+                  </div>
+                  <div class="setting-action">
+                    <button class="btn-kinetic btn-flat" style="padding:6px 12px; font-size:0.75rem;" onclick="loadJuiceVaultPlaylists(true)">
+                      Sync Now
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Group 4: Storage & Maintenance -->
+            <div class="settings-group">
+              <div class="settings-group-title">
+                <svg class="icon-svg" style="width:13px;height:13px;" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                Cache &amp; Reset
+              </div>
+              <div class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Clear Remote Web Cache</div>
+                    <div class="setting-desc">Clears cached track queues, soundboard samples, and temporary browser storage.</div>
+                  </div>
+                  <div class="setting-action">
+                    <button class="btn-kinetic btn-flat" style="padding:6px 12px; font-size:0.75rem;" onclick="clearAppCache()">
+                      Clear Cache
+                    </button>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-info">
+                    <div class="setting-label">Factory Reset Remote Settings</div>
+                    <div class="setting-desc">Restores all visual and audio settings back to original factory defaults.</div>
+                  </div>
+                  <div class="setting-action">
+                    <button class="btn-kinetic btn-flat" style="padding:6px 12px; font-size:0.75rem; color:var(--danger);" onclick="resetAllSettings()">
+                      Reset Defaults
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2879,6 +3423,10 @@ HTML_INDEX = """<!DOCTYPE html>
     <button class="nav-btn" onclick="switchMobileNav('shortcuts')">
       <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
       <span>Shortcuts</span>
+    </button>
+    <button class="nav-btn" onclick="switchMobileNav('settings')">
+      <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Settings</span>
     </button>
   </nav>
 
@@ -3060,7 +3608,7 @@ HTML_INDEX = """<!DOCTYPE html>
             <div id="userCardBio" style="font-size:0.72rem; color:var(--text-muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>
           </div>
         </div>
-        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-bottom:14px; text-align:center;">
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-bottom:14px; text-align:center;">
           <div style="padding:8px 4px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:var(--radius-sm);">
             <div id="userLikedCount" style="font-weight:700; font-size:0.9rem; color:#f43f5e;">0</div>
             <div style="font-size:0.65rem; color:var(--text-sub); text-transform:uppercase;">Likes</div>
@@ -3068,6 +3616,10 @@ HTML_INDEX = """<!DOCTYPE html>
           <div style="padding:8px 4px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:var(--radius-sm);">
             <div id="userListensCount" style="font-weight:700; font-size:0.9rem; color:var(--accent);">0</div>
             <div style="font-size:0.65rem; color:var(--text-sub); text-transform:uppercase;">Listens</div>
+          </div>
+          <div style="padding:8px 4px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:var(--radius-sm);">
+            <div id="userUniqueCount" style="font-weight:700; font-size:0.9rem; color:#10b981;">0</div>
+            <div style="font-size:0.65rem; color:var(--text-sub); text-transform:uppercase;">Songs</div>
           </div>
           <div style="padding:8px 4px; background:rgba(255,255,255,0.02); border:1px solid var(--border); border-radius:var(--radius-sm);">
             <div id="userStreakCount" style="font-weight:700; font-size:0.9rem; color:#38bdf8;">0d</div>
@@ -3078,22 +3630,49 @@ HTML_INDEX = """<!DOCTYPE html>
           <button class="btn-kinetic btn-flat" style="flex:1; justify-content:center; color:#f43f5e;" onclick="viewUserFavorites()">
             Favorites (<span id="userFavsBtnCount">0</span>)
           </button>
-          <button class="btn-kinetic btn-flat" style="flex:1; justify-content:center; color:var(--text-muted);" onclick="logoutUser()">
-            Disconnect
+          <button class="btn-kinetic btn-flat" style="flex:1; justify-content:center; color:var(--accent);" onclick="loadJuiceVaultPlaylists(true)">
+            Sync Playlists
+          </button>
+          <button class="btn-kinetic btn-flat" style="justify-content:center; color:var(--text-muted); padding:6px 10px;" onclick="logoutUser()">
+            Log Out
           </button>
         </div>
       </div>
 
       <!-- Login Form (when not logged in) -->
       <div id="userLoginForm">
-        <p style="font-size:0.78rem; color:var(--text-muted); line-height:1.45; margin-bottom:12px;">
-          Enter your <strong>juicevault.xyz</strong> username to connect your profile, display your badges, and save your liked songs.
-        </p>
-        <div style="display:flex; gap:8px; margin-bottom:8px;">
-          <input type="text" id="jvUsernameInput" class="search-field" placeholder="Username (e.g. ajaxfnc)" style="background:rgba(0,0,0,0.5); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 12px; color:#fff;" onkeydown="if(event.key==='Enter') loginJuiceVaultUser()">
-          <button class="btn-kinetic btn-badge" style="padding:8px 14px;" onclick="loginJuiceVaultUser()">Connect</button>
+        <!-- Auth Mode Toggle -->
+        <div style="display:flex; background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:8px; padding:3px; margin-bottom:14px; gap:4px;">
+          <button id="authTabLogin" class="btn-kinetic" style="flex:1; padding:6px; font-size:0.75rem; border-radius:6px; background:var(--accent); color:#fff; border:none;" onclick="switchAuthMode('login')">Account Sign In</button>
+          <button id="authTabPublic" class="btn-kinetic" style="flex:1; padding:6px; font-size:0.75rem; border-radius:6px; background:transparent; color:var(--text-muted); border:none;" onclick="switchAuthMode('public')">Public Username</button>
         </div>
-        <div id="jvLoginError" style="font-size:0.74rem; color:var(--danger); display:none; margin-top:4px;"></div>
+
+        <!-- Full Login Panel -->
+        <div id="authPanelLogin">
+          <p style="font-size:0.78rem; color:var(--text-muted); line-height:1.45; margin-bottom:12px;">
+            Sign in with your <strong>juicevault.xyz</strong> credentials to sync private playlists, likes, and full account stats.
+          </p>
+          <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+            <input type="text" id="jvAuthLoginInput" class="search-field" placeholder="Username or Email" style="background:rgba(0,0,0,0.5); border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 12px; color:#fff;" onkeydown="if(event.key==='Enter') loginJuiceVaultUserFull()">
+            <input type="password" id="jvAuthPassInput" class="search-field" placeholder="Password" style="background:rgba(0,0,0,0.5); border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 12px; color:#fff;" onkeydown="if(event.key==='Enter') loginJuiceVaultUserFull()">
+          </div>
+          <button class="btn-kinetic btn-primary" id="jvAuthLoginBtn" style="width:100%; padding:10px; font-size:0.82rem; justify-content:center;" onclick="loginJuiceVaultUserFull()">
+            Sign In to JuiceVault.xyz
+          </button>
+        </div>
+
+        <!-- Public Connect Panel -->
+        <div id="authPanelPublic" style="display:none;">
+          <p style="font-size:0.78rem; color:var(--text-muted); line-height:1.45; margin-bottom:12px;">
+            Enter any public <strong>juicevault.xyz</strong> username to display profile badges and stream their public likes.
+          </p>
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input type="text" id="jvUsernameInput" class="search-field" placeholder="Username (e.g. ajaxfnc)" style="background:rgba(0,0,0,0.5); border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 12px; color:#fff;" onkeydown="if(event.key==='Enter') loginJuiceVaultUser()">
+            <button class="btn-kinetic btn-badge" style="padding:8px 14px;" onclick="loginJuiceVaultUser()">Connect</button>
+          </div>
+        </div>
+
+        <div id="jvLoginError" style="font-size:0.74rem; color:var(--danger); display:none; margin-top:8px;"></div>
       </div>
     </div>
   </div>
@@ -3465,21 +4044,22 @@ HTML_INDEX = """<!DOCTYPE html>
       document.querySelectorAll('.segment-btn').forEach(el => el.classList.remove('active'));
       const target = document.getElementById('tab-' + tabId);
       if (target) target.classList.add('active');
-      const idx = ['queue', 'search', 'categories', 'soundboard', 'shortcuts'].indexOf(tabId);
+      const idx = ['queue', 'search', 'categories', 'soundboard', 'shortcuts', 'settings'].indexOf(tabId);
       if (idx !== -1) {
         const btns = document.querySelectorAll('.segment-bar.desktop-segment .segment-btn');
         if (btns[idx]) btns[idx].classList.add('active');
       }
       if (tabId === 'queue') loadQueue();
-      if (tabId === 'categories') loadCategories();
+      if (tabId === 'categories') { loadCategories(); loadJuiceVaultPlaylists(); }
       if (tabId === 'soundboard') loadSoundboard();
       if (tabId === 'shortcuts') renderShortcuts();
+      if (tabId === 'settings') renderSettingsUI();
       if (navigator.vibrate) navigator.vibrate(8);
     }
 
     function switchMobileNav(tabId) {
       document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-      const idx = ['player', 'queue', 'search', 'categories', 'soundboard', 'shortcuts'].indexOf(tabId);
+      const idx = ['player', 'queue', 'search', 'categories', 'soundboard', 'shortcuts', 'settings'].indexOf(tabId);
       if (idx !== -1) {
         const btns = document.querySelectorAll('.nav-btn');
         if (btns[idx]) btns[idx].classList.add('active');
@@ -3903,10 +4483,6 @@ HTML_INDEX = """<!DOCTYPE html>
         audio.crossOrigin = 'anonymous';
         audio.preload = 'auto';
         audio.playsInline = true;
-        const p = audio.play();
-        if (p !== undefined) {
-          p.catch(() => {});
-        }
         isAudioPrimed = true;
       } catch (e) {}
     }
@@ -3940,11 +4516,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
         syncLiveAudio(true);
         setupMediaSession();
-        const isGecko = navigator.userAgent.toLowerCase().includes('firefox') || navigator.userAgent.toLowerCase().includes('zen');
-        if (liveSyncInterval) clearInterval(liveSyncInterval);
-        liveSyncInterval = setInterval(() => {
-          if (liveStreamActive) syncLiveAudio(false);
-        }, isGecko ? 750 : 250);
+        restartLiveSyncLoop();
         showToast('Connecting 1:1 stream...');
       } else {
         if (liveSyncInterval) {
@@ -4040,18 +4612,22 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // Accelerated wheel velocity:
       // Deliberate scroll (>200ms): exactly 1% per notch (0.01)
-      // Rapid flicking: ramps up gradually: 2%, 3%, 4%, up to 5% max
-      if (dt > 220) {
-        volWheelVelocity = 1.0;
-      } else if (dt < 65) {
-        volWheelVelocity = Math.min(5.0, volWheelVelocity + 0.45);
-      } else if (dt < 130) {
-        volWheelVelocity = Math.min(3.5, volWheelVelocity + 0.25);
+      // Velocity curve: linear (fixed 1%) or adaptive (1%–5% based on scroll speed)
+      let stepPct = 1;
+      if (currentVolWheelCurve === 'linear') {
+        stepPct = 1;
       } else {
-        volWheelVelocity = Math.min(2.0, volWheelVelocity + 0.12);
+        if (dt > 220) {
+          volWheelVelocity = 1.0;
+        } else if (dt < 65) {
+          volWheelVelocity = Math.min(5.0, volWheelVelocity + 0.45);
+        } else if (dt < 130) {
+          volWheelVelocity = Math.min(3.5, volWheelVelocity + 0.25);
+        } else {
+          volWheelVelocity = Math.min(2.0, volWheelVelocity + 0.12);
+        }
+        stepPct = Math.max(1, Math.min(5, Math.round(volWheelVelocity)));
       }
-
-      const stepPct = Math.max(1, Math.min(5, Math.round(volWheelVelocity)));
       const step = stepPct / 100;
       const dir = (e.deltaY < 0) ? 1 : -1;
 
@@ -4132,10 +4708,13 @@ HTML_INDEX = """<!DOCTYPE html>
           if (title) title.innerText = 'Listen Together';
         };
 
+        let readyHandled = false;
         const onReady = () => {
+          if (readyHandled) return;
+          readyHandled = true;
           isAudioLoading = false;
           try {
-            if (currentElapsed > 0.1 && Math.abs(audio.currentTime - currentElapsed) > 0.4) {
+            if (audio.readyState >= 1 && currentElapsed > 0.1 && Math.abs(audio.currentTime - currentElapsed) > 0.4) {
               audio.currentTime = currentElapsed;
             }
           } catch (e) {}
@@ -4143,8 +4722,15 @@ HTML_INDEX = """<!DOCTYPE html>
           if (currentState && currentState.is_playing) {
             audio.play().catch(e => console.warn('Live playback play error:', e));
           }
-          if (badge) badge.innerText = '1:1 Sync';
-          if (title) title.innerText = 'Listen Together: Live';
+          if (badge) {
+            badge.innerText = '1:1 SYNC';
+            badge.className = 'lt-sync-badge live';
+          }
+          if (title) title.innerText = 'Listen Together';
+          const statusText = document.getElementById('ltStatusText');
+          if (statusText) statusText.innerText = 'Phase-Locked';
+          const statusInd = document.getElementById('ltStatusInd');
+          if (statusInd) statusInd.className = 'lt-status-indicator locked';
         };
 
         audio.onloadedmetadata = onReady;
@@ -4152,9 +4738,17 @@ HTML_INDEX = """<!DOCTYPE html>
 
         audio.onerror = (e) => {
           isAudioLoading = false;
+          currentLiveTrackId = null;
+          const statusText = document.getElementById('ltStatusText');
+          if (statusText) statusText.innerText = 'Reconnecting';
+          const statusInd = document.getElementById('ltStatusInd');
+          if (statusInd) statusInd.className = 'lt-status-indicator buffering';
           if (!liveStreamActive || !currentState || !currentState.is_playing) return;
           console.warn('Live audio stream error, auto-retrying in 1.2s...', e);
-          if (badge) badge.innerText = 'Retrying...';
+          if (badge) {
+            badge.innerText = 'RETRYING';
+            badge.className = 'lt-sync-badge connecting';
+          }
           if (audioRetryTimer) clearTimeout(audioRetryTimer);
           audioRetryTimer = setTimeout(() => {
             if (liveStreamActive && currentState && currentState.is_playing) {
@@ -4198,12 +4792,30 @@ HTML_INDEX = """<!DOCTYPE html>
           driftLabel.innerText = (driftMs >= 0 ? `+${driftMs}ms` : `${driftMs}ms`);
         }
 
-        // Gecko / Firefox / Zen Browser PLL dampening:
-        // Frequent playbackRate adjustments cause Gecko's Cubeb resampler buffer to flush & click/stutter.
-        // Also Gecko timer precision jitter (20-40ms) creates false micro-drifts.
         const isGecko = navigator.userAgent.toLowerCase().includes('firefox') || navigator.userAgent.toLowerCase().includes('zen');
-        const deadband = isGecko ? 0.22 : 0.035;
-        const hardSeekThreshold = isGecko ? 2.5 : 1.2;
+        let deadband = 0.08;
+        let hardSeekThreshold = 1.5;
+        let maxSteer = 0.05;
+
+        if (currentLatencyMode === 'low') {
+          deadband = 0.035;
+          hardSeekThreshold = 1.0;
+          maxSteer = 0.06;
+        } else if (currentLatencyMode === 'stable' || isGecko) {
+          deadband = 0.22;
+          hardSeekThreshold = 2.5;
+          maxSteer = 0.035;
+        }
+
+        const statusText = document.getElementById('ltStatusText');
+        const statusInd = document.getElementById('ltStatusInd');
+        if (Math.abs(driftMs) <= Math.round(deadband * 1000) + 40) {
+          if (statusText) statusText.innerText = 'Phase-Locked';
+          if (statusInd) statusInd.className = 'lt-status-indicator locked';
+        } else {
+          if (statusText) statusText.innerText = 'Aligning...';
+          if (statusInd) statusInd.className = 'lt-status-indicator buffering';
+        }
 
         if (Math.abs(drift) > hardSeekThreshold) {
           // Large drift -> Hard seek directly to Discord master position
@@ -4215,7 +4827,6 @@ HTML_INDEX = """<!DOCTYPE html>
           }
         } else if (Math.abs(drift) > deadband) {
           // Micro-drift: Proportional rate steering with rate hysteresis to avoid buffer churn
-          const maxSteer = isGecko ? 0.035 : 0.06;
           const steer = Math.min(maxSteer, Math.max(0.012, Math.abs(drift) * 0.10));
           const targetRate = (drift < 0) ? (speed * (1 + steer)) : (speed * (1 - steer));
           if (Math.abs(audio.playbackRate - targetRate) > (isGecko ? 0.015 : 0.004)) {
@@ -5414,6 +6025,8 @@ HTML_INDEX = """<!DOCTYPE html>
     let userLikesCache = [];
     let userLikesSet = new Set();
 
+    let userPlaylistsCache = [];
+
     function initJuiceVaultUser() {
       try {
         const savedUserStr = localStorage.getItem('jv_user');
@@ -5431,6 +6044,7 @@ HTML_INDEX = """<!DOCTYPE html>
         const username = localStorage.getItem('jv_username');
         if (username) {
           refreshJuiceVaultUserData(username);
+          loadJuiceVaultPlaylists();
         }
       } catch (e) {
         console.warn('JuiceVault user init failed:', e);
@@ -5438,12 +6052,33 @@ HTML_INDEX = """<!DOCTYPE html>
       updateFavoriteButtonState();
     }
 
+    function switchAuthMode(mode) {
+      const tabLogin = document.getElementById('authTabLogin');
+      const tabPub = document.getElementById('authTabPublic');
+      const panelLogin = document.getElementById('authPanelLogin');
+      const panelPub = document.getElementById('authPanelPublic');
+      const err = document.getElementById('jvLoginError');
+      if (err) err.style.display = 'none';
+
+      if (mode === 'login') {
+        if (tabLogin) { tabLogin.style.background = 'var(--accent)'; tabLogin.style.color = '#fff'; }
+        if (tabPub) { tabPub.style.background = 'transparent'; tabPub.style.color = 'var(--text-muted)'; }
+        if (panelLogin) panelLogin.style.display = 'block';
+        if (panelPub) panelPub.style.display = 'none';
+      } else {
+        if (tabPub) { tabPub.style.background = 'var(--accent)'; tabPub.style.color = '#fff'; }
+        if (tabLogin) { tabLogin.style.background = 'transparent'; tabLogin.style.color = 'var(--text-muted)'; }
+        if (panelLogin) panelLogin.style.display = 'none';
+        if (panelPub) panelPub.style.display = 'block';
+      }
+    }
+
     function openUserModal() {
       const sheet = document.getElementById('userSheet');
       if (sheet) sheet.classList.add('active');
       const err = document.getElementById('jvLoginError');
       if (err) err.style.display = 'none';
-      const input = document.getElementById('jvUsernameInput');
+      const input = document.getElementById('jvAuthLoginInput') || document.getElementById('jvUsernameInput');
       if (input && !currentJvUser) {
         setTimeout(() => input.focus(), 100);
       }
@@ -5452,6 +6087,70 @@ HTML_INDEX = """<!DOCTYPE html>
     function closeUserModal() {
       const sheet = document.getElementById('userSheet');
       if (sheet) sheet.classList.remove('active');
+    }
+
+    async function loginJuiceVaultUserFull() {
+      const loginInput = document.getElementById('jvAuthLoginInput');
+      const passInput = document.getElementById('jvAuthPassInput');
+      const errEl = document.getElementById('jvLoginError');
+      const btn = document.getElementById('jvAuthLoginBtn');
+      const username = (loginInput ? loginInput.value : '').trim();
+      const password = (passInput ? passInput.value : '').trim();
+
+      if (!username || !password) {
+        if (errEl) {
+          errEl.innerText = 'Please enter both username/email and password';
+          errEl.style.display = 'block';
+        }
+        return;
+      }
+
+      if (errEl) errEl.style.display = 'none';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'Signing in...';
+      }
+      showToast(`Logging in to JuiceVault.xyz...`);
+
+      try {
+        const res = await fetch(`/api/user/auth?${apiQuery()}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...apiHeaders() },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = 'Sign In to JuiceVault.xyz';
+        }
+
+        if (!data.ok || !data.user) {
+          if (errEl) {
+            errEl.innerText = data.error || 'Authentication failed. Check credentials.';
+            errEl.style.display = 'block';
+          }
+          return;
+        }
+
+        const user = data.user;
+        const token = data.token;
+        if (token) localStorage.setItem('jv_token', token);
+        localStorage.setItem('jv_username', user.username || username);
+        localStorage.setItem('jv_user', JSON.stringify(user));
+        renderUserProfile(user);
+        showToast(`Connected as @${user.username || username}!`);
+        closeUserModal();
+        await loadJuiceVaultPlaylists(true);
+      } catch (err) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = 'Sign In to JuiceVault.xyz';
+        }
+        if (errEl) {
+          errEl.innerText = `Connection failed: ${err.message}`;
+          errEl.style.display = 'block';
+        }
+      }
     }
 
     async function loginJuiceVaultUser() {
@@ -5483,8 +6182,9 @@ HTML_INDEX = """<!DOCTYPE html>
         localStorage.setItem('jv_user', JSON.stringify(user));
         renderUserProfile(user);
         showToast(`Connected as @${user.username || username}`);
-
+        closeUserModal();
         await refreshJuiceVaultLikes(username);
+        await loadJuiceVaultPlaylists(true);
       } catch (err) {
         if (errEl) {
           errEl.innerText = `Connection failed: ${err.message}`;
@@ -5522,6 +6222,158 @@ HTML_INDEX = """<!DOCTYPE html>
       } catch (e) {}
     }
 
+    async function loadJuiceVaultPlaylists(force = false) {
+      const container = document.getElementById('jvPlaylistsContent');
+      if (!container) return;
+
+      const username = localStorage.getItem('jv_username');
+      const userToken = localStorage.getItem('jv_token') || '';
+      if (!username) {
+        container.innerHTML = `
+          <div style="font-size:0.78rem; color:var(--text-sub); text-align:center; padding:16px 8px;">
+            Connect your JuiceVault.xyz account to access your personal playlists and liked songs.
+            <div style="margin-top:10px;">
+              <button class="btn-kinetic btn-primary" style="padding:6px 14px; font-size:0.75rem;" onclick="openUserModal()">Connect Account</button>
+            </div>
+          </div>`;
+        return;
+      }
+
+      if (!force && userPlaylistsCache.length > 0) {
+        renderJuiceVaultPlaylists();
+        return;
+      }
+
+      container.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); text-align:center; padding:12px;">Syncing playlists from JuiceVault.xyz...</div>';
+
+      try {
+        const q = new URLSearchParams({
+          username: username,
+          token: userToken
+        });
+        const res = await fetch(`/api/user/playlists?${q.toString()}&${apiQuery()}`, { headers: apiHeaders() });
+        const data = await res.json();
+        if (!data.ok) {
+          container.innerHTML = `<div style="font-size:0.75rem; color:var(--text-sub); padding:10px; text-align:center;">Could not load playlists: ${escapeHtml(data.error || 'Server error')}</div>`;
+          return;
+        }
+
+        userPlaylistsCache = data.playlists || [];
+        if (data.likes && Array.isArray(data.likes)) {
+          userLikesCache = data.likes;
+          userLikesSet = new Set(userLikesCache.map(x => String(x.id || x.songId || x.title).toLowerCase()));
+          localStorage.setItem('jv_likes', JSON.stringify(userLikesCache));
+          const favCountEl = document.getElementById('userFavsBtnCount');
+          if (favCountEl) favCountEl.innerText = userLikesCache.length;
+          updateFavoriteButtonState();
+        }
+
+        renderJuiceVaultPlaylists();
+      } catch (err) {
+        container.innerHTML = `<div style="font-size:0.75rem; color:var(--danger); padding:10px; text-align:center;">Sync error: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function renderJuiceVaultPlaylists() {
+      const container = document.getElementById('jvPlaylistsContent');
+      if (!container) return;
+
+      let html = '<div class="jv-playlists-list">';
+
+      const likesCount = userLikesCache ? userLikesCache.length : 0;
+      html += `
+        <div class="jv-playlist-card">
+          <div class="jv-playlist-left">
+            <div class="jv-playlist-disc" style="background:linear-gradient(135deg, rgba(244,63,94,0.3), rgba(168,85,247,0.3)); border-color:rgba(244,63,94,0.4);">
+              <svg class="icon-svg" style="width:16px;height:16px;color:#f43f5e;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </div>
+            <div class="jv-playlist-meta">
+              <div class="jv-playlist-title">Liked Songs</div>
+              <div class="jv-playlist-sub">${likesCount} track${likesCount === 1 ? '' : 's'} • Saved Vault Favorites</div>
+            </div>
+          </div>
+          <div class="jv-playlist-actions">
+            <button class="btn-kinetic btn-primary" style="padding:5px 10px; font-size:0.72rem;" onclick="playUserLikes(true)" title="Shuffle and queue all liked songs">
+              <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+              <span>Shuffle</span>
+            </button>
+            <button class="btn-kinetic btn-flat" style="padding:5px 8px; font-size:0.72rem;" onclick="viewUserFavorites()" title="View track list in search view">
+              <span>View</span>
+            </button>
+          </div>
+        </div>`;
+
+      if (userPlaylistsCache && userPlaylistsCache.length > 0) {
+        userPlaylistsCache.forEach(pl => {
+          const count = (pl.songs && Array.isArray(pl.songs)) ? pl.songs.length : (pl.songCount || 0);
+          html += `
+            <div class="jv-playlist-card">
+              <div class="jv-playlist-left">
+                <div class="jv-playlist-disc">
+                  <svg class="icon-svg" style="width:16px;height:16px;" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </div>
+                <div class="jv-playlist-meta">
+                  <div class="jv-playlist-title">${escapeHtml(pl.name || pl.title || 'Playlist')}</div>
+                  <div class="jv-playlist-sub">${count} track${count === 1 ? '' : 's'}${pl.author ? ` • by ${escapeHtml(pl.author)}` : ''}</div>
+                </div>
+              </div>
+              <div class="jv-playlist-actions">
+                <button class="btn-kinetic btn-primary" style="padding:5px 10px; font-size:0.72rem;" onclick="playJuiceVaultCustomPlaylist('${escapeHtml(pl.id || pl.name)}', true)" title="Shuffle playlist on Discord">
+                  <svg class="icon-svg" style="width:12px;height:12px;" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                  <span>Play</span>
+                </button>
+              </div>
+            </div>`;
+        });
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    async function playUserLikes(shuffle = true) {
+      if (!userLikesCache || userLikesCache.length === 0) {
+        showToast('No liked songs in your JuiceVault account');
+        return;
+      }
+      showToast(`Queueing ${userLikesCache.length} liked tracks on Discord...`);
+      const tracksToQueue = [...userLikesCache];
+      if (shuffle) {
+        for (let i = tracksToQueue.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [tracksToQueue[i], tracksToQueue[j]] = [tracksToQueue[j], tracksToQueue[i]];
+        }
+      }
+      for (let i = 0; i < Math.min(tracksToQueue.length, 25); i++) {
+        const item = tracksToQueue[i];
+        await action('play_track', { track_id: item.id || item.songId || item.title });
+        await new Promise(r => setTimeout(r, 60));
+      }
+      showToast(`Queued ${Math.min(tracksToQueue.length, 25)} favorites!`);
+    }
+
+    async function playJuiceVaultCustomPlaylist(plId, shuffle = true) {
+      const pl = userPlaylistsCache.find(x => (x.id === plId || x.name === plId));
+      if (!pl || !pl.songs || pl.songs.length === 0) {
+        showToast('Playlist is empty');
+        return;
+      }
+      const list = [...pl.songs];
+      if (shuffle) {
+        for (let i = list.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [list[i], list[j]] = [list[j], list[i]];
+        }
+      }
+      showToast(`Queueing "${pl.name || 'Playlist'}" on Discord...`);
+      for (let i = 0; i < Math.min(list.length, 25); i++) {
+        const song = list[i];
+        await action('play_track', { track_id: song.id || song.songId || song.title });
+        await new Promise(r => setTimeout(r, 60));
+      }
+      showToast(`Queued ${Math.min(list.length, 25)} tracks from ${pl.name || 'Playlist'}!`);
+    }
+
     function renderUserProfile(user) {
       currentJvUser = user;
       const profileView = document.getElementById('userProfileView');
@@ -5545,13 +6397,16 @@ HTML_INDEX = """<!DOCTYPE html>
       }
 
       const likesCount = document.getElementById('userLikedCount');
-      if (likesCount) likesCount.innerText = user.likes_count || 0;
+      if (likesCount) likesCount.innerText = user.likes_count || (user.stats && user.stats.likedCount) || (userLikesCache ? userLikesCache.length : 0);
 
       const listensCount = document.getElementById('userListensCount');
-      if (listensCount) listensCount.innerText = user.play_count || 0;
+      if (listensCount) listensCount.innerText = user.play_count || (user.listening && user.listening.totalListens) || 0;
+
+      const uniqueCount = document.getElementById('userUniqueCount');
+      if (uniqueCount) uniqueCount.innerText = (user.listening && user.listening.uniqueSongs) || (user.listening && user.listening.totalSongs) || 0;
 
       const streakCount = document.getElementById('userStreakCount');
-      if (streakCount) streakCount.innerText = `${user.streak || 0}d`;
+      if (streakCount) streakCount.innerText = `${(user.listening && user.listening.streak) || user.streak || 0}d`;
 
       const favCountEl = document.getElementById('userFavsBtnCount');
       if (favCountEl) favCountEl.innerText = userLikesCache.length || user.likes_count || 0;
@@ -5559,7 +6414,15 @@ HTML_INDEX = """<!DOCTYPE html>
       const badgesContainer = document.getElementById('userCardBadges');
       if (badgesContainer) {
         const badges = user.badges || [];
-        badgesContainer.innerHTML = badges.map(b => `<span class="status-badge jv-badge-pill">${escapeHtml(b)}</span>`).join('');
+        badgesContainer.innerHTML = badges.map(b => {
+          const lbl = (typeof b === 'object' && b !== null) ? (b.label || b.id) : String(b);
+          const tone = (typeof b === 'object' && b !== null && b.tone) ? b.tone : 'accent';
+          let toneStyle = 'background:rgba(168,85,247,0.15); color:var(--accent); border:1px solid rgba(168,85,247,0.3);';
+          if (tone === 'owner' || tone === 'rose') toneStyle = 'background:rgba(244,63,94,0.15); color:#fb7185; border:1px solid rgba(244,63,94,0.3);';
+          else if (tone === 'cyan' || tone === 'verified') toneStyle = 'background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3);';
+          else if (tone === 'green') toneStyle = 'background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3);';
+          return `<span class="status-badge" style="font-size:0.65rem; padding:2px 7px; border-radius:4px; ${toneStyle}">${escapeHtml(lbl)}</span>`;
+        }).join('');
       }
 
       const userBtn = document.getElementById('userBtn');
@@ -5573,6 +6436,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const headerName = document.getElementById('headerUserName');
       if (headerName) headerName.innerText = `@${user.username || user.display_name || 'User'}`;
 
+      renderSettingsUI();
       updateFavoriteButtonState();
     }
 
@@ -5580,6 +6444,8 @@ HTML_INDEX = """<!DOCTYPE html>
       currentJvUser = null;
       userLikesCache = [];
       userLikesSet.clear();
+      userPlaylistsCache = [];
+      localStorage.removeItem('jv_token');
       localStorage.removeItem('jv_username');
       localStorage.removeItem('jv_user');
       localStorage.removeItem('jv_likes');
@@ -5591,6 +6457,10 @@ HTML_INDEX = """<!DOCTYPE html>
 
       const input = document.getElementById('jvUsernameInput');
       if (input) input.value = '';
+      const loginInput = document.getElementById('jvAuthLoginInput');
+      if (loginInput) loginInput.value = '';
+      const passInput = document.getElementById('jvAuthPassInput');
+      if (passInput) passInput.value = '';
 
       const userBtn = document.getElementById('userBtn');
       if (userBtn) {
@@ -5603,8 +6473,279 @@ HTML_INDEX = """<!DOCTYPE html>
       const headerName = document.getElementById('headerUserName');
       if (headerName) headerName.innerText = 'Sign In';
 
+      loadJuiceVaultPlaylists();
+      renderSettingsUI();
       updateFavoriteButtonState();
       showToast('JuiceVault account disconnected');
+    }
+
+    // ==========================================
+    // Remote Settings Management Engine
+    // ==========================================
+    let currentTheme = 'purple';
+    let currentCoverShape = 'modern';
+    let currentGlassBlur = 'frosted';
+    let currentLatencyMode = (navigator.userAgent.toLowerCase().includes('firefox') || navigator.userAgent.toLowerCase().includes('zen')) ? 'stable' : 'balanced';
+    let currentVolWheelCurve = 'adaptive';
+    let soundboardPreviewEnabled = false;
+    let soundboardPreviewVol = 0.75;
+    let lockScreenControlsEnabled = true;
+    let auroraDefaultEnabled = true;
+
+    function loadSettings() {
+      try {
+        const savedStr = localStorage.getItem('jv_settings');
+        if (savedStr) {
+          const cfg = JSON.parse(savedStr);
+          if (cfg.theme) currentTheme = cfg.theme;
+          if (cfg.coverShape) currentCoverShape = cfg.coverShape;
+          if (cfg.glassBlur) currentGlassBlur = cfg.glassBlur;
+          if (cfg.latencyMode) currentLatencyMode = cfg.latencyMode;
+          if (cfg.volWheelCurve) currentVolWheelCurve = cfg.volWheelCurve;
+          if (cfg.sbPreview !== undefined) soundboardPreviewEnabled = !!cfg.sbPreview;
+          if (cfg.sbPreviewVol !== undefined) soundboardPreviewVol = parseFloat(cfg.sbPreviewVol) || 0.75;
+          if (cfg.lockScreen !== undefined) lockScreenControlsEnabled = !!cfg.lockScreen;
+          if (cfg.auroraDefault !== undefined) auroraDefaultEnabled = !!cfg.auroraDefault;
+        }
+      } catch (e) {
+        console.warn('Settings load error:', e);
+      }
+      applyAllSettings();
+    }
+
+    function saveSettings() {
+      try {
+        const cfg = {
+          theme: currentTheme,
+          coverShape: currentCoverShape,
+          glassBlur: currentGlassBlur,
+          latencyMode: currentLatencyMode,
+          volWheelCurve: currentVolWheelCurve,
+          sbPreview: soundboardPreviewEnabled,
+          sbPreviewVol: soundboardPreviewVol,
+          lockScreen: lockScreenControlsEnabled,
+          auroraDefault: auroraDefaultEnabled
+        };
+        localStorage.setItem('jv_settings', JSON.stringify(cfg));
+      } catch (e) {}
+    }
+
+    function applyAllSettings() {
+      setThemeAccent(currentTheme, false);
+      setCoverShape(currentCoverShape, false);
+      setGlassBlur(currentGlassBlur, false);
+      setLatencyMode(currentLatencyMode, false);
+      setVolWheelCurve(currentVolWheelCurve, false);
+      setSoundboardPreview(soundboardPreviewEnabled, false);
+      setSoundboardPreviewVol(soundboardPreviewVol, false);
+      setLockScreenControls(lockScreenControlsEnabled, false);
+      setAuroraDefaultToggle(auroraDefaultEnabled, false);
+      renderSettingsUI();
+    }
+
+    function setThemeAccent(theme, persist = true) {
+      currentTheme = theme;
+      document.body.classList.remove('theme-cyan', 'theme-rose', 'theme-green', 'theme-gold');
+      if (theme !== 'purple') {
+        document.body.classList.add(`theme-${theme}`);
+      }
+      document.querySelectorAll('.color-swatch').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-theme') === theme);
+      });
+      if (persist) {
+        saveSettings();
+        showToast(`Theme updated: ${theme.toUpperCase()}`);
+      }
+    }
+
+    function setCoverShape(shape, persist = true) {
+      currentCoverShape = shape;
+      document.body.classList.remove('cover-shape-squircle', 'cover-shape-circle');
+      if (shape === 'squircle') document.body.classList.add('cover-shape-squircle');
+      else if (shape === 'circle') document.body.classList.add('cover-shape-circle');
+      document.querySelectorAll('#settingCoverShapeSelector .pill-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-val') === shape);
+      });
+      if (persist) {
+        saveSettings();
+        showToast(`Album art shape: ${shape}`);
+      }
+    }
+
+    function setGlassBlur(mode, persist = true) {
+      currentGlassBlur = mode;
+      document.body.classList.remove('blur-none', 'blur-frosted');
+      if (mode === 'none') document.body.classList.add('blur-none');
+      else if (mode === 'deep') document.body.classList.add('blur-frosted');
+      document.querySelectorAll('#settingGlassSelector .pill-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-val') === mode);
+      });
+      if (persist) {
+        saveSettings();
+        showToast(`Glassmorphism: ${mode}`);
+      }
+    }
+
+    function setLatencyMode(mode, persist = true) {
+      currentLatencyMode = mode;
+      document.querySelectorAll('#settingLatencySelector .pill-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-val') === mode);
+      });
+      restartLiveSyncLoop();
+      if (persist) {
+        saveSettings();
+        showToast(`Buffer mode: ${mode.toUpperCase()}`);
+      }
+    }
+
+    function setVolWheelCurve(curve, persist = true) {
+      currentVolWheelCurve = curve;
+      document.querySelectorAll('#settingVolCurveSelector .pill-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-val') === curve);
+      });
+      if (persist) {
+        saveSettings();
+        showToast(`Volume curve: ${curve === 'adaptive' ? 'Adaptive (1%–5%)' : 'Fixed 1%'}`);
+      }
+    }
+
+    function setSoundboardPreview(val, persist = true) {
+      soundboardPreviewEnabled = !!val;
+      const t = document.getElementById('settingSbPreviewToggle');
+      if (t) t.checked = soundboardPreviewEnabled;
+      const sbRow = document.getElementById('settingSbVolRow');
+      if (sbRow) sbRow.style.display = soundboardPreviewEnabled ? 'flex' : 'none';
+      if (persist) {
+        saveSettings();
+        showToast(`Soundboard preview: ${soundboardPreviewEnabled ? 'ON' : 'OFF'}`);
+      }
+    }
+
+    function setSoundboardPreviewVol(val, persist = true) {
+      soundboardPreviewVol = parseFloat(val) || 0.75;
+      const sl = document.getElementById('settingSbVolSlider');
+      if (sl) sl.value = soundboardPreviewVol;
+      const pct = document.getElementById('settingSbVolPct');
+      if (pct) pct.innerText = `${Math.round(soundboardPreviewVol * 100)}%`;
+      if (persist) saveSettings();
+    }
+
+    function setLockScreenControls(val, persist = true) {
+      lockScreenControlsEnabled = !!val;
+      const t = document.getElementById('settingMediaSessionToggle');
+      if (t) t.checked = lockScreenControlsEnabled;
+      if (persist) {
+        saveSettings();
+        showToast(`Media keys / Lockscreen: ${lockScreenControlsEnabled ? 'ON' : 'OFF'}`);
+      }
+    }
+
+    function setAuroraDefaultToggle(val, persist = true) {
+      auroraDefaultEnabled = !!val;
+      const t = document.getElementById('settingAuroraToggle');
+      if (t) t.checked = auroraDefaultEnabled;
+      if (persist) {
+        saveSettings();
+        showToast(`Aurora background default: ${auroraDefaultEnabled ? 'ON' : 'OFF'}`);
+      }
+    }
+
+    function restartLiveSyncLoop() {
+      if (liveSyncInterval) {
+        clearInterval(liveSyncInterval);
+        liveSyncInterval = null;
+      }
+      if (!liveStreamActive) return;
+      let intervalMs = 300;
+      if (currentLatencyMode === 'low') intervalMs = 200;
+      else if (currentLatencyMode === 'stable') intervalMs = 800;
+      else intervalMs = 450;
+      liveSyncInterval = setInterval(() => {
+        if (liveStreamActive) syncLiveAudio(false);
+      }, intervalMs);
+    }
+
+    function renderSettingsUI() {
+      document.querySelectorAll('.color-swatch').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-theme') === currentTheme);
+      });
+      document.querySelectorAll('#settingCoverShapeSelector .pill-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-val') === currentCoverShape);
+      });
+      document.querySelectorAll('#settingGlassSelector .pill-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-val') === currentGlassBlur);
+      });
+      document.querySelectorAll('#settingLatencySelector .pill-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-val') === currentLatencyMode);
+      });
+      document.querySelectorAll('#settingVolCurveSelector .pill-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-val') === currentVolWheelCurve);
+      });
+      const tPreview = document.getElementById('settingSbPreviewToggle');
+      if (tPreview) tPreview.checked = soundboardPreviewEnabled;
+      const sbRow = document.getElementById('settingSbVolRow');
+      if (sbRow) sbRow.style.display = soundboardPreviewEnabled ? 'flex' : 'none';
+      const slVol = document.getElementById('settingSbVolSlider');
+      if (slVol) slVol.value = soundboardPreviewVol;
+      const pct = document.getElementById('settingSbVolPct');
+      if (pct) pct.innerText = `${Math.round(soundboardPreviewVol * 100)}%`;
+      const tLock = document.getElementById('settingMediaSessionToggle');
+      if (tLock) tLock.checked = lockScreenControlsEnabled;
+      const tAurora = document.getElementById('settingAuroraToggle');
+      if (tAurora) tAurora.checked = auroraDefaultEnabled;
+
+      const setLbl = document.getElementById('settingUserStatusLabel');
+      const setDesc = document.getElementById('settingUserStatusDesc');
+      const setBtn = document.getElementById('settingUserActionBtn');
+      const setSyncRow = document.getElementById('settingUserSyncRow');
+      if (currentJvUser) {
+        if (setLbl) setLbl.innerText = `Connected (@${currentJvUser.username || 'User'})`;
+        if (setDesc) setDesc.innerText = `Signed in as ${currentJvUser.display_name || currentJvUser.username}. Real-time profile, playlists & likes synced.`;
+        if (setBtn) { setBtn.innerText = 'Account Profile'; setBtn.className = 'btn-kinetic btn-flat'; }
+        if (setSyncRow) setSyncRow.style.display = 'flex';
+      } else {
+        if (setLbl) setLbl.innerText = 'Account Status';
+        if (setDesc) setDesc.innerText = 'Not signed in. Connect to sync your playlists and liked tracks.';
+        if (setBtn) { setBtn.innerText = 'Connect Account'; setBtn.className = 'btn-kinetic btn-primary'; }
+        if (setSyncRow) setSyncRow.style.display = 'none';
+      }
+    }
+
+    function clearAppCache() {
+      try {
+        lastQueueChecksum = '';
+        currentSearchResults = [];
+        localStorage.removeItem('jv_queue_cache');
+        localStorage.removeItem('jv_cached_state');
+        showToast('App cache cleared successfully');
+        loadQueue();
+      } catch (e) {
+        showToast('Cache cleared');
+      }
+    }
+
+    function resetAllSettings() {
+      try {
+        localStorage.removeItem('jv_settings');
+        localStorage.removeItem('jv_vis_preset');
+        localStorage.removeItem('jv_vis_enabled');
+        localStorage.removeItem('jv_vis_opacity');
+        localStorage.removeItem('jv_vis_sensitivity');
+        localStorage.removeItem('jv_vis_cover_bg');
+        currentTheme = 'purple';
+        currentCoverShape = 'modern';
+        currentGlassBlur = 'frosted';
+        currentLatencyMode = (navigator.userAgent.toLowerCase().includes('firefox') || navigator.userAgent.toLowerCase().includes('zen')) ? 'stable' : 'balanced';
+        currentVolWheelCurve = 'adaptive';
+        soundboardPreviewEnabled = false;
+        soundboardPreviewVol = 0.75;
+        lockScreenControlsEnabled = true;
+        auroraDefaultEnabled = true;
+        applyAllSettings();
+        showToast('All settings restored to defaults');
+      } catch (e) {
+        showToast('Settings reset');
+      }
     }
 
     function updateFavoriteButtonState() {
@@ -6921,6 +8062,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
     // Restore persistent user settings
     try {
+      loadSettings();
       updateCoverBlur(visCoverBlur);
       updateCoverDim(visCoverDim);
       updateCoverBgToggle(visCoverBgEnabled);
@@ -6948,8 +8090,9 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     } catch (e) {}
 
-    // Initialize JuiceVault account & favorites
+    // Initialize JuiceVault account, playlists & favorites
     initJuiceVaultUser();
+    loadJuiceVaultPlaylists();
 
     // Startup
     fetchTelemetry();
