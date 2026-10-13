@@ -2887,6 +2887,241 @@ HTML_INDEX = """<!DOCTYPE html>
       border-color: var(--border-accent);
       background: var(--accent-muted);
     }
+
+    /* ==========================================================
+       IDLE VISUALIZER FOCUS & BOTTOM-LEFT MINI PLAYER SYSTEM
+       ========================================================== */
+    .vis-focus-vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      background: radial-gradient(circle at center, transparent 35%, rgba(9, 9, 13, 0.72) 100%);
+      opacity: 0;
+      transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    body.vis-idle-focus-active .vis-focus-vignette {
+      opacity: 1;
+    }
+
+    /* Ambient Visualizer Canvas Focus State */
+    body.vis-idle-focus-active .ambient-visualizer-canvas {
+      opacity: 1 !important;
+      filter: drop-shadow(0 0 35px rgba(168, 85, 247, 0.65)) contrast(1.15) saturate(1.25) !important;
+      transform: scale(1.02) !important;
+      transition: all 0.75s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    body.vis-idle-focus-active .dynamic-cover-bg {
+      opacity: 0.95 !important;
+      filter: saturate(1.25) contrast(1.1) !important;
+      transition: all 0.75s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    /* Fading non-essential views during Visualizer Focus */
+    body.vis-idle-focus-active .app-header {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transform: translateY(-24px) scale(0.98) !important;
+      transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    body.vis-idle-focus-active .card-content-wrap {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transform: translateY(24px) scale(0.96) !important;
+      transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    body.vis-idle-focus-active .mobile-nav {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transform: translateY(30px) !important;
+      transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    /* MINI PLAYER IN BOTTOM-LEFT CORNER */
+    .card-player-wrap {
+      transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+    }
+
+    body.vis-idle-focus-active .card-player-wrap {
+      position: fixed !important;
+      left: 28px !important;
+      bottom: 28px !important;
+      top: auto !important;
+      right: auto !important;
+      width: 370px !important;
+      max-width: calc(100vw - 56px) !important;
+      z-index: 1000 !important;
+      margin: 0 !important;
+      animation: miniPlayerFloatIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      transition: all 0.65s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    @keyframes miniPlayerFloatIn {
+      0% {
+        opacity: 0.5;
+        transform: translate3d(-24px, 24px, 0) scale(0.94);
+      }
+      100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+    }
+
+    body.vis-idle-focus-active .card-player-wrap .ui-card {
+      background: rgba(13, 11, 22, 0.85) !important;
+      backdrop-filter: blur(32px) saturate(190%) !important;
+      -webkit-backdrop-filter: blur(32px) saturate(190%) !important;
+      border: 1px solid rgba(168, 85, 247, 0.36) !important;
+      border-radius: 20px !important;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(168, 85, 247, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
+      padding: 13px 16px !important;
+      display: grid !important;
+      grid-template-columns: 56px 1fr !important;
+      grid-template-areas:
+        "tag tag"
+        "art meta"
+        "scrub scrub"
+        "ctrl ctrl";
+      gap: 8px 12px !important;
+      align-items: center !important;
+      transition: all 0.65s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    /* Tag pill in mini player */
+    .vis-mini-focus-tag {
+      display: none;
+      grid-area: tag;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.62rem;
+      font-weight: 700;
+      color: var(--accent);
+      background: rgba(168, 85, 247, 0.12);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      border-radius: 999px;
+      padding: 3px 9px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace;
+      animation: pulseFocusTag 2.5s infinite ease-in-out;
+    }
+    body.vis-idle-focus-active .vis-mini-focus-tag {
+      display: flex !important;
+    }
+    @keyframes pulseFocusTag {
+      0%, 100% { box-shadow: 0 0 0 rgba(168, 85, 247, 0); }
+      50% { box-shadow: 0 0 12px rgba(168, 85, 247, 0.35); }
+    }
+
+    /* Mini player cover art */
+    body.vis-idle-focus-active .card-player-wrap .player-visual-wrap {
+      grid-area: art;
+      width: 56px !important;
+      height: 56px !important;
+      min-width: 56px !important;
+      margin: 0 !important;
+      border-radius: 14px !important;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6) !important;
+      overflow: hidden !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .player-cover {
+      width: 56px !important;
+      height: 56px !important;
+      border-radius: 14px !important;
+      object-fit: cover !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .cover-visualizer-aura,
+    body.vis-idle-focus-active .card-player-wrap .player-visual-ambient {
+      display: none !important;
+    }
+
+    /* Mini player meta text */
+    body.vis-idle-focus-active .card-player-wrap .track-meta {
+      grid-area: meta;
+      margin: 0 !important;
+      min-width: 0 !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .track-title-row {
+      gap: 6px !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .soundwave-box {
+      display: none !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .track-title {
+      font-size: 0.90rem !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      max-width: 260px !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .track-artist {
+      font-size: 0.72rem !important;
+      margin-top: 2px !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      max-width: 260px !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .pill-row,
+    body.vis-idle-focus-active .card-player-wrap .btn-fav {
+      display: none !important;
+    }
+
+    /* Mini scrubber */
+    body.vis-idle-focus-active .card-player-wrap .scrubber-wrap {
+      grid-area: scrub;
+      margin: 0 !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .scrubber-track {
+      height: 4px !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .scrubber-times {
+      font-size: 0.64rem !important;
+      margin-top: 2px !important;
+    }
+
+    /* Mini controls */
+    body.vis-idle-focus-active .card-player-wrap .controls-main {
+      grid-area: ctrl;
+      margin: 0 !important;
+      justify-content: center !important;
+      gap: 10px !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap #btnRepeat,
+    body.vis-idle-focus-active .card-player-wrap #btnShuffle,
+    body.vis-idle-focus-active .card-player-wrap [title="Rewind 10s"],
+    body.vis-idle-focus-active .card-player-wrap [title="Forward 10s"] {
+      display: none !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap .btn-play-pause {
+      width: 42px !important;
+      height: 42px !important;
+    }
+    body.vis-idle-focus-active .card-player-wrap #btnPrev,
+    body.vis-idle-focus-active .card-player-wrap #btnNext {
+      width: 36px !important;
+      height: 36px !important;
+    }
+
+    /* Hide auxiliary docks in mini mode */
+    body.vis-idle-focus-active .card-player-wrap .controls-sub,
+    body.vis-idle-focus-active .card-player-wrap .listen-together-card,
+    body.vis-idle-focus-active .card-player-wrap .telemetry-dock {
+      display: none !important;
+    }
+
+    @media (max-width: 859px) {
+      body.vis-idle-focus-active .card-player-wrap {
+        left: 12px !important;
+        right: 12px !important;
+        bottom: 14px !important;
+        width: auto !important;
+        max-width: none !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -2895,6 +3130,7 @@ HTML_INDEX = """<!DOCTYPE html>
     <div id="dynamicCoverOverlay" class="dynamic-cover-overlay"></div>
   </div>
   <canvas id="ambientVisualizerCanvas" class="ambient-visualizer-canvas"></canvas>
+  <div class="vis-focus-vignette" id="visFocusVignette"></div>
   <div class="backdrop-glow"></div>
 
   <!-- Header -->
@@ -3022,8 +3258,17 @@ HTML_INDEX = """<!DOCTYPE html>
     <!-- Responsive Grid -->
     <div class="app-grid">
       <!-- LEFT COLUMN: NOW PLAYING CARD -->
-      <div class="card-player-wrap">
-        <div class="ui-card">
+      <div class="card-player-wrap" id="cardPlayerWrap">
+        <div class="ui-card" id="mainPlayerCard">
+          <!-- Visualizer Idle Focus Mini Header Tag -->
+          <div class="vis-mini-focus-tag" id="visMiniFocusTag" onclick="exitVisIdleFocusMode(); resetVisIdleTimer();" style="cursor:pointer;" title="Click / Move mouse to restore full view">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span class="telemetry-live-dot" style="width:6px; height:6px;"></span>
+              <span>Visualizer Focus</span>
+            </div>
+            <span style="opacity:0.75; font-size:0.58rem;">5s Idle • Move mouse to restore</span>
+          </div>
+
           <div class="player-visual-wrap">
             <div class="player-visual-ambient" id="artAmbient"></div>
             <div class="cover-visualizer-aura" id="coverVisualizerAura"></div>
@@ -4237,7 +4482,7 @@ HTML_INDEX = """<!DOCTYPE html>
       </div>
 
       <!-- Master Switch -->
-      <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:var(--radius-sm); margin-bottom:12px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:var(--radius-sm); margin-bottom:8px;">
         <div>
           <div style="font-size:0.8rem; font-weight:700; color:#fff;">Reactive Visualizer</div>
           <div style="font-size:0.68rem; color:var(--text-sub);">Full-screen canvas &amp; dynamic cover aura</div>
@@ -4245,6 +4490,22 @@ HTML_INDEX = """<!DOCTYPE html>
         <button class="btn-kinetic btn-lt-action" id="visToggleMasterBtn" onclick="toggleVisualizerState()">
           <span id="visToggleMasterLabel">Enabled</span>
         </button>
+      </div>
+
+      <!-- Auto Focus (5s Idle Mini-Player) Switch -->
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:11px 14px; background:linear-gradient(135deg, rgba(168,85,247,0.1), rgba(56,189,248,0.05)); border:1px solid rgba(168,85,247,0.32); border-radius:var(--radius-sm); margin-bottom:12px;">
+        <div style="padding-right:12px;">
+          <div style="display:flex; align-items:center; gap:7px;">
+            <div style="font-size:0.8rem; font-weight:700; color:#fff;">Auto Focus (5s Inactivitate)</div>
+            <span class="lt-sync-badge live" style="font-size:0.58rem; padding:2px 6px;">Mini Player</span>
+          </div>
+          <div style="font-size:0.68rem; color:var(--text-sub); margin-top:3px; line-height:1.4;">
+            Când ești pe remote și nu miști mouse-ul timp de 5 secunde, playerul se micșorează în stânga jos și site-ul se focusează pe visualizer.
+          </div>
+        </div>
+        <label style="display:flex; align-items:center; cursor:pointer; flex-shrink:0;">
+          <input type="checkbox" id="visIdleFocusToggle" style="accent-color:var(--accent); width:20px; height:20px; cursor:pointer;" onchange="updateVisIdleFocusToggle(this.checked)">
+        </label>
       </div>
 
       <!-- Presets Grid (10 Presets) -->
@@ -8349,6 +8610,11 @@ HTML_INDEX = """<!DOCTYPE html>
     let visCoverDim = parseInt(localStorage.getItem('jv_vis_cover_dim') || '62', 10);
     let visCoverPulse = localStorage.getItem('jv_vis_cover_pulse') !== 'false';
     let currentCoverBgUrl = '';
+    let visIdleFocusEnabled = localStorage.getItem('jv_vis_idle_focus') === 'true';
+    let visIdleTimer = null;
+    let isVisIdleFocusActive = false;
+    let lastUserActivityMouseX = 0;
+    let lastUserActivityMouseY = 0;
     let visSimTime = 0;
     let visAnimFrame = null;
     let visStars = [];
@@ -8599,6 +8865,9 @@ HTML_INDEX = """<!DOCTYPE html>
       const pulseToggle = document.getElementById('visCoverPulseToggle');
       if (pulseToggle) pulseToggle.checked = visCoverPulse;
 
+      const idleToggle = document.getElementById('visIdleFocusToggle');
+      if (idleToggle) idleToggle.checked = visIdleFocusEnabled;
+
       updateVisualizerMasterBtnUI();
     }
 
@@ -8654,6 +8923,95 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
+    // ========================================================
+    // IDLE VISUALIZER FOCUS & BOTTOM-LEFT MINI PLAYER CONTROLLER
+    // ========================================================
+    function updateVisIdleFocusToggle(enabled) {
+      visIdleFocusEnabled = !!enabled;
+      try { localStorage.setItem('jv_vis_idle_focus', visIdleFocusEnabled ? 'true' : 'false'); } catch (e) {}
+      const idleToggle = document.getElementById('visIdleFocusToggle');
+      if (idleToggle) idleToggle.checked = visIdleFocusEnabled;
+      if (visIdleFocusEnabled) {
+        showToast('Auto Focus (5s): Activat • Playerul se micșorează în stânga jos');
+        resetVisIdleTimer();
+      } else {
+        showToast('Auto Focus: Dezactivat');
+        exitVisIdleFocusMode();
+        if (visIdleTimer) {
+          clearTimeout(visIdleTimer);
+          visIdleTimer = null;
+        }
+      }
+    }
+
+    function enterVisIdleFocusMode() {
+      if (isVisIdleFocusActive) return;
+      if (!visIdleFocusEnabled) return;
+
+      // Guard: do not activate if any modal or sheet is open
+      const activeModal = document.querySelector('.sheet-backdrop.active, .sheet-backdrop.visible, .modal-backdrop.active, .tutorial-modal-backdrop.active');
+      if (activeModal) return;
+
+      // Guard: do not activate if user is typing in a form field
+      const tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+      if (['input', 'textarea', 'select'].includes(tag)) return;
+
+      // On mobile screens (<860px), only enter if player tab is active
+      if (window.innerWidth < 860) {
+        const playerBtn = document.getElementById('mobileBtnPlayer');
+        if (playerBtn && !playerBtn.classList.contains('active')) return;
+      }
+
+      isVisIdleFocusActive = true;
+      document.body.classList.add('vis-idle-focus-active');
+
+      // Make sure ambient visualizer canvas is active and rendering
+      const canvas = document.getElementById('ambientVisualizerCanvas');
+      if (canvas && !canvas.classList.contains('active')) {
+        canvas.classList.add('active');
+        canvas.style.opacity = visOpacity;
+      }
+    }
+
+    function exitVisIdleFocusMode() {
+      if (!isVisIdleFocusActive) return;
+      isVisIdleFocusActive = false;
+      document.body.classList.remove('vis-idle-focus-active');
+    }
+
+    function resetVisIdleTimer() {
+      if (visIdleTimer) {
+        clearTimeout(visIdleTimer);
+        visIdleTimer = null;
+      }
+      if (!visIdleFocusEnabled) return;
+
+      visIdleTimer = setTimeout(() => {
+        enterVisIdleFocusMode();
+      }, 5000);
+    }
+
+    function handleUserActivity(e) {
+      if (!visIdleFocusEnabled) return;
+
+      // Micro-jitter deadband for high-DPI mouse sensors
+      if (e && e.type === 'mousemove') {
+        const dx = Math.abs(e.clientX - lastUserActivityMouseX);
+        const dy = Math.abs(e.clientY - lastUserActivityMouseY);
+        if (dx < 3 && dy < 3) return;
+        lastUserActivityMouseX = e.clientX;
+        lastUserActivityMouseY = e.clientY;
+      }
+
+      // If currently in focus mode, smoothly restore normal layout!
+      if (isVisIdleFocusActive) {
+        exitVisIdleFocusMode();
+      }
+
+      // Restart 5-second inactivity countdown
+      resetVisIdleTimer();
+    }
+
     function resetVisualizerSettings() {
       visPreset = 'aurora_mesh';
       visOpacity = 0.75;
@@ -8670,6 +9028,7 @@ HTML_INDEX = """<!DOCTYPE html>
       visCoverBlur = 36;
       visCoverDim = 62;
       visCoverPulse = true;
+      visIdleFocusEnabled = false;
       try {
         localStorage.setItem('jv_vis_preset', 'aurora_mesh');
         localStorage.setItem('jv_vis_opacity', '0.75');
@@ -8686,6 +9045,7 @@ HTML_INDEX = """<!DOCTYPE html>
         localStorage.setItem('jv_vis_cover_blur', '36');
         localStorage.setItem('jv_vis_cover_dim', '62');
         localStorage.setItem('jv_vis_cover_pulse', 'true');
+        localStorage.setItem('jv_vis_idle_focus', 'false');
       } catch (e) {}
       updateVisualizerOpacity(visOpacity);
       updateVisualizerSens(visSensitivity);
@@ -8700,6 +9060,11 @@ HTML_INDEX = """<!DOCTYPE html>
       updateCoverDim(visCoverDim);
       updateCoverBgToggle(true);
       updateCoverPulseToggle(true);
+      exitVisIdleFocusMode();
+      if (visIdleTimer) {
+        clearTimeout(visIdleTimer);
+        visIdleTimer = null;
+      }
       openVisualizerModal();
       showToast('Visualizer reset to Aurora Waves & defaults');
     }
@@ -9358,6 +9723,14 @@ HTML_INDEX = """<!DOCTYPE html>
         mini.classList.remove('visible');
       }
     });
+
+    // Idle focus mode user activity listeners
+    ['mousemove', 'mousedown', 'pointerdown', 'keydown', 'touchstart', 'touchmove', 'wheel'].forEach(evt => {
+      window.addEventListener(evt, handleUserActivity, { passive: true });
+    });
+    if (visIdleFocusEnabled) {
+      resetVisIdleTimer();
+    }
 
     // Instant paint from local cache (0ms perceived startup)
     try {
