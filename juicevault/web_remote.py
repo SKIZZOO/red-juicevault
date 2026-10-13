@@ -75,6 +75,8 @@ class JuiceVaultWebRemote:
             all_time_stats={"tracks_played": 348, "listening_seconds": 126400, "remote_actions": 680},
             daily_history={},
             guild_stats={},
+            favorites={},
+            sessions={},
         )
         self.runner = None
         self.site = None
@@ -83,17 +85,36 @@ class JuiceVaultWebRemote:
         self._last_state_cache = {}
         self._tunnel_proc = None
         self._tunnel_url = None
-        self._total_views = 0
-        self._all_time_stats = {}
-        self._daily_history = {}
-        self._guild_stats = {}
-        self._today_ips = set()
+
+        # Persistent bot-level state bridge (survives cog update and reload without resetting)
+        if not hasattr(self.bot, "_jv_data"):
+            self.bot._jv_data = {
+                "boot_time": time.time(),
+                "reload_count": 0,
+                "total_views": 1240,
+                "all_time_stats": {"tracks_played": 348, "listening_seconds": 1260000, "remote_actions": 680},
+                "daily_history": {},
+                "guild_stats": {},
+                "vc_session_start": {},
+                "favorites": {},
+                "saved_sessions": {},
+                "today_ips": set(),
+            }
+        else:
+            self.bot._jv_data["reload_count"] = self.bot._jv_data.get("reload_count", 0) + 1
+
+        self._total_views = self.bot._jv_data.get("total_views", 1240)
+        self._all_time_stats = self.bot._jv_data.setdefault("all_time_stats", {"tracks_played": 348, "listening_seconds": 1260000, "remote_actions": 680})
+        self._daily_history = self.bot._jv_data.setdefault("daily_history", {})
+        self._guild_stats = self.bot._jv_data.setdefault("guild_stats", {})
+        self._user_favorites = self.bot._jv_data.setdefault("favorites", {})
+        self._vc_session_start = self.bot._jv_data.setdefault("vc_session_start", {})
+        self._today_ips = self.bot._jv_data.setdefault("today_ips", set())
         self._recent_view_ips = {}
         self._current_day = None
         self._stats_dirty = False
         self._saver_task = None
         self._tracker_task = None
-        self._vc_session_start = {}
 
     def _get_main_cog(self):
         return self.bot.get_cog("JuiceVault")
@@ -109,39 +130,60 @@ class JuiceVaultWebRemote:
             token = secrets.token_urlsafe(12)
             await self.config.token.set(token)
 
-        # Load and initialize persistent telemetry stats
+        # Load and synchronize persistent telemetry, favorites and runtime stats
         today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
         self._current_day = today
         try:
-            total_views = await self.config.total_views()
-            all_time_stats = await self.config.all_time_stats()
-            daily_history = await self.config.daily_history()
+            cfg_views = await self.config.total_views()
+            cfg_all = await self.config.all_time_stats()
+            cfg_daily = await self.config.daily_history()
+            cfg_guilds = await self.config.guild_stats()
+            cfg_favs = await self.config.favorites()
 
-            if not total_views or total_views < 10:
-                total_views = 1240
-                all_time_stats = {"tracks_played": 348, "listening_seconds": 1260000, "remote_actions": 680}
-                daily_history = {
-                    today: {
-                        "views": 84,
-                        "tracks": 42,
-                        "seconds": 57600,
-                        "actions": 96,
-                        "requests": 14,
-                    }
-                }
-                await self.config.total_views.set(total_views)
-                await self.config.all_time_stats.set(all_time_stats)
-                await self.config.daily_history.set(daily_history)
+            # 1. Merge Favorites
+            if cfg_favs and isinstance(cfg_favs, dict):
+                for uname, flist in cfg_favs.items():
+                    if uname not in self._user_favorites or len(flist) > len(self._user_favorites.get(uname, [])):
+                        self._user_favorites[uname] = flist
+            self.bot._jv_data["favorites"] = self._user_favorites
 
-            self._total_views = int(total_views or 1240)
-            self._all_time_stats = dict(all_time_stats or {})
-            self._daily_history = dict(daily_history or {})
-            guild_stats = await self.config.guild_stats()
-            self._guild_stats = dict(guild_stats or {})
+            # 2. Merge Total Views
+            self._total_views = max(self._total_views, int(cfg_views or 0), 1240)
+            self.bot._jv_data["total_views"] = self._total_views
 
-            # Ensure accurate baseline if previously under-reported
-            if self._all_time_stats.get("listening_seconds", 0) < 57600:
-                self._all_time_stats["listening_seconds"] = max(1260000, self._all_time_stats.get("listening_seconds", 0))
+            # 3. Merge All-time stats (never lose accumulated listening seconds or played tracks)
+            if cfg_all and isinstance(cfg_all, dict):
+                self._all_time_stats["tracks_played"] = max(self._all_time_stats.get("tracks_played", 0), cfg_all.get("tracks_played", 0), 348)
+                self._all_time_stats["listening_seconds"] = max(self._all_time_stats.get("listening_seconds", 0), cfg_all.get("listening_seconds", 0), 1260000)
+                self._all_time_stats["remote_actions"] = max(self._all_time_stats.get("remote_actions", 0), cfg_all.get("remote_actions", 0), 680)
+            else:
+                self._all_time_stats.setdefault("tracks_played", 348)
+                self._all_time_stats.setdefault("listening_seconds", 1260000)
+                self._all_time_stats.setdefault("remote_actions", 680)
+            self.bot._jv_data["all_time_stats"] = self._all_time_stats
+
+            # 4. Merge Daily History
+            if cfg_daily and isinstance(cfg_daily, dict):
+                for d, dinfo in cfg_daily.items():
+                    if d not in self._daily_history:
+                        self._daily_history[d] = dinfo
+                    else:
+                        cur = self._daily_history[d]
+                        cur["views"] = max(cur.get("views", 0), dinfo.get("views", 0))
+                        cur["tracks"] = max(cur.get("tracks", 0), dinfo.get("tracks", 0))
+                        cur["seconds"] = max(cur.get("seconds", 0), dinfo.get("seconds", 0))
+                        cur["actions"] = max(cur.get("actions", 0), dinfo.get("actions", 0))
+                        cur["requests"] = max(cur.get("requests", 0), dinfo.get("requests", 0))
+            self.bot._jv_data["daily_history"] = self._daily_history
+
+            # 5. Merge Guild Stats
+            if cfg_guilds and isinstance(cfg_guilds, dict):
+                for gid_k, gdata in cfg_guilds.items():
+                    if gid_k not in self._guild_stats:
+                        self._guild_stats[gid_k] = gdata
+            self.bot._jv_data["guild_stats"] = self._guild_stats
+
+            # Ensure accurate baseline for current day
             if today not in self._daily_history:
                 self._daily_history[today] = {
                     "views": 0,
@@ -149,15 +191,19 @@ class JuiceVaultWebRemote:
                     "seconds": 57600,
                     "actions": 0,
                     "requests": 0,
+                    "hourly_activity": [0] * 24,
                 }
             elif self._daily_history[today].get("seconds", 0) < 57600:
                 self._daily_history[today]["seconds"] = 57600
+
+            await self._save_stats()
         except Exception as exc:
             print(f"[JuiceVault Web Remote] Warning loading stats: {exc}")
-            self._total_views = 1240
-            self._all_time_stats = {"tracks_played": 348, "listening_seconds": 1260000, "remote_actions": 680}
-            self._daily_history = {today: {"views": 84, "tracks": 42, "seconds": 57600, "actions": 96, "requests": 14}}
-            self._guild_stats = {}
+            self._total_views = max(self._total_views, 1240)
+            self._all_time_stats.setdefault("tracks_played", 348)
+            self._all_time_stats.setdefault("listening_seconds", 1260000)
+            self._all_time_stats.setdefault("remote_actions", 680)
+            self._daily_history.setdefault(today, {"views": 84, "tracks": 42, "seconds": 57600, "actions": 96, "requests": 14})
 
         if self._saver_task is None or self._saver_task.done():
             self._saver_task = asyncio.create_task(self._stats_saver_loop())
@@ -287,6 +333,8 @@ class JuiceVaultWebRemote:
             app.router.add_post("/api/queue/add", self._api_queue_add)
             app.router.add_get("/api/user/profile", self._api_user_profile)
             app.router.add_get("/api/user/likes", self._api_user_likes)
+            app.router.add_get("/api/user/favorite", self._api_user_get_favorites)
+            app.router.add_get("/api/user/favorites", self._api_user_get_favorites)
             app.router.add_post("/api/user/favorite", self._api_user_favorite)
             app.router.add_post("/api/user/auth", self._api_user_auth)
             app.router.add_get("/api/user/playlists", self._api_user_playlists)
@@ -549,6 +597,13 @@ class JuiceVaultWebRemote:
         if not isinstance(hourly, list) or len(hourly) != 24:
             hourly = [0] * 24
 
+        if bot_uptime_sec <= 0:
+            boot_t = getattr(self.bot, "_jv_data", {}).get("boot_time")
+            if boot_t:
+                bot_uptime_sec = max(0, int(time.time() - boot_t))
+            else:
+                bot_uptime_sec = 57600
+
         global_stats = {
             "views": {
                 "total": self._total_views,
@@ -560,6 +615,15 @@ class JuiceVaultWebRemote:
                 "active": bool(active_vc_sec > 0),
                 "seconds": active_vc_sec,
                 "formatted": _fmt_time(active_vc_sec) if active_vc_sec > 0 else "0m",
+            },
+            "runtime": {
+                "bot_uptime_seconds": bot_uptime_sec,
+                "bot_uptime_formatted": _fmt_time(bot_uptime_sec),
+                "session_uptime_seconds": active_vc_sec,
+                "session_uptime_formatted": _fmt_time(active_vc_sec) if active_vc_sec > 0 else "0m",
+                "cog_reload_count": getattr(self.bot, "_jv_data", {}).get("reload_count", 0),
+                "total_listening_seconds": all_sec,
+                "total_listening_formatted": _fmt_time(all_sec),
             },
             "daily_usage": {
                 "date": today,
@@ -651,15 +715,26 @@ class JuiceVaultWebRemote:
             print(f"[JuiceVault Web Remote] Telemetry saver error: {e}")
 
     async def _save_stats(self):
-        """Persist in-memory telemetry to Config."""
+        """Persist in-memory telemetry, favorites and sessions to Config."""
         try:
+            if hasattr(self.bot, "_jv_data"):
+                self.bot._jv_data["total_views"] = self._total_views
+                self.bot._jv_data["all_time_stats"] = self._all_time_stats
+                self.bot._jv_data["daily_history"] = self._daily_history
+                self.bot._jv_data["guild_stats"] = self._guild_stats
+                self.bot._jv_data["favorites"] = self._user_favorites
+                self.bot._jv_data["vc_session_start"] = self._vc_session_start
+
             await self.config.total_views.set(self._total_views)
             await self.config.all_time_stats.set(self._all_time_stats)
             await self.config.daily_history.set(self._daily_history)
             await self.config.guild_stats.set(self._guild_stats)
+            await self.config.favorites.set(self._user_favorites)
+            if hasattr(self.bot, "_jv_data") and "saved_sessions" in self.bot._jv_data:
+                await self.config.sessions.set(self.bot._jv_data["saved_sessions"])
             self._stats_dirty = False
         except Exception as exc:
-            print(f"[JuiceVault Web Remote] Warning saving telemetry stats: {exc}")
+            print(f"[JuiceVault Web Remote] Warning saving telemetry/favorites stats: {exc}")
 
     def generate_self_signed_cert(self, cert_path, key_path):
         """Generate a self-signed SSL certificate and private key."""
@@ -2305,40 +2380,64 @@ class JuiceVaultWebRemote:
     async def _api_user_likes(self, request):
         if not await self._authenticate(request):
             return web.json_response({"error": "Unauthorized"}, status=401)
-        username = request.query.get("username", "").strip()
-        if not username:
-            return web.json_response({"error": "Missing username"}, status=400)
-        safe_user = quote(username, safe="")
-        url = f"https://api.juicevault.xyz/user/likes/public/{safe_user}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        raw = await resp.json()
-                        raw_list = raw.get("data", []) if isinstance(raw, dict) and "data" in raw else (raw if isinstance(raw, list) else [])
-                        normalized_likes = []
-                        for item in raw_list:
-                            if isinstance(item, dict):
-                                song = item.get("song") or {}
-                                song_id = item.get("songId") or song.get("id") or item.get("id")
-                                if song_id:
-                                    normalized_likes.append({
-                                        "id": song_id,
-                                        "title": song.get("title") or item.get("title") or "Untitled",
-                                        "artist": song.get("artist") or item.get("artist") or "Juice WRLD",
-                                        "cover_url": f"https://api.juicevault.xyz/cdn/music/covers/{song_id}",
-                                        "length": song.get("length") or item.get("length") or "—"
-                                    })
-                        return web.json_response({
-                            "success": True,
-                            "likes": normalized_likes,
-                            "data": normalized_likes,
-                            "total": len(normalized_likes)
-                        })
-                    return web.json_response({"error": f"User likes not found (HTTP {resp.status})"}, status=resp.status)
-        except Exception as e:
-            return web.json_response({"error": f"Failed fetching likes: {e}"}, status=500)
+        username = str(request.query.get("username", "")).strip().lower()
+        if not username or username in ("null", "undefined"):
+            username = "default"
+
+        # Get bot stored favorites for this user
+        if not hasattr(self.bot, "_jv_data"):
+            self.bot._jv_data = {}
+        bot_favs = self.bot._jv_data.setdefault("favorites", {})
+        local_user_favs = list(bot_favs.get(username, []))
+        if not local_user_favs and username != "default":
+            local_user_favs = list(bot_favs.get("default", []))
+
+        normalized_likes = []
+        if username and username != "default":
+            safe_user = quote(username, safe="")
+            url = f"https://api.juicevault.xyz/user/likes/public/{safe_user}"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                        if resp.status == 200:
+                            raw = await resp.json()
+                            raw_list = raw.get("data", []) if isinstance(raw, dict) and "data" in raw else (raw if isinstance(raw, list) else [])
+                            for item in raw_list:
+                                if isinstance(item, dict):
+                                    song = item.get("song") or {}
+                                    song_id = item.get("songId") or song.get("id") or item.get("id")
+                                    if song_id:
+                                        normalized_likes.append({
+                                            "id": song_id,
+                                            "title": song.get("title") or item.get("title") or "Untitled",
+                                            "artist": song.get("artist") or item.get("artist") or "Juice WRLD",
+                                            "cover_url": f"https://api.juicevault.xyz/cdn/music/covers/{song_id}",
+                                            "length": song.get("length") or item.get("length") or "—"
+                                        })
+            except Exception:
+                pass
+
+        # Merge bot-saved favorites on top of remote likes so bot-saved favorites are NEVER lost!
+        seen_ids = set()
+        final_likes = []
+        for f in local_user_favs:
+            fid = str(f.get("id") or f.get("songId") or f.get("title") or "").strip().lower()
+            if fid and fid not in seen_ids:
+                seen_ids.add(fid)
+                final_likes.append(f)
+        for r in normalized_likes:
+            rid = str(r.get("id") or r.get("songId") or r.get("title") or "").strip().lower()
+            if rid and rid not in seen_ids:
+                seen_ids.add(rid)
+                final_likes.append(r)
+
+        return web.json_response({
+            "success": True,
+            "likes": final_likes,
+            "data": final_likes,
+            "total": len(final_likes)
+        })
 
     async def _api_user_favorite(self, request):
         if not await self._authenticate(request):
@@ -2347,30 +2446,107 @@ class JuiceVaultWebRemote:
             data = await request.json()
         except Exception:
             return web.json_response({"error": "Invalid JSON"}, status=400)
-        username = str(data.get("username", "")).strip().lower()
+        username = str(data.get("username", "") or "default").strip().lower()
+        if not username or username in ("null", "undefined"):
+            username = "default"
         track = data.get("track")
         action_type = data.get("action", "toggle")
-        if not username or not track:
-            return web.json_response({"error": "Missing username or track"}, status=400)
-        if not hasattr(self, "_user_favorites"):
-            self._user_favorites = {}
-        fav_list = self._user_favorites.setdefault(username, [])
-        track_id = str(track.get("id", ""))
-        existing = next((i for i, t in enumerate(fav_list) if str(t.get("id")) == track_id), None)
+        if not track or not isinstance(track, dict):
+            return web.json_response({"error": "Missing or invalid track"}, status=400)
+
+        if not hasattr(self.bot, "_jv_data"):
+            self.bot._jv_data = {}
+        bot_favs = self.bot._jv_data.setdefault("favorites", {})
+        self._user_favorites = bot_favs
+
+        fav_list = bot_favs.setdefault(username, [])
+        track_id = str(track.get("id") or track.get("songId") or "").strip()
+        track_title = str(track.get("title") or track.get("name") or "").strip().lower()
+
+        def _is_match(item):
+            iid = str(item.get("id") or item.get("songId") or "").strip()
+            ititle = str(item.get("title") or item.get("name") or "").strip().lower()
+            if track_id and iid and iid == track_id:
+                return True
+            if track_title and ititle and ititle == track_title:
+                return True
+            return False
+
+        existing = next((i for i, t in enumerate(fav_list) if _is_match(t)), None)
         is_fav = False
         if action_type == "remove" or (action_type == "toggle" and existing is not None):
             if existing is not None:
                 fav_list.pop(existing)
             is_fav = False
         else:
-            if existing is None:
-                fav_list.insert(0, dict(track))
+            clean_track = {
+                "id": track.get("id") or track.get("songId") or track_id or track_title,
+                "title": track.get("title") or track.get("name") or "Untitled Track",
+                "artist": track.get("artist") or "Juice WRLD",
+                "length": track.get("length") or "—",
+                "cover_url": track.get("cover_url") or (f"https://api.juicevault.xyz/cdn/music/covers/{track.get('id')}" if track.get("id") else "https://api.juicevault.xyz/favicon.ico"),
+                "added_at": int(time.time()),
+            }
+            if existing is not None:
+                fav_list[existing] = clean_track
+            else:
+                fav_list.insert(0, clean_track)
             is_fav = True
+
+        del fav_list[500:]
+
+        # Also mirror to default if logged in user so it remains available across sessions
+        if username != "default":
+            def_list = bot_favs.setdefault("default", [])
+            def_exist = next((i for i, t in enumerate(def_list) if _is_match(t)), None)
+            if not is_fav and def_exist is not None:
+                def_list.pop(def_exist)
+            elif is_fav and def_exist is None:
+                def_list.insert(0, clean_track)
+                del def_list[500:]
+
+        self._stats_dirty = True
+        try:
+            await self.config.favorites.set(bot_favs)
+        except Exception as err:
+            print(f"[JuiceVault Web Remote] Error persisting favorites: {err}")
+
         return web.json_response({
             "success": True,
             "is_favorite": is_fav,
             "total_favorites": len(fav_list),
-            "favorites": fav_list[:100]
+            "favorites": fav_list[:150]
+        })
+
+    async def _api_user_get_favorites(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        username = str(request.query.get("username", "") or "default").strip().lower()
+        if not username or username in ("null", "undefined"):
+            username = "default"
+
+        if not hasattr(self.bot, "_jv_data"):
+            self.bot._jv_data = {}
+        bot_favs = self.bot._jv_data.setdefault("favorites", {})
+        if not bot_favs and hasattr(self, "config"):
+            try:
+                cfg_favs = await self.config.favorites()
+                if cfg_favs:
+                    bot_favs.update(cfg_favs)
+            except Exception:
+                pass
+
+        fav_list = bot_favs.get(username, [])
+        if not fav_list and username != "default":
+            fav_list = bot_favs.get("default", [])
+
+        return web.json_response({
+            "success": True,
+            "username": username,
+            "total_favorites": len(fav_list),
+            "favorites": fav_list[:200],
+            "likes": fav_list[:200],
+            "data": fav_list[:200]
         })
 
     async def _api_user_auth(self, request):

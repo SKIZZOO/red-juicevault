@@ -97,6 +97,35 @@ class JuiceVault(commands.Cog):
                 pass
             self.restore_task = None
         self._cleanup_prefetch()
+
+        # Preserve active playback sessions on self.bot._jv_data across cog updates & reloads
+        if not hasattr(self.bot, "_jv_data"):
+            self.bot._jv_data = {}
+        saved_sessions = self.bot._jv_data.setdefault("saved_sessions", {})
+
+        for gid in list(self.tasks):
+            guild = self.bot.get_guild(gid)
+            voice = guild.voice_client if guild else None
+            cur_track = self.current.get(gid)
+            cur_pos = self.play_positions.get(gid, 0.0)
+            res_track = None
+            if cur_track:
+                res_track = dict(cur_track)
+                res_track["_resume_position"] = cur_pos
+                res_track["_resume_was_playing"] = bool(voice and (voice.is_playing() or not voice.is_paused()))
+
+            saved_sessions[gid] = {
+                "channel_id": voice.channel.id if (voice and voice.channel) else None,
+                "current_track": res_track,
+                "queue": list(self.queues.get(gid, [])),
+                "manual_queue": list(self.manual_queues.get(gid, [])),
+                "loop": self.loops.get(gid, "off"),
+                "effects": self.effects.get(gid, "none"),
+                "position": cur_pos,
+                "history": list(self.history.get(gid, [])),
+                "saved_at": time.time(),
+            }
+
         for guild_id in list(self.tasks):
             await self._stop(guild_id)
         if self.session and not self.session.closed:
@@ -115,6 +144,7 @@ class JuiceVault(commands.Cog):
         try:
             await self.bot.wait_until_ready()
             await asyncio.sleep(2)
+            saved_sessions = getattr(self.bot, "_jv_data", {}).get("saved_sessions", {})
             for guild_id, settings in (await self.config.all_guilds()).items():
                 if not settings.get("enabled") or not settings.get("channel_id"):
                     continue
@@ -126,12 +156,29 @@ class JuiceVault(commands.Cog):
                     continue
                 if guild_id in self.tasks:
                     continue
+
+                saved = saved_sessions.pop(guild_id, None)
+
                 self.stop_events[guild_id] = asyncio.Event()
                 self.skip_events[guild_id] = asyncio.Event()
                 self.seek_events[guild_id] = asyncio.Event()
                 self.skip_counts[guild_id] = 0
-                self.manual_queues[guild_id] = []
-                self.effects[guild_id] = "none"
+
+                if saved:
+                    self.queues[guild_id] = list(saved.get("queue") or [])
+                    mq = list(saved.get("manual_queue") or [])
+                    cur_t = saved.get("current_track")
+                    if cur_t:
+                        mq.insert(0, cur_t)
+                    self.manual_queues[guild_id] = mq
+                    self.effects[guild_id] = saved.get("effects", "none")
+                    self.loops[guild_id] = saved.get("loop", "off")
+                    self.history[guild_id] = list(saved.get("history") or [])
+                    self.play_positions[guild_id] = saved.get("position", 0.0)
+                else:
+                    self.manual_queues[guild_id] = []
+                    self.effects[guild_id] = "none"
+
                 self.tasks[guild_id] = asyncio.create_task(self._player(guild, channel))
         except asyncio.CancelledError:
             raise
@@ -1142,7 +1189,7 @@ class JuiceVault(commands.Cog):
     @commands.group(name="jv", invoke_without_command=True)
     @commands.guild_only()
     async def jv(self, ctx):
-        await ctx.send("`4jv start` `4jv stop` `4jv skip` `4jv skip10` `4jv shuffle` `4jv categories` `4jv category <name>` `4jv search <name>` `4jv play <name>` `4jv refresh` `4jv status` `4jv remote`")
+        await ctx.send("`4jv start` `4jv stop` `4jv skip` `4jv skip10` `4jv shuffle` `4jv fav` `4jv favs` `4jv playfav <#>` `4jv categories` `4jv category <name>` `4jv search <name>` `4jv play <name>` `4jv refresh` `4jv status` `4jv remote`")
 
     @jv.command(name="start")
     async def start(self, ctx):
@@ -1220,6 +1267,135 @@ class JuiceVault(commands.Cog):
         self._cleanup_prefetch(ctx.guild.id)
         self._trigger_next_prefetch(ctx.guild.id)
         await ctx.send(f"🔀 Queue shuffled — `{len(queue)}` tracks.")
+
+    @jv.command(name="favorite", aliases=["fav", "like"])
+    async def favorite_cmd(self, ctx, *, search_query: str = None):
+        """Favorite or unfavorite the currently playing song or search query."""
+        gid = ctx.guild.id
+        track = None
+        if search_query:
+            category = await self.config.guild(ctx.guild).category()
+            tracks = await self.fetch_tracks(category)
+            q = search_query.strip().lower()
+            matches = [t for t in tracks if q in str(t.get("title", "")).lower() or q in str(t.get("artist", "")).lower()]
+            if not matches:
+                await ctx.send(f"❌ No track matching `{search_query}` found.")
+                return
+            track = matches[0]
+        else:
+            track = self.current.get(gid)
+            if not track:
+                await ctx.send("❌ No track is currently playing in this server.")
+                return
+
+        username = str(ctx.author.id)
+        author_name = ctx.author.display_name
+
+        if not hasattr(self.bot, "_jv_data"):
+            self.bot._jv_data = {}
+        bot_favs = self.bot._jv_data.setdefault("favorites", {})
+        user_list = bot_favs.setdefault(username, [])
+
+        track_id = str(track.get("id") or track.get("songId") or "").strip()
+        track_title = str(track.get("title") or track.get("name") or "").strip().lower()
+
+        existing = next((i for i, t in enumerate(user_list) if (track_id and str(t.get("id")) == track_id) or (track_title and str(t.get("title", "")).lower() == track_title)), None)
+
+        t_title = track.get("title") or track.get("name") or "Untitled"
+        t_artist = track.get("artist") or "Juice WRLD"
+
+        if existing is not None:
+            user_list.pop(existing)
+            action_msg = f"💔 Removed **{t_title}** from your favorites."
+        else:
+            clean_track = {
+                "id": track.get("id") or track_id or track_title,
+                "title": t_title,
+                "artist": t_artist,
+                "length": track.get("length") or "—",
+                "cover_url": track.get("cover_url") or (f"https://api.juicevault.xyz/cdn/music/covers/{track.get('id')}" if track.get("id") else ""),
+                "added_at": int(time.time()),
+            }
+            user_list.insert(0, clean_track)
+            action_msg = f"❤️ Added **{t_title}** by *{t_artist}* to your favorites! ({len(user_list)} saved)"
+
+        # Mirror under display name for easy Web Remote reference
+        bot_favs[author_name.lower()] = user_list
+
+        if hasattr(self, "web_remote") and self.web_remote:
+            self.web_remote._user_favorites = bot_favs
+            try:
+                await self.web_remote.config.favorites.set(bot_favs)
+            except Exception:
+                pass
+
+        await ctx.send(action_msg)
+
+    @jv.command(name="favorites", aliases=["favs", "likes"])
+    async def favorites_cmd(self, ctx):
+        """List your saved JuiceVault favorites."""
+        username = str(ctx.author.id)
+        bot_favs = getattr(self.bot, "_jv_data", {}).get("favorites", {})
+        user_list = bot_favs.get(username) or bot_favs.get(ctx.author.display_name.lower()) or bot_favs.get("default", [])
+        if not user_list:
+            await ctx.send("You don't have any saved favorites yet. Use `4jv favorite` while a track is playing!")
+            return
+
+        embed = discord.Embed(
+            title=f"❤️ {ctx.author.display_name}'s JuiceVault Favorites ({len(user_list)})",
+            color=0xF43F5E,
+        )
+        lines = []
+        for i, t in enumerate(user_list[:15], start=1):
+            title = t.get("title", "Untitled")
+            artist = t.get("artist", "Juice WRLD")
+            length = t.get("length", "—")
+            lines.append(f"`{i}.` **{title}** — *{artist}* (`{length}`)")
+
+        if len(user_list) > 15:
+            lines.append(f"\n*...and {len(user_list) - 15} more on the Web Remote.*")
+
+        embed.description = "\n".join(lines)
+        embed.set_footer(text="Use 4jv playfav <number> to queue or play on Web Remote.")
+        await ctx.send(embed=embed)
+
+    @jv.command(name="playfav", aliases=["pf"])
+    async def playfav_cmd(self, ctx, *, item: str = "1"):
+        """Queue or play a song from your favorites."""
+        gid = ctx.guild.id
+        if gid not in self.tasks:
+            await ctx.send("JuiceVault is not running. Use `4jv start` first.")
+            return
+
+        username = str(ctx.author.id)
+        bot_favs = getattr(self.bot, "_jv_data", {}).get("favorites", {})
+        user_list = bot_favs.get(username) or bot_favs.get(ctx.author.display_name.lower()) or bot_favs.get("default", [])
+        if not user_list:
+            await ctx.send("You don't have any saved favorites yet.")
+            return
+
+        selected = None
+        if item.isdigit():
+            idx = int(item) - 1
+            if 0 <= idx < len(user_list):
+                selected = user_list[idx]
+        elif item.lower() == "all":
+            self.manual_queues.setdefault(gid, []).extend(list(user_list))
+            await ctx.send(f"➕ Queued all `{len(user_list)}` favorite songs!")
+            return
+        else:
+            q = item.lower()
+            for t in user_list:
+                if q in str(t.get("title", "")).lower():
+                    selected = t
+                    break
+
+        if not selected:
+            await ctx.send(f"❌ Track `{item}` not found in your favorites.")
+            return
+
+        self.manual_queues.setdefault(gid, []).append(dict(selected))
+        await ctx.send(f"➕ Added **{selected.get('title', 'Track')}** from favorites to queue (position #{len(self.manual_queues[gid])}).")
 
     @jv.command(name="categories")
     async def categories_cmd(self, ctx):

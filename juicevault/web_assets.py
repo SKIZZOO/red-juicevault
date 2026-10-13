@@ -7068,6 +7068,35 @@ HTML_INDEX = """<!DOCTYPE html>
 
     let userPlaylistsCache = [];
 
+    async function loadSavedBotFavorites() {
+      try {
+        const username = (currentJvUser && currentJvUser.username) || localStorage.getItem('jv_username') || 'default';
+        const res = await fetch(`/api/user/favorites?username=${encodeURIComponent(username)}&${apiQuery()}`, { headers: apiHeaders() });
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.favorites)) {
+          const merged = [...data.favorites];
+          const existingIds = new Set(data.favorites.map(x => String(x.id || x.songId || x.title).toLowerCase()));
+          userLikesCache.forEach(item => {
+            const iid = String(item.id || item.songId || item.title).toLowerCase();
+            if (!existingIds.has(iid)) {
+              merged.push(item);
+              existingIds.add(iid);
+            }
+          });
+          userLikesCache = merged;
+          userLikesSet = new Set(userLikesCache.map(x => String(x.id || x.songId || x.title).toLowerCase()));
+          localStorage.setItem('jv_likes', JSON.stringify(userLikesCache));
+          const favCountEl = document.getElementById('userFavsBtnCount');
+          if (favCountEl) favCountEl.innerText = userLikesCache.length;
+          const likedCountEl = document.getElementById('userLikedCount');
+          if (likedCountEl) likedCountEl.innerText = userLikesCache.length;
+          updateFavoriteButtonState();
+        }
+      } catch (e) {
+        console.warn('Failed loading bot favorites:', e);
+      }
+    }
+
     function initJuiceVaultUser() {
       try {
         const savedUserStr = localStorage.getItem('jv_user');
@@ -7091,6 +7120,7 @@ HTML_INDEX = """<!DOCTYPE html>
         console.warn('JuiceVault user init failed:', e);
       }
       updateFavoriteButtonState();
+      loadSavedBotFavorites();
     }
 
     function switchAuthMode(mode) {
@@ -7253,11 +7283,22 @@ HTML_INDEX = """<!DOCTYPE html>
         const data = await res.json();
         const likes = data.likes || data.data;
         if (likes && Array.isArray(likes)) {
-          userLikesCache = likes;
+          const merged = [...likes];
+          const existingIds = new Set(likes.map(x => String(x.id || x.songId || x.title).toLowerCase()));
+          userLikesCache.forEach(item => {
+            const iid = String(item.id || item.songId || item.title).toLowerCase();
+            if (!existingIds.has(iid)) {
+              merged.push(item);
+              existingIds.add(iid);
+            }
+          });
+          userLikesCache = merged;
           userLikesSet = new Set(userLikesCache.map(x => String(x.id || x.songId || x.title).toLowerCase()));
           localStorage.setItem('jv_likes', JSON.stringify(userLikesCache));
           const favCountEl = document.getElementById('userFavsBtnCount');
           if (favCountEl) favCountEl.innerText = userLikesCache.length;
+          const likedCountEl = document.getElementById('userLikedCount');
+          if (likedCountEl) likedCountEl.innerText = userLikesCache.length;
           updateFavoriteButtonState();
         }
       } catch (e) {}
@@ -7301,11 +7342,22 @@ HTML_INDEX = """<!DOCTYPE html>
 
         userPlaylistsCache = data.playlists || [];
         if (data.likes && Array.isArray(data.likes)) {
-          userLikesCache = data.likes;
+          const merged = [...data.likes];
+          const existingIds = new Set(data.likes.map(x => String(x.id || x.songId || x.title).toLowerCase()));
+          userLikesCache.forEach(item => {
+            const iid = String(item.id || item.songId || item.title).toLowerCase();
+            if (!existingIds.has(iid)) {
+              merged.push(item);
+              existingIds.add(iid);
+            }
+          });
+          userLikesCache = merged;
           userLikesSet = new Set(userLikesCache.map(x => String(x.id || x.songId || x.title).toLowerCase()));
           localStorage.setItem('jv_likes', JSON.stringify(userLikesCache));
           const favCountEl = document.getElementById('userFavsBtnCount');
           if (favCountEl) favCountEl.innerText = userLikesCache.length;
+          const likedCountEl = document.getElementById('userLikedCount');
+          if (likedCountEl) likedCountEl.innerText = userLikesCache.length;
           updateFavoriteButtonState();
         }
 
@@ -8064,20 +8116,19 @@ HTML_INDEX = """<!DOCTYPE html>
     }
 
     async function toggleCurrentSongFavorite() {
-      if (!currentJvUser) {
-        openUserModal();
-        showToast('Connect your JuiceVault account first to favorite tracks');
+      const t = currentState && currentState.track;
+      if (!t) {
+        showToast('No track is currently playing');
         return;
       }
-      const t = currentState && currentState.track;
-      if (!t) return;
 
+      const username = (currentJvUser && currentJvUser.username) || localStorage.getItem('jv_username') || 'default';
       const tid = String(t.id || t.title || '').toLowerCase();
       const isFav = userLikesSet.has(tid) || userLikesSet.has(String(t.title || '').toLowerCase());
 
       if (isFav) {
         userLikesSet.delete(tid);
-        userLikesSet.delete(String(t.title || '').toLowerCase());
+        if (t.title) userLikesSet.delete(String(t.title).toLowerCase());
         userLikesCache = userLikesCache.filter(x => {
           const xid = String(x.id || x.songId || x.title || '').toLowerCase();
           return xid !== tid && xid !== String(t.title || '').toLowerCase();
@@ -8088,7 +8139,7 @@ HTML_INDEX = """<!DOCTYPE html>
           id: t.id || tid,
           title: t.title || 'Untitled Track',
           artist: t.artist || 'Juice WRLD',
-          cover_url: t.cover_url || (t.id ? `https://api.juicevault.xyz/cdn/music/covers/${t.id}` : ''),
+          cover_url: t.cover_url || (t.id ? `https://api.juicevault.xyz/cdn/music/covers/${t.id}` : 'https://api.juicevault.xyz/favicon.ico'),
           length: t.length || '—'
         };
         userLikesSet.add(tid);
@@ -8103,10 +8154,69 @@ HTML_INDEX = """<!DOCTYPE html>
       const likedCountEl = document.getElementById('userLikedCount');
       if (likedCountEl) likedCountEl.innerText = userLikesCache.length;
       updateFavoriteButtonState();
+
+      // Sync with Bot Server API
+      try {
+        const res = await fetch(`/api/user/favorite?${apiQuery()}`, {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            username: username,
+            track: t,
+            action: isFav ? 'remove' : 'add'
+          })
+        });
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.favorites)) {
+          userLikesCache = data.favorites;
+          userLikesSet = new Set(userLikesCache.map(x => String(x.id || x.songId || x.title).toLowerCase()));
+          localStorage.setItem('jv_likes', JSON.stringify(userLikesCache));
+          if (favCountEl) favCountEl.innerText = userLikesCache.length;
+          if (likedCountEl) likedCountEl.innerText = userLikesCache.length;
+          updateFavoriteButtonState();
+        }
+      } catch (err) {
+        console.warn('Favorite API sync failed:', err);
+      }
     }
 
-    function viewUserFavorites() {
+    async function removeFavoriteByIndex(idx) {
+      if (idx < 0 || idx >= userLikesCache.length) return;
+      const t = userLikesCache[idx];
+      const username = (currentJvUser && currentJvUser.username) || localStorage.getItem('jv_username') || 'default';
+      const tid = String(t.id || t.songId || t.title || '').toLowerCase();
+
+      userLikesSet.delete(tid);
+      if (t.title) userLikesSet.delete(String(t.title).toLowerCase());
+      userLikesCache.splice(idx, 1);
+      localStorage.setItem('jv_likes', JSON.stringify(userLikesCache));
+
+      const favCountEl = document.getElementById('userFavsBtnCount');
+      if (favCountEl) favCountEl.innerText = userLikesCache.length;
+      const likedCountEl = document.getElementById('userLikedCount');
+      if (likedCountEl) likedCountEl.innerText = userLikesCache.length;
+      updateFavoriteButtonState();
+      viewUserFavorites();
+      showToast(`Removed "${t.title}" from favorites`);
+
+      try {
+        await fetch(`/api/user/favorite?${apiQuery()}`, {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            username: username,
+            track: t,
+            action: 'remove'
+          })
+        });
+      } catch (e) {}
+    }
+
+    async function viewUserFavorites() {
       closeUserModal();
+      if (!userLikesCache || userLikesCache.length === 0) {
+        await loadSavedBotFavorites();
+      }
       if (!userLikesCache || userLikesCache.length === 0) {
         showToast('No favorite songs saved yet');
         return;
@@ -8116,11 +8226,12 @@ HTML_INDEX = """<!DOCTYPE html>
       const resContainer = document.getElementById('searchResults');
       if (!resContainer) return;
 
+      const username = (currentJvUser && currentJvUser.username) || localStorage.getItem('jv_username') || 'Vault Listener';
       let html = `
         <div style="background:linear-gradient(135deg, rgba(244,63,94,0.12), rgba(168,85,247,0.08)); border:1px solid rgba(244,63,94,0.3); border-radius:12px; padding:12px 16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
           <div>
             <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; color:#f43f5e; font-weight:700;">JuiceVault Favorites</div>
-            <div style="font-weight:700; font-size:0.92rem; color:#fff;">@${escapeHtml(currentJvUser ? currentJvUser.username : 'User')} • ${userLikesCache.length} track${userLikesCache.length === 1 ? '' : 's'}</div>
+            <div style="font-weight:700; font-size:0.92rem; color:#fff;">@${escapeHtml(username)} • ${userLikesCache.length} track${userLikesCache.length === 1 ? '' : 's'}</div>
           </div>
           <div style="display:flex; gap:6px;">
             <button class="btn-kinetic btn-badge" style="background:#f43f5e; color:#fff;" onclick="addAllPlaylistTracks(true)">Play All</button>
@@ -8135,9 +8246,10 @@ HTML_INDEX = """<!DOCTYPE html>
             <div class="track-name">${escapeHtml(item.title || 'Untitled')}</div>
             <div class="track-desc">${escapeHtml(item.artist || 'Juice WRLD')} • ${escapeHtml(item.length || '—')}</div>
           </div>
-          <div style="display:flex; gap:6px;">
+          <div style="display:flex; align-items:center; gap:6px;">
             <button class="btn-kinetic btn-badge" onclick="addSearchResultByIndex(${idx}, true)" title="Play Now">Play</button>
             <button class="btn-kinetic btn-badge" onclick="addSearchResultByIndex(${idx}, false)" title="Add to Queue">+ Add</button>
+            <button class="btn-kinetic btn-badge" style="background:rgba(244,63,94,0.12); color:#f43f5e; border:1px solid rgba(244,63,94,0.3); padding:4px 8px;" onclick="removeFavoriteByIndex(${idx})" title="Remove favorite">✕</button>
           </div>
         </div>
       `).join('');
