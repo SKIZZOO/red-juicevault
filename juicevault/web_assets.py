@@ -10293,7 +10293,7 @@ HTML_INDEX = """<!DOCTYPE html>
       const now = Date.now();
 
       // Check for wake word "garmin" (or common speech recognition variants)
-      const wakeRegex = /\\b(?:hey\\s+|ok\\s+|hei\\s+)?(?:garmin|garmen|garmon|garmyn|carmin)\\b/i;
+      const wakeRegex = /\\b(?:hey\\s+|ok\\s+|hei\\s+|ba\\s+|bai\\s+|alo\\s+|yo\\s+)?(?:garmin|garmen|garmon|garmyn|carmin)\\b/i;
       const wakeMatch = clean.match(wakeRegex);
 
       let commandPart = '';

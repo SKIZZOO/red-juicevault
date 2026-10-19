@@ -10,8 +10,18 @@ import asyncio
 import logging
 import re
 import time
+import unicodedata
 
 log = logging.getLogger("red.juicevault.voice_recognition")
+
+
+def _normalize_speech(text: str) -> str:
+    """Normalize text by stripping diacritics and extra punctuation for robust command matching."""
+    if not text:
+        return ""
+    decomposed = unicodedata.normalize("NFD", text)
+    stripped = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    return stripped.lower().strip()
 
 # 1. Check optional dependencies: discord-ext-voice-recv and SpeechRecognition
 VOICE_RECV_AVAILABLE = False
@@ -157,14 +167,14 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if not text:
                 return
 
-            clean = text.lower().strip()
+            clean = _normalize_speech(text)
             guild = self.bot.get_guild(self.guild_id)
             user = guild.get_member(user_id) if guild else None
             user_name = user.display_name if user else f"User {user_id}"
             now = time.monotonic()
 
-            # Check for Garmin Wake Word: "garmin", "hey garmin", "ok garmin", "garmen", etc.
-            wake_match = re.search(r'\b(?:hey\s+|ok\s+|hei\s+)?(?:garmin|garmen|garmon|garmyn|carmin)\b', clean, re.IGNORECASE)
+            # Check for Garmin Wake Word: "garmin", "ba garmin", "hey garmin", "ok garmin", "garmen", etc.
+            wake_match = re.search(r'\b(?:hey\s+|ok\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin)\b', clean, re.IGNORECASE)
 
             if wake_match:
                 cmd_part = clean[wake_match.end():].strip().lstrip(",.:;!?- ")
@@ -200,16 +210,38 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Rewind -10s ⏪")
                     return
 
-            # 2. SKIP / NEXT
-            if any(w in clean_cmd for w in ("skip", "next", "urmatoarea", "sari", "urmatorul", "treci peste", "sară", "schimba", "schimb-o", "alta piesa", "alta melodie")):
+            # 2. SEARCH & PLAY SONG (e.g. "canta robbery", "play robbery", "pune robbery", "baga robbery")
+            play_match = re.match(r'^(?:canta|pune|baga|play|asculta)\s+(.+)$', clean_cmd, re.IGNORECASE)
+            if play_match:
+                q = play_match.group(1).strip()
+                if q:
+                    try:
+                        tracks = await self.cog.fetch_tracks()
+                        candidates = [item for item in tracks if q in _normalize_speech(self.cog._search_text(item))]
+                        track = candidates[0] if candidates else None
+                        if track:
+                            self.cog.manual_queues.setdefault(self.guild_id, []).insert(0, track)
+                            await self.cog._request_skip(self.guild_id, 1)
+                            track_name = self.cog._track_text(track)
+                            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Playing: **{track_name}** 🎶")
+                            return
+                        else:
+                            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: Piesa *\"{q}\"* nu a fost găsită în arhivă.")
+                            return
+                    except Exception as e:
+                        log.warning(f"[Garmin Voice Search] Error searching: {e}")
+
+            # 3. SKIP / NEXT
+            if any(w in clean_cmd for w in ("skip", "next", "urmatoarea", "sari", "urmatorul", "treci peste", "schimba", "schimb-o", "alta piesa", "alta melodie")):
                 if any(w in clean_cmd for w in ("10", "ten", "zece")):
                     await self.cog._request_skip(self.guild_id, 10)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped 10 tracks! ⏩")
                 else:
                     await self.cog._request_skip(self.guild_id, 1)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped track! ⏭️")
+                return
 
-            # 3. PREVIOUS / BACK
+            # 4. PREVIOUS / BACK
             elif any(w in clean_cmd for w in ("previous", "prev", "back", "inapoi", "anterioara", "piesa anterioara", "melodia anterioara")):
                 hist = self.cog.history.get(self.guild_id, [])
                 if hist:
@@ -217,22 +249,25 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self.cog.manual_queues.setdefault(self.guild_id, []).insert(0, prev_t)
                     await self.cog._request_skip(self.guild_id, 1)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Previous track! ⏮️")
+                return
 
-            # 4. PAUSE
+            # 5. PAUSE
             elif any(w in clean_cmd for w in ("pause", "pauza", "stop", "opreste", "taci")):
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_playing():
                     voice.pause()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Paused! ⏸️")
+                return
 
-            # 5. RESUME / PLAY
+            # 6. RESUME / PLAY
             elif any(w in clean_cmd for w in ("resume", "play", "continua", "porneste", "da drumul", "baga")):
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_paused():
                     voice.resume()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Resumed playback! ▶️")
+                return
 
-            # 6. SHUFFLE
+            # 7. SHUFFLE
             elif any(w in clean_cmd for w in ("shuffle", "amesteca", "mix")):
                 q = self.cog.queues.get(self.guild_id, [])
                 if q:
@@ -241,8 +276,9 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self.cog._cleanup_prefetch(self.guild_id)
                     self.cog._trigger_next_prefetch(self.guild_id)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Shuffled queue! 🔀")
+                return
 
-            # 7. FAVORITE
+            # 8. FAVORITE
             elif any(w in clean_cmd for w in ("favorite", "fav", "like", "place", "iubeste", "favorit", "apreciaza")):
                 cur = self.cog.current.get(self.guild_id)
                 if cur:
@@ -256,6 +292,10 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             except Exception:
                                 pass
                         await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Added to favorites! ❤️")
+                return
+
+            # Feedback when recognized speech was addressed to Garmin but didn't match known command
+            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Comandă nerecunoscută.")
 
         def _recognize_speech_blocking(self, pcm_bytes):
             """Synchronously pass PCM audio data to Google Speech Recognition."""
