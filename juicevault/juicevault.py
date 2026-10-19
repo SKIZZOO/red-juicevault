@@ -754,12 +754,25 @@ class JuiceVault(commands.Cog):
                     track = self.queues[gid].pop(0)
                     source_type = "normal"
                 prev_track = self.current.get(gid)
-                if prev_track and not track.get("_from_history") and not track.get("_jv_seek_copy"):
+                if (
+                    prev_track
+                    and not prev_track.get("_is_vip")
+                    and not prev_track.get("_is_soundboard")
+                    and not track.get("_from_history")
+                    and not track.get("_jv_seek_copy")
+                    and not track.get("_is_vip")
+                    and not track.get("_is_soundboard")
+                ):
                     hist = self.history.setdefault(gid, [])
                     if not hist or str(hist[-1].get("id")) != str(prev_track.get("id")):
                         hist.append(dict(prev_track))
                         del hist[:-50]
-                if not track.get("_from_history") and not track.get("_jv_seek_copy"):
+                if (
+                    not track.get("_from_history")
+                    and not track.get("_jv_seek_copy")
+                    and not track.get("_is_vip")
+                    and not track.get("_is_soundboard")
+                ):
                     self.history_pos[gid] = None
                 self.current[gid] = track
                 if track.get("_resume_position") is not None:
@@ -1130,6 +1143,7 @@ class JuiceVault(commands.Cog):
                 _resume_position=current_pos,
                 _resume_was_playing=was_playing,
             )
+            resume_track.pop("_jv_repeat_copy", None)
             self.manual_queues.setdefault(gid, []).insert(0, resume_track)
 
         vip_track = {

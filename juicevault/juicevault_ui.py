@@ -164,7 +164,16 @@ class JuiceVaultPanelView(discord.ui.View):
         enabled = not self.panel.repeat_enabled.get(self.guild_id, False); self.panel.repeat_enabled[self.guild_id] = enabled; self.panel.repeat_queued[self.guild_id] = False
         if enabled:
             current = cog.current.get(self.guild_id)
-            if current: cog.manual_queues.setdefault(self.guild_id, []).insert(0, dict(current, _jv_repeat_copy=True)); self.panel.repeat_queued[self.guild_id] = True
+            if current and not current.get("_is_vip") and not current.get("_is_soundboard"):
+                manual = cog.manual_queues.setdefault(self.guild_id, [])
+                if not any(t.get("_jv_repeat_copy") for t in manual):
+                    rep = dict(current)
+                    rep.pop("_jv_seek_copy", None)
+                    rep.pop("_resume_position", None)
+                    rep.pop("_resume_was_playing", None)
+                    rep["_jv_repeat_copy"] = True
+                    manual.insert(0, rep)
+                self.panel.repeat_queued[self.guild_id] = True
         else:
             cog.manual_queues[self.guild_id] = [t for t in cog.manual_queues.get(self.guild_id, []) if not t.get("_jv_repeat_copy")]
         await interaction.followup.send("🔁 Repeat enabled — the current track will play again." if enabled else "🔁 Repeat disabled.", ephemeral=True); await self.panel.update_panel(self.guild_id)
@@ -338,17 +347,57 @@ class JuiceVaultUI(commands.Cog):
                 main = self.bot.get_cog("JuiceVault")
                 if main:
                     for guild_id in list(main.tasks):
-                        track = main.current.get(guild_id); track_id = str(track.get("id")) if track else None; track_object = id(track) if track else None; previous_id = self.last_seen_current.get(guild_id); previous_object = self.last_track_object.get(guild_id)
+                        track = main.current.get(guild_id)
+                        is_temporary = bool(track and (track.get("_is_vip") or track.get("_is_soundboard")))
+                        if is_temporary:
+                            continue
+                        track_id = str(track.get("id")) if track else None
+                        track_object = id(track) if track else None
+                        previous_id = self.last_seen_current.get(guild_id)
+                        previous_object = self.last_track_object.get(guild_id)
                         if track_id and (track_id != previous_id or track_object != previous_object):
-                            if previous_id:
+                            is_seek_copy = bool(track.get("_jv_seek_copy"))
+                            if previous_id and not is_seek_copy:
                                 previous_track = self.last_track_snapshot.get(guild_id)
-                                if previous_track: history = self.history.setdefault(guild_id, []); history.append(previous_track); del history[:-50]
-                            self.last_seen_current[guild_id] = track_id; self.last_track_snapshot[guild_id] = dict(track); self.last_track_object[guild_id] = track_object
-                            if self.repeat_enabled.get(guild_id): self.repeat_queued[guild_id] = True; main.manual_queues.setdefault(guild_id, []).insert(0, dict(track, _jv_repeat_copy=True))
+                                if previous_track and not previous_track.get("_is_vip") and not previous_track.get("_is_soundboard"):
+                                    history = self.history.setdefault(guild_id, [])
+                                    history.append(previous_track)
+                                    del history[:-50]
+                            self.last_seen_current[guild_id] = track_id
+                            self.last_track_snapshot[guild_id] = dict(track)
+                            self.last_track_object[guild_id] = track_object
+                            if self.repeat_enabled.get(guild_id):
+                                manual = main.manual_queues.setdefault(guild_id, [])
+                                if not any(t.get("_jv_repeat_copy") for t in manual):
+                                    rep = dict(track)
+                                    rep.pop("_jv_seek_copy", None)
+                                    rep.pop("_resume_position", None)
+                                    rep.pop("_resume_was_playing", None)
+                                    rep["_jv_repeat_copy"] = True
+                                    manual.insert(0, rep)
+                                self.repeat_queued[guild_id] = True
                             asyncio.create_task(self.update_panel(guild_id))
-                        guild = self.bot.get_guild(guild_id); voice = guild.voice_client if guild else None
-                        if self.repeat_enabled.get(guild_id) and track and voice and voice.is_connected() and not voice.is_playing() and not voice.is_paused() and not self.repeat_queued.get(guild_id):
-                            main.manual_queues.setdefault(guild_id, []).insert(0, dict(track, _jv_repeat_copy=True)); self.repeat_queued[guild_id] = True
+                        guild = self.bot.get_guild(guild_id)
+                        voice = guild.voice_client if guild else None
+                        if (
+                            self.repeat_enabled.get(guild_id)
+                            and track
+                            and not track.get("_is_vip")
+                            and not track.get("_is_soundboard")
+                            and voice
+                            and voice.is_connected()
+                            and not voice.is_playing()
+                            and not voice.is_paused()
+                        ):
+                            manual = main.manual_queues.setdefault(guild_id, [])
+                            if not any(t.get("_jv_repeat_copy") for t in manual):
+                                rep = dict(track)
+                                rep.pop("_jv_seek_copy", None)
+                                rep.pop("_resume_position", None)
+                                rep.pop("_resume_was_playing", None)
+                                rep["_jv_repeat_copy"] = True
+                                manual.insert(0, rep)
+                            self.repeat_queued[guild_id] = True
                 await asyncio.sleep(0.5)
             except asyncio.CancelledError: raise
             except Exception as exc: print(f"[JuiceVaultUI] control loop error: {type(exc).__name__}: {exc}"); await asyncio.sleep(2)

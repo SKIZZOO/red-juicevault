@@ -380,7 +380,7 @@ async def play_soundboard_in_guild(main_cog, guild_id, sound_id):
     local_path = main_cog.current_files.get(gid)
 
     # 1. If currently playing a track (and not already a soundboard sound), save resume state
-    if current and not current.get('_is_soundboard'):
+    if current and not current.get('_is_soundboard') and not current.get('_is_vip'):
         base = float(main_cog.play_positions.get(gid, 0.0))
         started = getattr(voice, '_jv_started_at', None)
         if started is not None and was_playing:
@@ -397,6 +397,7 @@ async def play_soundboard_in_guild(main_cog, guild_id, sound_id):
             _resume_position=current_pos,
             _resume_was_playing=was_playing,
         )
+        resume_track.pop('_jv_repeat_copy', None)
         main_cog.manual_queues.setdefault(gid, []).insert(0, resume_track)
 
     # 2. Build soundboard track entry

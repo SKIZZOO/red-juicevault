@@ -1373,8 +1373,15 @@ class JuiceVaultWebRemote:
                 ui.repeat_enabled[gid] = new_state
                 ui.repeat_queued[gid] = False
                 current = main.current.get(gid)
-                if new_state and current:
-                    main.manual_queues.setdefault(gid, []).insert(0, dict(current, _jv_repeat_copy=True))
+                if new_state and current and not current.get("_is_vip") and not current.get("_is_soundboard"):
+                    manual = main.manual_queues.setdefault(gid, [])
+                    if not any(t.get("_jv_repeat_copy") for t in manual):
+                        rep = dict(current)
+                        rep.pop("_jv_seek_copy", None)
+                        rep.pop("_resume_position", None)
+                        rep.pop("_resume_was_playing", None)
+                        rep["_jv_repeat_copy"] = True
+                        manual.insert(0, rep)
                     ui.repeat_queued[gid] = True
                 elif not new_state:
                     main.manual_queues[gid] = [t for t in main.manual_queues.get(gid, []) if not t.get("_jv_repeat_copy")]
