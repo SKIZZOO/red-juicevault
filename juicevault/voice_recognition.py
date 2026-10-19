@@ -76,22 +76,30 @@ def _get_siri_chime_wav_path() -> str:
         return ""
 
 
-async def play_chime_and_proceed(guild, action_coro=None):
+async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = True):
     """Play the Siri assistant chime in voice channel, then execute the command action."""
     voice = getattr(guild, "voice_client", None)
     chime_path = _get_siri_chime_wav_path()
     if voice and voice.is_connected() and chime_path and os.path.isfile(chime_path):
         try:
             import discord
-            if voice.is_playing() or voice.is_paused():
-                voice.stop()
-            voice.play(discord.FFmpegPCMAudio(chime_path))
-            await asyncio.sleep(0.28)
+            if not voice.is_playing() or interrupt_playback:
+                if voice.is_playing() or voice.is_paused():
+                    voice.stop()
+                voice.play(discord.FFmpegPCMAudio(chime_path))
+                await asyncio.sleep(0.32)
         except Exception:
             pass
     if action_coro is not None:
         if asyncio.iscoroutine(action_coro):
             await action_coro
+
+DAVEY_AVAILABLE = False
+try:
+    import davey
+    DAVEY_AVAILABLE = True
+except ImportError:
+    davey = None
 
 # 1. Check optional dependencies: discord-ext-voice-recv and SpeechRecognition
 VOICE_RECV_AVAILABLE = False
@@ -100,8 +108,7 @@ try:
     VOICE_RECV_AVAILABLE = True
 
     # Hotfix for discord-ext-voice-recv:
-    # 1. PacketDecoder._decode_packet crashes on OpusError: corrupted stream (e.g. camera, DAVE, bad packets).
-    # Catch OpusError and re-initialize decoder so PacketRouter thread never dies.
+    # 1. DAVE (Discord Audio/Video E2EE) inbound frame decryption + OpusError corrupted stream resilience.
     try:
         from discord.ext.voice_recv import opus as _vr_opus
         import discord.opus
@@ -111,7 +118,7 @@ try:
             def _safe_decode_packet(self, packet):
                 try:
                     return _orig_decode_packet(self, packet)
-                except discord.opus.OpusError as err:
+                except discord.opus.OpusError:
                     # Reset decoder and ignore corrupted frame
                     try:
                         self._decoder = discord.opus.Decoder()
@@ -122,6 +129,63 @@ try:
                     return packet, None
 
             _vr_opus.PacketDecoder._decode_packet = _safe_decode_packet
+
+            def _dave_decrypt(decoder, packet):
+                """Decrypt a DAVE (E2EE) frame in place using discord.py's DaveSession."""
+                if davey is None or not packet or not getattr(packet, "decrypted_data", None):
+                    return
+
+                sink = getattr(decoder, "sink", None)
+                vc = getattr(sink, "voice_client", None)
+                state = getattr(vc, "_connection", None)
+                session = getattr(state, "dave_session", None)
+                if (
+                    session is None
+                    or not getattr(session, "ready", False)
+                    or getattr(state, "dave_protocol_version", 0) == 0
+                ):
+                    return
+
+                user_id = getattr(decoder, "_cached_id", None)
+                if user_id is None:
+                    return
+
+                try:
+                    packet.decrypted_data = session.decrypt(
+                        int(user_id), davey.MediaType.audio, bytes(packet.decrypted_data)
+                    )
+                except Exception:
+                    # Silence frames or passthrough frames raise; leave unencrypted
+                    pass
+
+            _orig_process_packet = _vr_opus.PacketDecoder._process_packet
+
+            def _safe_process_packet(self, packet):
+                member = self._get_cached_member()
+                if member is None:
+                    try:
+                        self._cached_id = self.sink.voice_client._get_id_from_ssrc(self.ssrc)
+                    except Exception:
+                        pass
+                    member = self._get_cached_member()
+
+                # Decrypt DAVE payload if channel uses E2EE
+                _dave_decrypt(self, packet)
+
+                pcm = None
+                if not self.sink.wants_opus():
+                    packet, pcm = self._decode_packet(packet)
+
+                voice_data_cls = getattr(_vr_opus, "VoiceData", getattr(voice_recv, "VoiceData", None))
+                if voice_data_cls is not None:
+                    data = voice_data_cls(packet, member, pcm=pcm)
+                else:
+                    data = _orig_process_packet(self, packet)
+                self._last_seq = packet.sequence
+                self._last_ts = packet.timestamp
+                return data
+
+            _vr_opus.PacketDecoder._process_packet = _safe_process_packet
     except Exception as _e:
         log.debug(f"[JuiceVault Voice] PacketDecoder patch note: {_e}")
 
@@ -159,6 +223,8 @@ def is_voice_recognition_supported():
         missing.append("discord-ext-voice-recv")
     if not SPEECH_RECOGNITION_AVAILABLE:
         missing.append("SpeechRecognition")
+    if not DAVEY_AVAILABLE:
+        missing.append("davey")
 
     if missing:
         return False, "pip install " + " ".join(missing)
@@ -244,6 +310,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             buf = self._buffers.setdefault(uid, bytearray())
+            if len(buf) == 0:
+                print(f"[JuiceVault Voice] 🎙️ Audio received from {getattr(user, 'display_name', user)} - listening...")
             # Buffer up to 10 seconds of audio (~960,000 bytes)
             if len(buf) < 960_000:
                 buf.extend(pcm)

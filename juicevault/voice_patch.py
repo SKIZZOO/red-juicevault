@@ -49,7 +49,8 @@ async def stay_in_current_voice(self, guild, channel):
         try:
             connected_voice = await channel.connect(reconnect=True, timeout=15, cls=voice_cls)
         except Exception as exc:
-            print(f"[JuiceVault Voice] VoiceRecvClient connection error: {exc}")
+            err_msg = str(exc) or type(exc).__name__
+            print(f"[JuiceVault Voice] VoiceRecvClient connection error ({type(exc).__name__}): {err_msg}")
             # Fallback to standard discord.VoiceClient so music playback NEVER fails!
             if guild.voice_client:
                 try:

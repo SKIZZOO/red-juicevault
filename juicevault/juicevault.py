@@ -1491,13 +1491,13 @@ class JuiceVault(commands.Cog):
     @jv.command(name="installvc", aliases=["installvoice", "installvoicerequirements"])
     @commands.is_owner()
     async def install_vc_cmd(self, ctx):
-        """Automatically install voice command dependencies (discord-ext-voice-recv and SpeechRecognition)
+        """Automatically install voice command dependencies (discord-ext-voice-recv, SpeechRecognition, and davey)
         directly into the bot's Python environment."""
-        msg = await ctx.send("⏳ **Instalare în curs...** Se instalează `discord-ext-voice-recv` și `SpeechRecognition` în mediul Python al botului...")
+        msg = await ctx.send("⏳ **Instalare în curs...** Se instalează `discord-ext-voice-recv`, `SpeechRecognition` și `davey` (decriptare voce Discord E2EE) în mediul Python al botului...")
         import sys
         import subprocess
 
-        cmd = [sys.executable, "-m", "pip", "install", "discord-ext-voice-recv", "SpeechRecognition"]
+        cmd = [sys.executable, "-m", "pip", "install", "discord-ext-voice-recv", "SpeechRecognition", "davey"]
         try:
             proc = await asyncio.to_thread(
                 subprocess.run,
@@ -1517,7 +1517,7 @@ class JuiceVault(commands.Cog):
                 await msg.edit(
                     content=(
                         "✅ **Instalare reușită!**\n"
-                        "Pachetele `discord-ext-voice-recv` și `SpeechRecognition` au fost instalate cu succes în mediul botului!\n"
+                        "Pachetele `discord-ext-voice-recv`, `SpeechRecognition` și `davey` au fost instalate cu succes în mediul botului!\n"
                         "🎤 **Comenzile vocale Garmin pe voice sunt acum ACTIVE!**\n"
                         "Încearcă acum pe voice: **„Bă Garmin, dă-i skip”** sau **„Bă Garmin, bagă piesa robbery”**!"
                     )
