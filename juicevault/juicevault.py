@@ -1461,7 +1461,7 @@ class JuiceVault(commands.Cog):
                 name="🔊 In-Discord Voice Channel Recognition",
                 value=(
                     f"Status: **{'🟢 ACTIVE' if (supported and is_enabled) else ('🟡 READY (Disabled)' if supported else '⚪ Missing Python Packages')}**\n"
-                    + (f"Installed & Ready!\nToggle with: `4jv vc on` or `4jv vc off`" if supported else f"Requires: `{reason}`\nInstall on host: `pip install discord-ext-voice-recv SpeechRecognition`")
+                    + (f"Installed & Ready!\nToggle with: `4jv vc on` or `4jv vc off`" if supported else f"Requires: `{reason}`\n💡 **Instalează automat tastând: `4jv installvc`**\n*(sau pe host: `pip install discord-ext-voice-recv SpeechRecognition`)*")
                 ),
                 inline=False
             )
@@ -1474,7 +1474,8 @@ class JuiceVault(commands.Cog):
                 name="🗣️ Wake Word & Voice Commands (RO / EN)",
                 value=(
                     "🎙️ **Wake Word**: Say **`Garmin`** before any command!\n"
-                    "• **`Garmin, skip`** / **`Garmin, următoarea`** ➔ Skip current track\n"
+                    "• **`Garmin, skip`** / **`Garmin, dă-i skip`** / **`Garmin, următoarea`** ➔ Skip current track\n"
+                    "• **`Garmin, bagă piesa robbery`** / **`Garmin, play fire`** ➔ Search & play track\n"
                     "• **`Garmin, skip 10`** / **`Garmin, înainte 10`** ➔ Forward +10s / Skip 10 tracks\n"
                     "• **`Garmin, back 10`** / **`Garmin, înapoi 10`** ➔ Rewind -10s\n"
                     "• **`Garmin, previous`** ➔ Play previous track\n"
@@ -1486,6 +1487,76 @@ class JuiceVault(commands.Cog):
                 inline=False
             )
             await ctx.send(embed=embed)
+
+    @jv.command(name="installvc", aliases=["installvoice", "installvoicerequirements"])
+    @commands.is_owner()
+    async def install_vc_cmd(self, ctx):
+        """Automatically install voice command dependencies (discord-ext-voice-recv and SpeechRecognition)
+        directly into the bot's Python environment."""
+        msg = await ctx.send("⏳ **Instalare în curs...** Se instalează `discord-ext-voice-recv` și `SpeechRecognition` în mediul Python al botului...")
+        import sys
+        import subprocess
+
+        cmd = [sys.executable, "-m", "pip", "install", "discord-ext-voice-recv", "SpeechRecognition"]
+        try:
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=180
+            )
+            if proc.returncode == 0:
+                import importlib
+                from . import voice_recognition
+                importlib.reload(voice_recognition)
+                from .voice_recognition import is_voice_recognition_supported, attach_voice_command_sink
+                supported, _ = is_voice_recognition_supported()
+                if supported and ctx.guild and ctx.guild.voice_client:
+                    attach_voice_command_sink(self, ctx.guild)
+                await msg.edit(
+                    content=(
+                        "✅ **Instalare reușită!**\n"
+                        "Pachetele `discord-ext-voice-recv` și `SpeechRecognition` au fost instalate cu succes în mediul botului!\n"
+                        "🎤 **Comenzile vocale Garmin pe voice sunt acum ACTIVE!**\n"
+                        "Încearcă acum pe voice: **„Bă Garmin, dă-i skip”** sau **„Bă Garmin, bagă piesa robbery”**!"
+                    )
+                )
+            else:
+                err = proc.stderr or proc.stdout
+                await msg.edit(content=f"❌ **Eroare la instalare:**\n```{err[:1500]}```")
+        except Exception as exc:
+            await msg.edit(content=f"❌ **Eroare:** `{exc}`")
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Handle 'da' / 'yes' / 'nu' / 'no' responses to YouTube voice prompts in text chat."""
+        if not message.guild or message.author.bot:
+            return
+        pending = getattr(self, "_pending_yt_voice", {}).get(message.guild.id)
+        if not pending or time.time() >= pending.get("expires", 0.0):
+            return
+        content = message.content.strip().lower()
+        if content in ("da", "yes", "y", "sure", "sigur", "baga", "pune-o"):
+            self._pending_yt_voice.pop(message.guild.id, None)
+            target_q = pending["query"]
+            is_ro = pending.get("lang") == "ro"
+            await message.channel.send(f"🔍 **[Garmin]** Caut *\"{target_q}\"* pe YouTube... ⏳" if is_ro else f"🔍 **[Garmin]** Searching YouTube for *\"{target_q}\"*... ⏳")
+            try:
+                from .external_search_patch import _extract_search
+                results = await asyncio.to_thread(_extract_search, target_q)
+                if results:
+                    yt_track = results[0]
+                    self.manual_queues.setdefault(message.guild.id, []).insert(0, yt_track)
+                    await self._request_skip(message.guild.id, 1)
+                    await message.channel.send(f"🎥 **[Garmin]** Redare de pe YouTube: **{yt_track.get('title', target_q)}** 🎶" if is_ro else f"🎥 **[Garmin]** Playing from YouTube: **{yt_track.get('title', target_q)}** 🎶")
+                else:
+                    await message.channel.send(f"❌ Nu am găsit pe YouTube: *\"{target_q}\"*")
+            except Exception as e:
+                await message.channel.send(f"❌ YouTube error: `{e}`")
+        elif content in ("nu", "no", "n", "cancel", "anuleaza"):
+            self._pending_yt_voice.pop(message.guild.id, None)
+            await message.channel.send("🚫 **[Garmin]** Comandă anulată." if pending.get("lang") == "ro" else "🚫 **[Garmin]** Cancelled.")
 
     @jv.command(name="categories")
     async def categories_cmd(self, ctx):

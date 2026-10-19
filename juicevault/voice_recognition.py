@@ -9,9 +9,14 @@ receiving packages are not installed on the host.
 import array
 import asyncio
 import logging
+import math
+import os
 import re
+import struct
+import tempfile
 import time
 import unicodedata
+import wave
 
 log = logging.getLogger("red.juicevault.voice_recognition")
 
@@ -23,6 +28,70 @@ def _normalize_speech(text: str) -> str:
     decomposed = unicodedata.normalize("NFD", text)
     stripped = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
     return stripped.lower().strip()
+
+
+_CHIME_FILE_PATH = None
+
+
+def _get_siri_chime_wav_path() -> str:
+    """Generate or retrieve a crisp two-tone assistant chime (D5 -> A5) WAV file."""
+    global _CHIME_FILE_PATH
+    if _CHIME_FILE_PATH and os.path.isfile(_CHIME_FILE_PATH):
+        return _CHIME_FILE_PATH
+
+    path = os.path.join(tempfile.gettempdir(), "juicevault_siri_chime.wav")
+    try:
+        sample_rate = 48000
+        duration1 = 0.09
+        duration2 = 0.18
+        freq1 = 587.33  # D5
+        freq2 = 880.00  # A5
+
+        frames = bytearray()
+        total_samples1 = int(sample_rate * duration1)
+        total_samples2 = int(sample_rate * duration2)
+
+        for i in range(total_samples1):
+            t = i / sample_rate
+            env = 1.0 - (i / total_samples1) ** 1.8
+            val = int(env * 18000 * math.sin(2 * math.pi * freq1 * t))
+            frames.extend(struct.pack('<hh', val, val))
+
+        for i in range(total_samples2):
+            t = i / sample_rate
+            env = 1.0 - (i / total_samples2) ** 1.3
+            val = int(env * 20000 * math.sin(2 * math.pi * freq2 * t))
+            frames.extend(struct.pack('<hh', val, val))
+
+        with wave.open(path, "wb") as wf:
+            wf.setnchannels(2)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(frames)
+
+        _CHIME_FILE_PATH = path
+        return path
+    except Exception as exc:
+        log.warning(f"[JuiceVault Voice] Failed generating chime: {exc}")
+        return ""
+
+
+async def play_chime_and_proceed(guild, action_coro=None):
+    """Play the Siri assistant chime in voice channel, then execute the command action."""
+    voice = getattr(guild, "voice_client", None)
+    chime_path = _get_siri_chime_wav_path()
+    if voice and voice.is_connected() and chime_path and os.path.isfile(chime_path):
+        try:
+            import discord
+            if voice.is_playing() or voice.is_paused():
+                voice.stop()
+            voice.play(discord.FFmpegPCMAudio(chime_path))
+            await asyncio.sleep(0.28)
+        except Exception:
+            pass
+    if action_coro is not None:
+        if asyncio.iscoroutine(action_coro):
+            await action_coro
 
 # 1. Check optional dependencies: discord-ext-voice-recv and SpeechRecognition
 VOICE_RECV_AVAILABLE = False
@@ -161,7 +230,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
         async def _transcribe_and_dispatch(self, user_id, pcm_bytes):
             loop = asyncio.get_running_loop()
             try:
-                text = await loop.run_in_executor(None, self._recognize_speech_blocking, pcm_bytes)
+                text, detected_lang = await loop.run_in_executor(None, self._recognize_speech_blocking, pcm_bytes)
             except Exception as exc:
                 print(f"[JuiceVault Voice] Transcribe executor error: {exc}")
                 return
@@ -174,7 +243,40 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             user = guild.get_member(user_id) if guild else None
             user_name = user.display_name if user else f"User {user_id}"
             now = time.monotonic()
-            print(f"[JuiceVault Voice] Received speech from {user_name}: '{text}' (normalized: '{clean}')")
+            print(f"[JuiceVault Voice] Received speech from {user_name} ({detected_lang}): '{text}' (normalized: '{clean}')")
+
+            # Check if this utterance is answering a pending YouTube question
+            pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
+            if pending and time.time() < pending.get("expires", 0.0):
+                is_affirmative = any(w in clean for w in ("da", "yes", "sure", "sigur", "baga", "pune-o", "canta-o", "play it", "ok", "yep", "bine"))
+                is_negative = any(w in clean for w in ("nu", "no", "cancel", "anuleaza", "stop", "lasa", "nevermind"))
+                if is_affirmative:
+                    self.cog._pending_yt_voice.pop(self.guild_id, None)
+                    target_q = pending["query"]
+                    is_ro_p = pending.get("lang") == "ro"
+                    wait_msg = f"🔍 **[Garmin]** Caut *\"{target_q}\"* pe YouTube... ⏳" if is_ro_p else f"🔍 **[Garmin]** Searching YouTube for *\"{target_q}\"*... ⏳"
+                    await self._notify(guild, wait_msg)
+                    try:
+                        from .external_search_patch import _extract_search
+                        results = await asyncio.to_thread(_extract_search, target_q)
+                        if results:
+                            yt_track = results[0]
+                            self.cog.manual_queues.setdefault(self.guild_id, []).insert(0, yt_track)
+                            await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 1))
+                            res_msg = f"🎥 **[Garmin]** Redare de pe YouTube: **{yt_track.get('title', target_q)}** 🎶" if is_ro_p else f"🎥 **[Garmin]** Playing from YouTube: **{yt_track.get('title', target_q)}** 🎶"
+                            await self._notify(guild, res_msg)
+                        else:
+                            fail_msg = f"❌ **[Garmin]** Nu am găsit rezultate pe YouTube pentru *\"{target_q}\"*." if is_ro_p else f"❌ **[Garmin]** No YouTube results found for *\"{target_q}\"*."
+                            await self._notify(guild, fail_msg)
+                    except Exception as exc:
+                        print(f"[Garmin YouTube Voice] Error: {exc}")
+                        await self._notify(guild, f"❌ YouTube search error: `{exc}`")
+                    return
+                elif is_negative:
+                    self.cog._pending_yt_voice.pop(self.guild_id, None)
+                    cancel_msg = "🚫 **[Garmin]** Comandă anulată." if pending.get("lang") == "ro" else "🚫 **[Garmin]** Cancelled."
+                    await self._notify(guild, cancel_msg)
+                    return
 
             # Check for Garmin Wake Word: "garmin", "ba garmin", "hey garmin", "ok garmin", "carmen", "darmin", etc.
             wake_match = re.search(r'\b(?:hey\s+|ok\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin|carmen|darmin|german|barmin)\b', clean, re.IGNORECASE)
@@ -182,9 +284,10 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if wake_match:
                 cmd_part = clean[wake_match.end():].strip().lstrip(",.:;!?- ")
                 if not cmd_part:
-                    # User only said "Garmin" -> wake up for 8 seconds
+                    # User only said "Garmin" -> wake up for 8 seconds and ring Siri chime!
                     self._wake_windows[user_id] = now + 8.0
                     print(f"[JuiceVault Voice] Wake word 'Garmin' activated by {user_name}. Waiting for command...")
+                    await play_chime_and_proceed(guild)
                     await self._notify(guild, f"🎤 **[Garmin]** Da, {user_name}? Ascult... (Listening...) 🟢")
                     return
                 clean_cmd = cmd_part
@@ -200,21 +303,26 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return
 
             print(f"[JuiceVault Voice Command] {user_name} -> Garmin command: '{clean_cmd}' (full: '{clean}')")
+            is_ro = (detected_lang == "ro-RO") or any(w in clean for w in ("canta", "pune", "baga", "da", "ba", "bai", "piesa", "melodia", "urmatoarea", "sari", "schimba"))
 
             # 1. SEEK / DERULARE 10s
             if any(w in clean_cmd for w in ("inainte 10", "forward 10", "skip 10s", "10 secunde inainte")):
                 if hasattr(self.cog, "_request_seek"):
-                    await self.cog._request_seek(self.guild_id, delta=10.0)
+                    await play_chime_and_proceed(guild, self.cog._request_seek(self.guild_id, delta=10.0))
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Forward +10s ⏩")
                     return
             elif any(w in clean_cmd for w in ("inapoi 10", "back 10", "rewind 10", "10 secunde inapoi")):
                 if hasattr(self.cog, "_request_seek"):
-                    await self.cog._request_seek(self.guild_id, delta=-10.0)
+                    await play_chime_and_proceed(guild, self.cog._request_seek(self.guild_id, delta=-10.0))
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Rewind -10s ⏪")
                     return
 
-            # 2. SEARCH & PLAY SONG (e.g. "canta robbery", "play robbery", "pune robbery", "baga robbery")
-            play_match = re.match(r'^(?:canta|pune|baga|play|asculta)\s+(.+)$', clean_cmd, re.IGNORECASE)
+            # 2. SEARCH & PLAY SONG (handles "canta robbery", "baga piesa robbery", "da-i play la robbery", "play fire", etc.)
+            play_match = re.match(
+                r'^(?:canta|pune|baga|play|asculta|da-i play la|dai play la|da play la|da-i drumul la|dai drumul la)\s+(?:piesa|melodia|melodie|track|song)?\s*(?:cu|de\s+la|by)?\s*(.+)$',
+                clean_cmd,
+                re.IGNORECASE
+            )
             if play_match:
                 q = play_match.group(1).strip()
                 if q:
@@ -224,23 +332,37 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         track = candidates[0] if candidates else None
                         if track:
                             self.cog.manual_queues.setdefault(self.guild_id, []).insert(0, track)
-                            await self.cog._request_skip(self.guild_id, 1)
+                            await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 1))
                             track_name = self.cog._track_text(track)
                             await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Playing: **{track_name}** 🎶")
                             return
                         else:
-                            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: Piesa *\"{q}\"* nu a fost găsită în arhivă.")
+                            # Not found in JuiceVault archive -> propose YouTube playback in user's language
+                            if not hasattr(self.cog, "_pending_yt_voice"):
+                                self.cog._pending_yt_voice = {}
+                            self.cog._pending_yt_voice[self.guild_id] = {
+                                "user_id": user_id,
+                                "query": q,
+                                "lang": "ro" if is_ro else "en",
+                                "expires": time.time() + 35.0,
+                                "user_name": user_name,
+                            }
+                            if is_ro:
+                                ask_msg = f"🎤 **[Garmin]** {user_name}: Piesa *\"{q}\"* nu se află în arhiva JuiceVault. Vrei să o caut și să o redau de pe **YouTube**? *(Zi **„Garmin, da”** sau scrie **da**)*"
+                            else:
+                                ask_msg = f"🎤 **[Garmin]** {user_name}: Track *\"{q}\"* was not found in the JuiceVault archive. Would you like me to play it from **YouTube**? *(Say **\"Garmin, yes\"** or type **yes**)*"
+                            await self._notify(guild, ask_msg)
                             return
                     except Exception as e:
                         log.warning(f"[Garmin Voice Search] Error searching: {e}")
 
-            # 3. SKIP / NEXT
-            if any(w in clean_cmd for w in ("skip", "next", "urmatoarea", "sari", "urmatorul", "treci peste", "schimba", "schimb-o", "alta piesa", "alta melodie")):
+            # 3. SKIP / NEXT (handles "skip", "next", "da-i skip", "dai skip", "urmatoarea", "sari", etc.)
+            if any(w in clean_cmd for w in ("skip", "next", "urmatoarea", "sari", "urmatorul", "treci peste", "schimba", "schimb-o", "alta piesa", "alta melodie", "da-i skip", "dai skip", "treci")):
                 if any(w in clean_cmd for w in ("10", "ten", "zece")):
-                    await self.cog._request_skip(self.guild_id, 10)
+                    await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 10))
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped 10 tracks! ⏩")
                 else:
-                    await self.cog._request_skip(self.guild_id, 1)
+                    await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 1))
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped track! ⏭️")
                 return
 
@@ -250,7 +372,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 if hist:
                     prev_t = hist.pop()
                     self.cog.manual_queues.setdefault(self.guild_id, []).insert(0, prev_t)
-                    await self.cog._request_skip(self.guild_id, 1)
+                    await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 1))
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Previous track! ⏮️")
                 return
 
@@ -278,6 +400,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     random.shuffle(q)
                     self.cog._cleanup_prefetch(self.guild_id)
                     self.cog._trigger_next_prefetch(self.guild_id)
+                    await play_chime_and_proceed(guild)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Shuffled queue! 🔀")
                 return
 
@@ -294,6 +417,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                                 await self.cog.web_remote.config.favorites.set(bot_favs)
                             except Exception:
                                 pass
+                        await play_chime_and_proceed(guild)
                         await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Added to favorites! ❤️")
                 return
 
@@ -310,30 +434,32 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 mono_16k = a[0::6].tobytes()
             except Exception as e:
                 print(f"[JuiceVault Voice] Audio conversion error: {e}")
-                return None
+                return None, "ro-RO"
 
             if not mono_16k or len(mono_16k) < 3200:
-                return None
+                return None, "ro-RO"
 
             audio_data = sr.AudioData(mono_16k, 16000, 2)
             first_cand = None
+            first_lang = "ro-RO"
             for lang in ("ro-RO", "en-US"):
                 try:
                     res = self._recognizer.recognize_google(audio_data, language=lang)
                     if res:
                         print(f"[JuiceVault Voice] Google STT recognized ({lang}): '{res}'")
                         lower_res = res.lower()
-                        if any(k in lower_res for k in ("garmin", "garmen", "garmon", "skip", "next", "pause", "play", "canta", "pune", "urmatoarea", "sari")):
-                            return res
+                        if any(k in lower_res for k in ("garmin", "garmen", "garmon", "carmin", "carmen", "skip", "next", "pause", "play", "canta", "pune", "baga", "urmatoarea", "sari", "da", "nu")):
+                            return res, lang
                         if first_cand is None:
                             first_cand = res
+                            first_lang = lang
                 except sr.UnknownValueError:
                     pass
                 except sr.RequestError as exc:
                     print(f"[JuiceVault Voice] Google STT network/API error: {exc}")
                 except Exception as exc:
                     print(f"[JuiceVault Voice] Google STT exception: {type(exc).__name__}: {exc}")
-            return first_cand
+            return first_cand, first_lang
 
         async def _notify(self, guild, message):
             """Send a subtle feedback message in the active voice or text channel."""
