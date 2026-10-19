@@ -472,7 +472,10 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self._wake_windows[user_id] = now + 8.0
                     print(f"[JuiceVault Voice] Wake word 'Garmin' activated by {user_name}. Waiting for command...")
                     await play_chime_and_proceed(guild)
-                    await self._notify(guild, f"🎤 **[Garmin]** Da, {user_name}? Ascult... (Listening...) 🟢")
+                    is_en = (detected_lang == "en-US") or any(clean.startswith(w) for w in ("hey", "hi", "ok", "yo"))
+                    greeting = f"Yes, {user_name}? I'm listening..." if is_en else f"Da, {user_name}? Ascult..."
+                    await speak_in_voice(guild, greeting, lang="en" if is_en else "ro")
+                    await self._notify(guild, f"🎤 **[Garmin]** {greeting} 🟢")
                     return
                 clean_cmd = cmd_part
                 self._wake_windows.pop(user_id, None)
