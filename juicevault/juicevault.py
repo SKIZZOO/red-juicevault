@@ -1537,7 +1537,7 @@ class JuiceVault(commands.Cog):
         if not pending or time.time() >= pending.get("expires", 0.0):
             return
         content = message.content.strip().lower()
-        if content in ("da", "yes", "y", "sure", "sigur", "baga", "pune-o", "cauta", "pune", "hai", "da te rog"):
+        if content in ("da", "yes", "y", "sure", "sigur", "baga", "pune-o", "cauta", "pune", "hai", "da te rog", "te rog", "youtube", "pe youtube", "de pe youtube", "dupa youtube", "play it"):
             self._pending_yt_voice.pop(message.guild.id, None)
             target_q = pending["query"]
             is_ro = pending.get("lang") == "ro"
@@ -1545,17 +1545,46 @@ class JuiceVault(commands.Cog):
             try:
                 from .voice_recognition import play_chime_and_proceed
                 from .external_search_patch import _extract_search
-                results = await asyncio.to_thread(_extract_search, target_q)
-                if results:
-                    yt_track = results[0]
-                    self.manual_queues.setdefault(message.guild.id, []).insert(0, yt_track)
-                    await play_chime_and_proceed(message.guild, self._request_skip(message.guild.id, 1))
-                    await message.channel.send(f"🎥 **[Garmin]** Redare de pe YouTube: **{yt_track.get('title', target_q)}** 🎶" if is_ro else f"🎥 **[Garmin]** Playing from YouTube: **{yt_track.get('title', target_q)}** 🎶")
-                else:
-                    await message.channel.send(f"❌ Nu am găsit pe YouTube: *\"{target_q}\"*")
+                info = await asyncio.to_thread(_extract_search, target_q)
+                if info:
+                    if info.get("_is_playlist"):
+                        entries = info.get("entries") or []
+                        yt_track = entries[0] if entries else None
+                    else:
+                        yt_track = info
+
+                    if yt_track:
+                        gid = message.guild.id
+                        self.manual_queues.setdefault(gid, []).insert(0, yt_track)
+                        voice = message.guild.voice_client
+                        if gid in self.tasks:
+                            if gid in self.skip_events:
+                                self.skip_events[gid].set()
+                            if voice and (voice.is_playing() or voice.is_paused()):
+                                voice.stop()
+                        else:
+                            if voice and voice.channel:
+                                self.stop_events[gid] = asyncio.Event()
+                                self.skip_events[gid] = asyncio.Event()
+                                self.seek_events[gid] = asyncio.Event()
+                                self.skip_counts[gid] = 0
+                                self.effects[gid] = "none"
+                                self.tasks[gid] = asyncio.create_task(self._player(message.guild, voice.channel))
+
+                        await play_chime_and_proceed(message.guild)
+                        title = yt_track.get('title') or target_q
+                        await message.channel.send(f"🎥 **[Garmin]** Redare de pe YouTube: **{title}** 🎶" if is_ro else f"🎥 **[Garmin]** Playing from YouTube: **{title}** 🎶")
+                        ui = self.bot.get_cog("JuiceVaultUI")
+                        if ui:
+                            asyncio.create_task(ui.update_panel(gid))
+                        if hasattr(self, "web_remote") and self.web_remote:
+                            asyncio.create_task(self.web_remote.broadcast_state(gid))
+                        return
+
+                await message.channel.send(f"❌ Nu am găsit pe YouTube: *\"{target_q}\"*")
             except Exception as e:
                 await message.channel.send(f"❌ YouTube error: `{e}`")
-        elif content in ("nu", "no", "n", "cancel", "anuleaza"):
+        elif content in ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa"):
             self._pending_yt_voice.pop(message.guild.id, None)
             await message.channel.send("🚫 **[Garmin]** Comandă anulată." if pending.get("lang") == "ro" else "🚫 **[Garmin]** Cancelled.")
 
