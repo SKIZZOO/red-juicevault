@@ -23,9 +23,9 @@ import discord
 
 log = logging.getLogger("red.juicevault.voice_recognition")
 
-# Silence noisy RTCP telemetry spam (SenderReportPacket type=200) from discord-ext-voice-recv
-logging.getLogger("discord.ext.voice_recv.reader").setLevel(logging.WARNING)
-logging.getLogger("discord.ext.voice_recv").setLevel(logging.WARNING)
+# Silence noisy RTCP telemetry and decoder key crypto errors from discord-ext-voice-recv
+logging.getLogger("discord.ext.voice_recv.reader").setLevel(logging.CRITICAL)
+logging.getLogger("discord.ext.voice_recv").setLevel(logging.CRITICAL)
 
 
 def _normalize_speech(text: str) -> str:
@@ -56,12 +56,12 @@ def _levenshtein(s1: str, s2: str) -> int:
 
 
 _MULTI_WORD_WAKE_REGEX = re.compile(
-    r'^(?:hey\s+|ok\s+|okay\s+|hei\s+|alo\s+|yo\s+)?(?:god\s+i\'?m\s+in|god\s+im\s+in|egger\s+man|eggar\s+man|eggerman|edgar\s+man|got\s+him\s+in|i\s+got\s+him\s+in|a\s+garden|the\s+garden|call\s+man|call\s+men)\b',
+    r'^(?:hey\s+|ok\s+|okay\s+|hei\s+|alo\s+|yo\s+)?(?:god\s+i\'?m\s+in|god\s+im\s+in|egger\s+man|eggar\s+man|eggerman|edgar\s+man|eger\s+man|eger\s+men|egr\s+man|egr\s+men|elgar\s+man|elgar\s+men|got\s+him\s+in|i\s+got\s+him\s+in|a\s+garden|the\s+garden|call\s+man|call\s+men)\b',
     re.IGNORECASE
 )
 
 _SINGLE_WORD_WAKE_REGEX = re.compile(
-    r'\b(?:hey\s+|ok\s+|okay\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+|bre\s+|ma\s+|fa\s+|auzi\s+|zi\s+|spune\s+|hi\s+|hello\s+|e\s+|a\s+|the\s+|de\s+)?(?:garmin|garmen|garmon|garmyn|garminn|garmy|garminu|garminul|garmini|carmin|carmen|carmina|carman|carme|carmyn|darmin|damin|darmon|barmin|karmin|karmen|jarmin|parmin|garden|gardon|gardi|gardin|gaming|germain|german|germane|calmin|starmin|sharmin)\b',
+    r'\b(?:hey\s+|ok\s+|okay\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+|bre\s+|ma\s+|fa\s+|auzi\s+|zi\s+|spune\s+|hi\s+|hello\s+|e\s+|a\s+|the\s+|de\s+)?(?:garmin|garmen|garmon|garmyn|garminn|garmy|garminu|garminul|garmini|carmin|carmen|carmina|carman|carme|carmyn|darmin|damin|darmon|barmin|karmin|karmen|jarmin|parmin|garden|gardon|gardi|gardin|gaming|germain|german|germane|elgar|edgar|eggar|egger|egr|eger|calmin|starmin|sharmin)\b',
     re.IGNORECASE
 )
 
@@ -409,18 +409,25 @@ async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bo
             import discord
             exe = _get_ffmpeg_exe()
             mixer = getattr(voice, "_jv_mixer", None)
+            if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
+                mixer = voice.source
+                voice._jv_mixer = mixer
+            elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
+                try:
+                    mixer = DuckingAudioSource(voice.source)
+                    voice.source = mixer
+                    if hasattr(voice, "_player") and voice._player:
+                        voice._player.source = mixer
+                    voice._jv_mixer = mixer
+                except Exception:
+                    mixer = None
+
             if voice.is_playing() and mixer is not None:
                 # Play chime over ducked music (5% volume) without stopping music!
                 chime_source = discord.FFmpegPCMAudio(chime_path, executable=exe)
                 mixer.set_overlay(chime_source)
                 await asyncio.sleep(0.35)
-            elif not voice.is_playing() or interrupt_playback:
-                if voice.is_playing() or voice.is_paused():
-                    voice.stop()
-                    for _ in range(20):
-                        if not voice.is_playing():
-                            break
-                        await asyncio.sleep(0.02)
+            elif not voice.is_playing():
                 voice.play(discord.FFmpegPCMAudio(chime_path, executable=exe))
                 await asyncio.sleep(0.35)
         except Exception as exc:
@@ -484,8 +491,21 @@ async def speak_in_voice(guild, text: str, lang: str = "ro"):
     try:
         exe = _get_ffmpeg_exe()
         mixer = getattr(voice, "_jv_mixer", None)
+        if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
+            mixer = voice.source
+            voice._jv_mixer = mixer
+        elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
+            try:
+                mixer = DuckingAudioSource(voice.source)
+                voice.source = mixer
+                if hasattr(voice, "_player") and voice._player:
+                    voice._player.source = mixer
+                voice._jv_mixer = mixer
+            except Exception:
+                mixer = None
+
         if voice.is_playing() and mixer is not None:
-            # Music is actively playing -> DUCK music to 5% and speak over it!
+            # Music is actively playing -> DUCK music to 5% and speak over it without stopping the song!
             print(f"[JuiceVault Voice TTS] 🔊 Speaking over ducked music (5%) in '{guild.name}': \"{clean_tts}\" ({lang})")
             overlay = discord.FFmpegPCMAudio(path, executable=exe)
             mixer.set_overlay(overlay)
@@ -494,15 +514,8 @@ async def speak_in_voice(guild, text: str, lang: str = "ro"):
                 if not mixer.is_overlay_playing():
                     break
                 await asyncio.sleep(0.1)
-        else:
+        elif not voice.is_playing():
             # No music playing -> play directly on voice client
-            if voice.is_playing() or voice.is_paused():
-                voice.stop()
-                for _ in range(25):
-                    if not voice.is_playing():
-                        break
-                    await asyncio.sleep(0.04)
-
             print(f"[JuiceVault Voice TTS] 🔊 Speaking in '{guild.name}': \"{clean_tts}\" ({lang})")
             voice.play(discord.FFmpegPCMAudio(path, executable=exe))
             duration = max(1.5, min(7.0, len(clean_tts) * 0.085))

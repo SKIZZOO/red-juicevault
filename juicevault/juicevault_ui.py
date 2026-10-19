@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 
 import discord
 from redbot.core import Config, commands
