@@ -153,6 +153,12 @@ def _extract_search(query, skip_sources=(), max_playlist_items=250):
         "ignoreerrors": True,
         "default_search": "auto",
         "playlistend": max_playlist_items if is_playlist_candidate else 5,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "mweb", "web"],
+                "player_skip": ["webpage", "configs"],
+            }
+        },
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
@@ -255,7 +261,7 @@ def _download_with_ytdlp(url, tempdir):
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "format": "bestaudio/best",
         "outtmpl": outtmpl,
         "restrictfilenames": True,
         "overwrites": True,
@@ -266,9 +272,10 @@ def _download_with_ytdlp(url, tempdir):
     }
 
     attempts = [
+        {**base, "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}}},
+        {**base, "extractor_args": {"youtube": {"player_client": ["ios", "android"]}}},
+        {**base, "extractor_args": {"youtube": {"player_client": ["web_safari", "web"]}}},
         base,
-        {**base, "extractor_args": {"youtube": {"player_client": ["android"]}}},
-        {**base, "extractor_args": {"youtube": {"player_client": ["web_safari"]}}},
     ]
     last_error = None
     for opts in attempts:

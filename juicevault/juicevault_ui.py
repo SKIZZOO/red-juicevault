@@ -92,7 +92,7 @@ class JuiceVaultPanelView(discord.ui.View):
             ("Stop", "⏹️", discord.ButtonStyle.danger, self._stop, "stop"),
             ("Shuffle", "🔀", discord.ButtonStyle.secondary, self._shuffle, "shuffle"),
             ("Category", "🎚️", discord.ButtonStyle.secondary, self._category, "category"),
-            ("Refresh", "🔄", discord.ButtonStyle.secondary, self._refresh, "refresh"),
+            ("Refresh", "🔄", discord.ButtonStyle.secondary, self._refresh_panel, "refresh"),
         ]
         for label, emoji, style, callback, key in buttons:
             button = discord.ui.Button(label=label, emoji=emoji, style=style, custom_id=f"juicevault:{key}:{guild_id}")
@@ -215,7 +215,7 @@ class JuiceVaultPanelView(discord.ui.View):
             categories = await cog.categories(); await interaction.followup.send("🎚️ Select a music category:", view=JuiceVaultCategoryView(self.panel, self.guild_id, categories), ephemeral=True)
         except Exception as exc: await interaction.followup.send(f"Unable to load categories: `{type(exc).__name__}: {exc}`", ephemeral=True)
 
-    async def _refresh(self, interaction):
+    async def _refresh_panel(self, interaction):
         await interaction.response.defer(); cog = self._cog()
         if cog is None: await interaction.followup.send("JuiceVault is not loaded.", ephemeral=True); return
         try:
@@ -235,6 +235,7 @@ class JuiceVaultUI(commands.Cog):
         self._task = None; self._control_task = None; self._restore_task = None; self._registered_views = set(); self.history = {}; self.last_seen_current = {}; self.last_track_snapshot = {}; self.last_track_object = {}; self.repeat_enabled = {}; self.repeat_queued = {}
         self._panel_update_locks = {}
         self._panel_update_pending = set()
+        self._last_panel_edit = {}
 
     async def cog_load(self):
         self._task = asyncio.create_task(self._panel_loop()); self._control_task = asyncio.create_task(self._control_loop()); self._restore_task = asyncio.create_task(self._restore_views())
@@ -332,10 +333,15 @@ class JuiceVaultUI(commands.Cog):
         async with lock:
             while True:
                 self._panel_update_pending.discard(guild_id)
+                last_edit = self._last_panel_edit.get(guild_id, 0.0)
+                now = time.monotonic()
+                if now - last_edit < 1.8:
+                    await asyncio.sleep(1.8 - (now - last_edit))
                 message = await self._get_panel_message(guild_id)
                 if message is None: return
                 try:
                     await message.edit(embed=await self._make_embed(guild_id), view=JuiceVaultPanelView(self, guild_id))
+                    self._last_panel_edit[guild_id] = time.monotonic()
                 except (discord.NotFound, discord.Forbidden, discord.HTTPException): pass
                 if guild_id not in self._panel_update_pending: return
                 await asyncio.sleep(1.0)

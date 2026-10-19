@@ -55,6 +55,9 @@ class JuiceVault(commands.Cog):
             category="all",
             last_track=None,
             last_position=0.0,
+            voice_commands_enabled=True,
+            learned_wake_words=[],
+            learned_song_queries={},
         )
         self.session = None
         self.tasks = {}
@@ -1678,6 +1681,41 @@ class JuiceVault(commands.Cog):
         except Exception as exc:
             await msg.edit(content=f"❌ **Eroare:** `{exc}`")
 
+    @jv.command(name="vclearn", aliases=["voicelearn", "garminlearn"])
+    @commands.guild_only()
+    async def vc_learn_cmd(self, ctx, *, word_or_phrase: str):
+        """Teach Garmin a new custom wake word or phonetic phrase (e.g. 'carmena', 'băi băiatule')."""
+        try:
+            from .voice_recognition import add_learned_wake_word, get_learned_wake_words
+            await add_learned_wake_word(self, ctx.guild.id, word_or_phrase)
+            words = await get_learned_wake_words(self, ctx.guild.id)
+            await ctx.send(f"🧠 **[Garmin]** Am învățat noul apelativ: **\"{word_or_phrase}\"**! 🎙️\nCuvinte active învățate: `{', '.join(sorted(words))}`")
+        except Exception as exc:
+            await ctx.send(f"❌ Eroare: {exc}")
+
+    @jv.command(name="vclearned", aliases=["voicelearned", "garminlearned"])
+    @commands.guild_only()
+    async def vc_learned_cmd(self, ctx):
+        """List all custom wake words and learned song mappings for this server."""
+        try:
+            from .voice_recognition import get_learned_wake_words, get_learned_song_queries
+            words = await get_learned_wake_words(self, ctx.guild.id)
+            queries = await get_learned_song_queries(self, ctx.guild.id)
+            embed = discord.Embed(title="🧠 Garmin Adaptive Memory", color=0xA855F7)
+            embed.add_field(
+                name="🎙️ Learned Wake Words",
+                value=", ".join(f"`{w}`" for w in sorted(words)) if words else "*Niciun cuvânt personalizat încă. Garmin învață automat variațiile când vorbești!*",
+                inline=False
+            )
+            embed.add_field(
+                name="🎵 Learned Song Aliases",
+                value="\n".join(f"• **\"{q}\"** ➔ {t.get('title')}" for q, t in list(queries.items())[:15]) if queries else "*Nicio piesă învățată încă. Căutările pe YouTube sunt reținute automat!*",
+                inline=False
+            )
+            await ctx.send(embed=embed)
+        except Exception as exc:
+            await ctx.send(f"❌ Eroare: {exc}")
+
     @commands.Cog.listener()
     async def on_message(self, message):
         """Handle 'da' / 'yes' / 'nu' / 'no' responses to YouTube voice prompts in text chat."""
@@ -1705,6 +1743,11 @@ class JuiceVault(commands.Cog):
 
                     if yt_track:
                         gid = message.guild.id
+                        try:
+                            from .voice_recognition import add_learned_song_query
+                            asyncio.create_task(add_learned_song_query(self, gid, target_q, yt_track))
+                        except Exception:
+                            pass
                         self.manual_queues.setdefault(gid, []).insert(0, yt_track)
                         voice = message.guild.voice_client
                         if gid in self.tasks:
