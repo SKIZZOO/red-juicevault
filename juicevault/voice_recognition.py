@@ -283,14 +283,18 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
     m = _MULTI_WORD_WAKE_REGEX.search(clean)
     if m:
         wake = m.group(0).strip()
-        cmd = clean[m.end():].strip().lstrip(",.:;!?- ")
+        before = clean[:m.start()].strip().rstrip(",.:;!?- ")
+        after = clean[m.end():].strip().lstrip(",.:;!?- ")
+        cmd = f"{before} {after}".strip()
         return True, cmd, wake
 
     # 2. Single-word names with optional multi-prefix salutations ('bă Garmin', 'ok Garmin', etc.)
     m = _SINGLE_WORD_WAKE_REGEX.search(clean)
     if m:
         wake = m.group(0).strip()
-        cmd = clean[m.end():].strip().lstrip(",.:;!?- ")
+        before = clean[:m.start()].strip().rstrip(",.:;!?- ")
+        after = clean[m.end():].strip().lstrip(",.:;!?- ")
+        cmd = f"{before} {after}".strip()
         return True, cmd, wake
 
     # 3. Custom learned wake words for this guild
@@ -301,7 +305,9 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
                 continue
             idx = clean.find(clean_lw)
             if idx != -1:
-                cmd = clean[idx + len(clean_lw):].strip().lstrip(",.:;!?- ")
+                before = clean[:idx].strip().rstrip(",.:;!?- ")
+                after = clean[idx + len(clean_lw):].strip().lstrip(",.:;!?- ")
+                cmd = f"{before} {after}".strip()
                 return True, cmd, clean_lw
 
     # 4. Levenshtein fuzzy distance matching on leading words (distance <= 2 to 'garmin')
@@ -320,38 +326,6 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
                     return True, " ".join(cmd_tokens).strip(), cand_clean
 
     return False, "", ""
-
-
-def _is_unambiguous_direct_command(text: str) -> bool:
-    """Return True if utterance is an unmistakable music control command that should
-    execute immediately even without saying 'Garmin' (e.g. 'da-i skip la piesa', 'salveaza piesa asta')."""
-    clean = _normalize_speech(text)
-    if not clean:
-        return False
-
-    # 1. Direct skip commands
-    if re.search(r'^(?:te\s+rog\s+)?(?:da-i\s+skip|dai\s+skip|da\s+skip|skip|treci\s+peste|treci\s+la\s+urmatoarea|schimba|schimb-o|urmatoarea)\s*(?:la\s+piesa|la\s+melodie|la\s+track|piesa\s+asta|piesa|melodia|track|song|this\s+song|the\s+song)?(?:\s+te\s+rog|\s+frate|\s+man)?$', clean, re.I):
-        return True
-    if any(w in clean for w in ("da-i skip", "dai skip", "da skip", "skip la piesa", "skip piesa", "skip this song", "skip the song", "urmatoarea piesa", "schimba piesa")):
-        return True
-    if clean.strip() in {"skip", "next", "urmatoarea", "sari", "schimba", "schimb-o", "da-i skip", "dai skip", "da skip"}:
-        return True
-
-    # 2. Direct favorite / save commands
-    if re.search(r'^(?:te\s+rog\s+)?(?:salveaza|adauga\s+la|pune\s+la|baga\s+la|favorite|save)\s*(?:piesa\s+asta|melodia\s+asta|piesa|melodia|favorite|preferate|this\s+song|song|track)?(?:\s+la\s+favorite|\s+la\s+preferate)?(?:\s+te\s+rog)?$', clean, re.I):
-        return True
-    if any(p in clean for p in ("salveaza piesa", "salveaza melodia", "favorite this song", "save this song", "adauga la favorite", "pune la favorite", "baga la favorite", "baga din favorite", "play my favorite", "piesa favorita", "melodie preferata")):
-        return True
-
-    # 3. Direct pause / stop commands
-    if re.search(r'^(?:te\s+rog\s+)?(?:pauza|opreste|stop|taci|shut\s+up|pause)\s*(?:la\s+muzica|la\s+piesa|muzica|piesa|the\s+music)?(?:\s+din\s+gura)?$', clean, re.I):
-        return True
-
-    # 4. Direct resume commands
-    if re.search(r'^(?:te\s+rog\s+)?(?:continua|porneste|da-i\s+drumul|dai\s+drumul|resume)\s*(?:la\s+muzica|la\s+piesa|muzica|piesa|the\s+music)?$', clean, re.I):
-        return True
-
-    return False
 
 
 async def get_learned_wake_words(cog, guild_id: int) -> set:
@@ -1286,9 +1260,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
 
-            # Direct commands that execute immediately even without saying 'Garmin' (e.g. 'da-i skip la piesa', 'salveaza piesa asta')
-            is_direct_cmd = _is_unambiguous_direct_command(clean)
-
             # Check for Garmin Wake Word using permissive matcher + custom learned words + fuzzy Levenshtein
             custom_words = await get_learned_wake_words(self.cog, self.guild_id)
             matched_wake, cmd_part, wake_word = _match_wake_word(clean, custom_words)
@@ -1311,12 +1282,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return
                 clean_cmd = cmd_part
                 self._wake_windows.pop(user_id, None)
-            elif is_direct_cmd:
-                # Direct voice command executed immediately even without wake word!
-                self._lock_session(user_id, duration=20.0)
-                clean_cmd = clean
-                self._wake_windows.pop(user_id, None)
-                print(f"[JuiceVault Voice] Direct command detected from {user_name} (no wake word needed): '{clean}'")
             else:
                 # Check if within active wake window from a previous greeting
                 if now < self._wake_windows.get(user_id, 0.0):
@@ -1737,9 +1702,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         score = 0
                         matched_wake, _, _ = _match_wake_word(clean, custom_words)
                         if matched_wake:
-                            score += 150
-                        if _is_unambiguous_direct_command(clean):
-                            score += 160
+                            score += 200
                         tokens = set(re.findall(r'[a-z0-9]+', clean))
                         score += len(tokens & control_words) * 30
                         score += min(len(clean), 25)
