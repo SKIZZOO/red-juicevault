@@ -283,6 +283,8 @@ def _mix_pcm(music_pcm: bytes, overlay_pcm: bytes, music_vol: float) -> bytes:
     target_len = max(len(music_pcm), len(overlay_pcm))
     if not target_len:
         return b''
+    if target_len % 4 != 0:
+        target_len += 4 - (target_len % 4)
     if len(music_pcm) < target_len:
         music_pcm = music_pcm + b'\x00' * (target_len - len(music_pcm))
     if len(overlay_pcm) < target_len:
@@ -308,7 +310,7 @@ def _mix_pcm(music_pcm: bytes, overlay_pcm: bytes, music_vol: float) -> bytes:
 
 
 class DuckingAudioSource(discord.AudioSource):
-    """AudioSource wrapper that ducks the main music volume to 5% (0.05) whenever
+    """AudioSource wrapper that ducks the main music volume to 18% (0.18) whenever
     an overlay audio stream (Garmin TTS or Siri chime) is playing."""
 
     def __init__(self, main_source):
@@ -330,7 +332,7 @@ class DuckingAudioSource(discord.AudioSource):
                 except Exception:
                     pass
             self.overlay_source = overlay_source
-            self.target_volume = 0.05  # Duck music down to 5% volume!
+            self.target_volume = 0.18  # Duck music down to 18% volume ("ducks the sounds a bit")
 
     def is_overlay_playing(self) -> bool:
         with self._lock:
@@ -352,9 +354,9 @@ class DuckingAudioSource(discord.AudioSource):
 
         # Smooth volume ducking / recovery ramp
         if self.current_volume < self.target_volume:
-            self.current_volume = min(self.target_volume, self.current_volume + 0.15)
+            self.current_volume = min(self.target_volume, self.current_volume + 0.08)
         elif self.current_volume > self.target_volume:
-            self.current_volume = max(self.target_volume, self.current_volume - 0.25)
+            self.current_volume = max(self.target_volume, self.current_volume - 0.12)
 
         vol = self.current_volume
 
@@ -401,7 +403,7 @@ class DuckingAudioSource(discord.AudioSource):
 
 async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = False):
     """Play the Siri assistant chime in voice channel, then execute the command action.
-    If music is actively playing, ducks music to 5% without stopping the track."""
+    If music is actively playing, ducks music to 18% without stopping the track."""
     voice = getattr(guild, "voice_client", None)
     chime_path = _get_siri_chime_wav_path()
     if voice and voice.is_connected() and chime_path and os.path.isfile(chime_path):
@@ -423,7 +425,7 @@ async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bo
                     mixer = None
 
             if voice.is_playing() and mixer is not None:
-                # Play chime over ducked music (5% volume) without stopping music!
+                # Play chime over ducked music (18% volume) without stopping music!
                 chime_source = discord.FFmpegPCMAudio(chime_path, executable=exe)
                 mixer.set_overlay(chime_source)
                 await asyncio.sleep(0.35)
@@ -439,7 +441,7 @@ async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bo
 
 async def speak_in_voice(guild, text: str, lang: str = "ro"):
     """Fetch Google Translate TTS and speak out loud directly in the voice channel.
-    If music is actively playing, ducks music to 5% volume and speaks over it."""
+    If music is actively playing, ducks music to 18% volume and speaks over it."""
     voice = getattr(guild, "voice_client", None)
     if not voice or not voice.is_connected():
         return
@@ -505,8 +507,8 @@ async def speak_in_voice(guild, text: str, lang: str = "ro"):
                 mixer = None
 
         if voice.is_playing() and mixer is not None:
-            # Music is actively playing -> DUCK music to 5% and speak over it without stopping the song!
-            print(f"[JuiceVault Voice TTS] 🔊 Speaking over ducked music (5%) in '{guild.name}': \"{clean_tts}\" ({lang})")
+            # Music is actively playing -> DUCK music to 18% and speak over it without stopping the song!
+            print(f"[JuiceVault Voice TTS] 🔊 Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({lang})")
             overlay = discord.FFmpegPCMAudio(path, executable=exe)
             mixer.set_overlay(overlay)
             duration = max(1.5, min(8.0, len(clean_tts) * 0.085 + 0.4))
@@ -1104,7 +1106,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         return
                     else:
                         # 3. Not found in JuiceVault archive -> propose YouTube fallback!
-                        # Music is ducked to 5% while Garmin asks; music NEVER stops!
+                        # Music is ducked to 18% while Garmin asks; music NEVER stops!
                         print(f"[JuiceVault Voice] Track '{q}' not found in archive -> Proposing YouTube fallback")
                         if not hasattr(self.cog, "_pending_yt_voice"):
                             self.cog._pending_yt_voice = {}
