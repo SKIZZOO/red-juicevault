@@ -10460,8 +10460,26 @@ HTML_INDEX = """<!DOCTYPE html>
         return;
       }
 
-      // Search & Play query ("play Lucid Dreams", "baga piesa Robbery", "canta Robbery", "da-i play la piesa ...")
-      const playMatch = clean.match(/^(?:play|canta|pune|baga|asculta|da-i play la|dai play la|da play la|da-i drumul la|dai drumul la)\\s+(?:piesa|melodia|melodie|track|song)?\\s*(?:cu|de la|by)?\\s*(.+)$/i);
+      // Direct YouTube search
+      if (clean.includes('youtube')) {
+        let ytQ = clean.replace(/\\b(?:cauta|baga|pune|play|gaseste|search|reda|da-i play la|dai play la)?\\s*(?:pe|de pe|dupa|from|on)?\\s*youtube\\s*(?:pentru|for|cu|de la|by)?\\b/gi, '').trim();
+        ytQ = ytQ.replace(/^(?:cauta|baga|pune|play|gaseste|search|reda|da-i play la|dai play la)\\s+(?:piesa|melodia|track|song)?\\s*(?:cu|de la|by)?\\s*/gi, '').trim();
+        if (ytQ) {
+          playSiriChime();
+          setFeedback(`Garmin YouTube: "${ytQ}"...`);
+          showToast(`Garmin YouTube: "${ytQ}"`);
+          if (typeof switchTab === 'function') switchTab('search');
+          const searchInput = document.getElementById('searchInput');
+          if (searchInput) {
+            searchInput.value = ytQ;
+            if (typeof performSearch === 'function') performSearch(ytQ);
+          }
+          return;
+        }
+      }
+
+      // Search & Play query ("play Lucid Dreams", "baga piesa Robbery", "canta Robbery", "cauta Drake", "baga 6ix9ine")
+      const playMatch = clean.match(/^(?:play|canta|pune|baga|asculta|cauta|gaseste|search|reda|da-i play la|dai play la|da play la|da-i drumul la|dai drumul la)\\s+(?:piesa|melodia|melodie|track|song)?\\s*(?:cu|de la|by)?\\s*(.+)$/i);
       if (playMatch && playMatch[1]) {
         playSiriChime();
         const query = playMatch[1].trim();

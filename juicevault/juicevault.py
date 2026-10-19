@@ -1537,18 +1537,19 @@ class JuiceVault(commands.Cog):
         if not pending or time.time() >= pending.get("expires", 0.0):
             return
         content = message.content.strip().lower()
-        if content in ("da", "yes", "y", "sure", "sigur", "baga", "pune-o"):
+        if content in ("da", "yes", "y", "sure", "sigur", "baga", "pune-o", "cauta", "pune", "hai", "da te rog"):
             self._pending_yt_voice.pop(message.guild.id, None)
             target_q = pending["query"]
             is_ro = pending.get("lang") == "ro"
             await message.channel.send(f"🔍 **[Garmin]** Caut *\"{target_q}\"* pe YouTube... ⏳" if is_ro else f"🔍 **[Garmin]** Searching YouTube for *\"{target_q}\"*... ⏳")
             try:
+                from .voice_recognition import play_chime_and_proceed
                 from .external_search_patch import _extract_search
                 results = await asyncio.to_thread(_extract_search, target_q)
                 if results:
                     yt_track = results[0]
                     self.manual_queues.setdefault(message.guild.id, []).insert(0, yt_track)
-                    await self._request_skip(message.guild.id, 1)
+                    await play_chime_and_proceed(message.guild, self._request_skip(message.guild.id, 1))
                     await message.channel.send(f"🎥 **[Garmin]** Redare de pe YouTube: **{yt_track.get('title', target_q)}** 🎶" if is_ro else f"🎥 **[Garmin]** Playing from YouTube: **{yt_track.get('title', target_q)}** 🎶")
                 else:
                     await message.channel.send(f"❌ Nu am găsit pe YouTube: *\"{target_q}\"*")
