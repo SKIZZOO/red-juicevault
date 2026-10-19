@@ -812,8 +812,15 @@ class JuiceVault(commands.Cog):
                     if track.get("_clip_duration"):
                         options += f" -t {float(track['_clip_duration']):.3f}"
                     source = discord.FFmpegPCMAudio(local_path, executable=self._ffmpeg_executable(), before_options=before, options=options, stderr=log_file)
+                    try:
+                        from .voice_recognition import DuckingAudioSource
+                        mixer = DuckingAudioSource(source)
+                        voice._jv_mixer = mixer
+                        play_source = mixer
+                    except Exception:
+                        play_source = source
                     await self._wait_for_voice_idle(voice)
-                    voice.play(source, after=after)
+                    voice.play(play_source, after=after)
                     voice._jv_started_at = time.monotonic()
                     self.play_positions[gid] = start_offset
                     if self.pause_after_seek.pop(gid, False) and voice.is_playing():
@@ -876,6 +883,8 @@ class JuiceVault(commands.Cog):
                     await self._wait_for_voice_idle(voice)
                 else:
                     await self._wait_for_voice_idle(voice)
+                if hasattr(voice, "_jv_mixer"):
+                    voice._jv_mixer = None
                 if log_file:
                     try:
                         log_file.flush()

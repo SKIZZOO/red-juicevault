@@ -14,6 +14,7 @@ import os
 import re
 import struct
 import tempfile
+import threading
 import time
 import unicodedata
 import wave
@@ -108,21 +109,161 @@ def _detect_user_language(text: str, default_lang: str = "ro-RO") -> str:
     return "en" if "en" in default_lang.lower() else "ro"
 
 
-async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = True):
-    """Play the Siri assistant chime in voice channel, then execute the command action."""
+def _mix_pcm(music_pcm: bytes, overlay_pcm: bytes, music_vol: float) -> bytes:
+    """Mix 48kHz 16-bit stereo PCM bytes with ducking volume scaling."""
+    try:
+        import audioop
+        m = audioop.mul(music_pcm, 2, max(0.0, min(1.0, music_vol)))
+        if overlay_pcm:
+            if len(m) > len(overlay_pcm):
+                overlay_pcm = overlay_pcm + b'\x00' * (len(m) - len(overlay_pcm))
+            elif len(overlay_pcm) > len(m):
+                m = m + b'\x00' * (len(overlay_pcm) - len(m))
+            return audioop.add(m, overlay_pcm, 2)
+        return m
+    except Exception:
+        pass
+
+    target_len = max(len(music_pcm), len(overlay_pcm))
+    if not target_len:
+        return b''
+    if len(music_pcm) < target_len:
+        music_pcm = music_pcm + b'\x00' * (target_len - len(music_pcm))
+    if len(overlay_pcm) < target_len:
+        overlay_pcm = overlay_pcm + b'\x00' * (target_len - len(overlay_pcm))
+
+    a_music = array.array('h')
+    a_music.frombytes(music_pcm)
+    if overlay_pcm:
+        a_over = array.array('h')
+        a_over.frombytes(overlay_pcm)
+        for i in range(len(a_music)):
+            v = int(a_music[i] * music_vol + a_over[i])
+            if v > 32767:
+                a_music[i] = 32767
+            elif v < -32768:
+                a_music[i] = -32768
+            else:
+                a_music[i] = v
+    else:
+        for i in range(len(a_music)):
+            a_music[i] = int(a_music[i] * music_vol)
+    return a_music.tobytes()
+
+
+class DuckingAudioSource:
+    """AudioSource wrapper that ducks the main music volume to 5% (0.05) whenever
+    an overlay audio stream (Garmin TTS or Siri chime) is playing."""
+
+    def __init__(self, main_source):
+        self.main_source = main_source
+        self.overlay_source = None
+        self._lock = threading.Lock()
+        self.current_volume = 1.0
+        self.target_volume = 1.0
+
+    def is_opus(self) -> bool:
+        return False
+
+    def set_overlay(self, overlay_source):
+        with self._lock:
+            if self.overlay_source:
+                try:
+                    self.overlay_source.cleanup()
+                except Exception:
+                    pass
+            self.overlay_source = overlay_source
+            self.target_volume = 0.05  # Duck music down to 5% volume!
+
+    def is_overlay_playing(self) -> bool:
+        with self._lock:
+            return self.overlay_source is not None
+
+    def read(self) -> bytes:
+        music_data = b''
+        if self.main_source:
+            try:
+                music_data = self.main_source.read()
+            except Exception:
+                music_data = b''
+
+        with self._lock:
+            overlay = self.overlay_source
+
+        if not music_data and not overlay:
+            return b''
+
+        # Smooth volume ducking / recovery ramp
+        if self.current_volume < self.target_volume:
+            self.current_volume = min(self.target_volume, self.current_volume + 0.15)
+        elif self.current_volume > self.target_volume:
+            self.current_volume = max(self.target_volume, self.current_volume - 0.25)
+
+        vol = self.current_volume
+
+        overlay_data = b''
+        if overlay:
+            try:
+                overlay_data = overlay.read()
+            except Exception:
+                overlay_data = b''
+
+            if not overlay_data:
+                # Overlay stream completed
+                with self._lock:
+                    if self.overlay_source is overlay:
+                        try:
+                            overlay.cleanup()
+                        except Exception:
+                            pass
+                        self.overlay_source = None
+                        self.target_volume = 1.0  # Restore music volume to 100%!
+
+        if not overlay_data and vol >= 0.98:
+            return music_data
+
+        if not music_data and overlay_data:
+            return overlay_data
+
+        return _mix_pcm(music_data, overlay_data, vol)
+
+    def cleanup(self):
+        with self._lock:
+            if self.overlay_source:
+                try:
+                    self.overlay_source.cleanup()
+                except Exception:
+                    pass
+                self.overlay_source = None
+        if self.main_source:
+            try:
+                self.main_source.cleanup()
+            except Exception:
+                pass
+
+
+async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = False):
+    """Play the Siri assistant chime in voice channel, then execute the command action.
+    If music is actively playing, ducks music to 5% without stopping the track."""
     voice = getattr(guild, "voice_client", None)
     chime_path = _get_siri_chime_wav_path()
     if voice and voice.is_connected() and chime_path and os.path.isfile(chime_path):
         try:
             import discord
-            if not voice.is_playing() or interrupt_playback:
+            exe = _get_ffmpeg_exe()
+            mixer = getattr(voice, "_jv_mixer", None)
+            if voice.is_playing() and mixer is not None:
+                # Play chime over ducked music (5% volume) without stopping music!
+                chime_source = discord.FFmpegPCMAudio(chime_path, executable=exe)
+                mixer.set_overlay(chime_source)
+                await asyncio.sleep(0.35)
+            elif not voice.is_playing() or interrupt_playback:
                 if voice.is_playing() or voice.is_paused():
                     voice.stop()
                     for _ in range(20):
                         if not voice.is_playing():
                             break
                         await asyncio.sleep(0.02)
-                exe = _get_ffmpeg_exe()
                 voice.play(discord.FFmpegPCMAudio(chime_path, executable=exe))
                 await asyncio.sleep(0.35)
         except Exception as exc:
@@ -133,11 +274,13 @@ async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bo
 
 
 async def speak_in_voice(guild, text: str, lang: str = "ro"):
-    """Fetch Google Translate TTS and speak out loud directly in the voice channel."""
+    """Fetch Google Translate TTS and speak out loud directly in the voice channel.
+    If music is actively playing, ducks music to 5% volume and speaks over it."""
     voice = getattr(guild, "voice_client", None)
     if not voice or not voice.is_connected():
         return
     import urllib.parse
+    import discord
 
     clean_tts = re.sub(r'[*_~`#<>|]', '', text).strip()
     if not clean_tts:
@@ -182,22 +325,34 @@ async def speak_in_voice(guild, text: str, lang: str = "ro"):
         return
 
     try:
-        import discord
-        if voice.is_playing() or voice.is_paused():
-            voice.stop()
-            for _ in range(25):
+        exe = _get_ffmpeg_exe()
+        mixer = getattr(voice, "_jv_mixer", None)
+        if voice.is_playing() and mixer is not None:
+            # Music is actively playing -> DUCK music to 5% and speak over it!
+            print(f"[JuiceVault Voice TTS] 🔊 Speaking over ducked music (5%) in '{guild.name}': \"{clean_tts}\" ({lang})")
+            overlay = discord.FFmpegPCMAudio(path, executable=exe)
+            mixer.set_overlay(overlay)
+            duration = max(1.5, min(8.0, len(clean_tts) * 0.085 + 0.4))
+            for _ in range(int(duration / 0.1)):
+                if not mixer.is_overlay_playing():
+                    break
+                await asyncio.sleep(0.1)
+        else:
+            # No music playing -> play directly on voice client
+            if voice.is_playing() or voice.is_paused():
+                voice.stop()
+                for _ in range(25):
+                    if not voice.is_playing():
+                        break
+                    await asyncio.sleep(0.04)
+
+            print(f"[JuiceVault Voice TTS] 🔊 Speaking in '{guild.name}': \"{clean_tts}\" ({lang})")
+            voice.play(discord.FFmpegPCMAudio(path, executable=exe))
+            duration = max(1.5, min(7.0, len(clean_tts) * 0.085))
+            for _ in range(int(duration / 0.1)):
                 if not voice.is_playing():
                     break
-                await asyncio.sleep(0.04)
-
-        exe = _get_ffmpeg_exe()
-        print(f"[JuiceVault Voice TTS] 🔊 Speaking in '{guild.name}': \"{clean_tts}\" ({lang})")
-        voice.play(discord.FFmpegPCMAudio(path, executable=exe))
-        duration = max(1.5, min(7.0, len(clean_tts) * 0.085))
-        for _ in range(int(duration / 0.1)):
-            if not voice.is_playing():
-                break
-            await asyncio.sleep(0.1)
+                await asyncio.sleep(0.1)
     except Exception as exc:
         print(f"[JuiceVault Voice TTS] Playback error: {exc}")
 
