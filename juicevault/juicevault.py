@@ -46,6 +46,14 @@ class JuiceVault(commands.Cog):
     VIP_AUDIO_RAW = os.path.join(tempfile.gettempdir(), "juicevault_vip_raw.mp3")
     VIP_COOLDOWN_SECONDS = 25.0
 
+    SKIZZOO_VIDEO_URL = "https://www.youtube.com/watch?v=QeX0wYlnUt0"
+    SKIZZOO_START_OFFSET = 1.0
+    SKIZZOO_PLAY_DURATION = 5.0  # From 1st second until sec 6 in the video -> 5 seconds duration
+    SKIZZOO_DELAY_SECONDS = 0.5
+    SKIZZOO_AUDIO_SLICED = os.path.join(tempfile.gettempdir(), "juicevault_skizzoo_entrance_5s.wav")
+    SKIZZOO_AUDIO_RAW = os.path.join(tempfile.gettempdir(), "juicevault_skizzoo_raw.mp3")
+    SKIZZOO_COOLDOWN_SECONDS = 20.0
+
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=918273645, force_registration=True)
@@ -92,13 +100,18 @@ class JuiceVault(commands.Cog):
         self._preserved_files = set()
         self._vip_cooldowns = {}
         self._vip_cache_task = None
+        self._skizzoo_cooldowns = {}
+        self._skizzoo_cache_task = None
 
     async def cog_load(self):
         await self._ensure_session()
         self.restore_task = asyncio.create_task(self._restore_players())
         self._vip_cache_task = asyncio.create_task(self._ensure_vip_audio())
+        self._skizzoo_cache_task = asyncio.create_task(self._ensure_skizzoo_audio())
 
     async def cog_unload(self):
+        if self._skizzoo_cache_task and not self._skizzoo_cache_task.done():
+            self._skizzoo_cache_task.cancel()
         if self._vip_cache_task and not self._vip_cache_task.done():
             self._vip_cache_task.cancel()
         if self.restore_task:
@@ -1192,6 +1205,149 @@ class JuiceVault(commands.Cog):
         voice.stop()
         return target
 
+    def _is_skizzoo(self, member) -> bool:
+        if not member:
+            return False
+        names = [
+            getattr(member, "name", ""),
+            getattr(member, "display_name", ""),
+            getattr(member, "global_name", ""),
+            getattr(member, "nick", ""),
+        ]
+        combined = " ".join(str(n or "").lower() for n in names)
+        if "skizzoo" in combined:
+            return True
+        owner_id = getattr(self.bot, "owner_id", None)
+        if owner_id and member.id == owner_id:
+            return True
+        owner_ids = getattr(self.bot, "owner_ids", None) or set()
+        if owner_ids and member.id in owner_ids:
+            return True
+        if member.id in self.VIP_USER_IDS and "ski" in combined:
+            return True
+        return False
+
+    async def _ensure_skizzoo_audio(self):
+        if os.path.isfile(self.SKIZZOO_AUDIO_SLICED) and os.path.getsize(self.SKIZZOO_AUDIO_SLICED) > 1024:
+            return self.SKIZZOO_AUDIO_SLICED, True
+        if os.path.isfile(self.SKIZZOO_AUDIO_RAW) and os.path.getsize(self.SKIZZOO_AUDIO_RAW) > 1024:
+            raw_path = self.SKIZZOO_AUDIO_RAW
+            try:
+                ffmpeg_bin = self._ffmpeg_executable()
+                slice_cmd = [
+                    ffmpeg_bin,
+                    "-y",
+                    "-ss", str(self.SKIZZOO_START_OFFSET),
+                    "-t", str(self.SKIZZOO_PLAY_DURATION),
+                    "-i", raw_path,
+                    "-vn",
+                    "-ar", "48000",
+                    "-ac", "2",
+                    self.SKIZZOO_AUDIO_SLICED,
+                ]
+                import subprocess
+                sub_res = subprocess.run(slice_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
+                if sub_res.returncode == 0 and os.path.isfile(self.SKIZZOO_AUDIO_SLICED) and os.path.getsize(self.SKIZZOO_AUDIO_SLICED) > 512:
+                    return self.SKIZZOO_AUDIO_SLICED, True
+            except Exception:
+                pass
+            return self.SKIZZOO_AUDIO_RAW, False
+
+        def _do_download():
+            try:
+                from .external_search_patch import _download_with_ytdlp
+                tempdir = tempfile.mkdtemp(prefix="juicevault-skizzoo-")
+                try:
+                    downloaded = _download_with_ytdlp(self.SKIZZOO_VIDEO_URL, tempdir)
+                    if downloaded and os.path.isfile(downloaded) and os.path.getsize(downloaded) > 1024:
+                        shutil.copyfile(downloaded, self.SKIZZOO_AUDIO_RAW)
+                        ffmpeg_bin = self._ffmpeg_executable()
+                        sliced_target = os.path.join(tempdir, "skizzoo_sliced.wav")
+                        slice_cmd = [
+                            ffmpeg_bin,
+                            "-y",
+                            "-ss", str(self.SKIZZOO_START_OFFSET),
+                            "-t", str(self.SKIZZOO_PLAY_DURATION),
+                            "-i", downloaded,
+                            "-vn",
+                            "-ar", "48000",
+                            "-ac", "2",
+                            sliced_target,
+                        ]
+                        try:
+                            import subprocess
+                            sub_res = subprocess.run(
+                                slice_cmd,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                timeout=15,
+                            )
+                            if sub_res.returncode == 0 and os.path.isfile(sliced_target) and os.path.getsize(sliced_target) > 512:
+                                shutil.copyfile(sliced_target, self.SKIZZOO_AUDIO_SLICED)
+                                return self.SKIZZOO_AUDIO_SLICED, True
+                        except Exception as slice_err:
+                            print(f"[JuiceVault] Skizzoo entrance slice notice: {slice_err}")
+
+                        return self.SKIZZOO_AUDIO_RAW, False
+                finally:
+                    shutil.rmtree(tempdir, ignore_errors=True)
+            except Exception as exc:
+                print(f"[JuiceVault] Skizzoo entrance audio cache error: {exc}")
+                return None, False
+
+        return await asyncio.to_thread(_do_download)
+
+    async def _trigger_skizzoo_join(self, guild, member, target_channel_id):
+        await asyncio.sleep(self.SKIZZOO_DELAY_SECONDS)
+
+        gid = guild.id
+        voice = guild.voice_client
+        if not voice or not voice.is_connected() or voice.channel is None:
+            return
+
+        current_ch = getattr(getattr(member, "voice", None), "channel", None)
+        if not current_ch or current_ch.id != voice.channel.id or current_ch.id != target_channel_id:
+            return
+
+        res = await self._ensure_skizzoo_audio()
+        audio_path = res[0] if isinstance(res, tuple) else res
+        is_pre_sliced = res[1] if isinstance(res, tuple) else False
+
+        if not audio_path or not os.path.isfile(audio_path):
+            print(f"[JuiceVault Entrance] Skizzoo entrance audio not available.")
+            return
+
+        exe = self._ffmpeg_executable()
+        before_opts = "-nostdin"
+        extra_opts = "-vn"
+        if not is_pre_sliced:
+            before_opts = f"-nostdin -ss {self.SKIZZOO_START_OFFSET:.3f}"
+            extra_opts = f"-vn -t {self.SKIZZOO_PLAY_DURATION:.3f}"
+
+        from .voice_recognition import DuckingAudioSource
+        mixer = getattr(voice, "_jv_mixer", None)
+        if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
+            mixer = voice.source
+            voice._jv_mixer = mixer
+        elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
+            try:
+                mixer = DuckingAudioSource(voice.source)
+                voice.source = mixer
+                if hasattr(voice, "_player") and voice._player:
+                    voice._player.source = mixer
+                voice._jv_mixer = mixer
+            except Exception:
+                mixer = None
+
+        if voice.is_playing() and mixer is not None:
+            entrance_source = discord.FFmpegPCMAudio(audio_path, executable=exe, before_options=before_opts, options=extra_opts)
+            mixer.set_overlay(entrance_source)
+            print(f"[JuiceVault Entrance] 👑 Playing Skizzoo entrance theme (1s-6s) over ducked music (18%) in '{guild.name}'")
+        elif not voice.is_playing():
+            entrance_source = discord.FFmpegPCMAudio(audio_path, executable=exe, before_options=before_opts, options=extra_opts)
+            voice.play(entrance_source)
+            print(f"[JuiceVault Entrance] 👑 Playing Skizzoo entrance theme (1s-6s) directly in '{guild.name}'")
+
     async def _ensure_vip_audio(self):
         if os.path.isfile(self.VIP_AUDIO_SLICED) and os.path.getsize(self.VIP_AUDIO_SLICED) > 1024:
             return self.VIP_AUDIO_SLICED, True
@@ -1243,21 +1399,15 @@ class JuiceVault(commands.Cog):
         return await asyncio.to_thread(_do_download)
 
     async def _trigger_vip_join(self, guild, member, target_channel_id):
-        # 3-second delay from when VIP joins
         await asyncio.sleep(self.VIP_DELAY_SECONDS)
 
         gid = guild.id
         voice = guild.voice_client
-        if not voice or not voice.is_connected() or gid not in self.tasks:
+        if not voice or not voice.is_connected() or voice.channel is None:
             return
 
-        # Check if member is still connected to the voice channel where bot is playing
         current_ch = getattr(getattr(member, "voice", None), "channel", None)
         if not current_ch or current_ch.id != voice.channel.id or current_ch.id != target_channel_id:
-            return
-
-        current = self.current.get(gid)
-        if current and current.get("_is_vip"):
             return
 
         vip_audio_res = await self._ensure_vip_audio()
@@ -1268,63 +1418,36 @@ class JuiceVault(commands.Cog):
             print(f"[JuiceVault] VIP audio not available for member {member.id}.")
             return
 
-        if not hasattr(self, "_preserved_files"):
-            self._preserved_files = set()
+        exe = self._ffmpeg_executable()
+        before_opts = "-nostdin"
+        extra_opts = "-vn"
+        if not is_pre_sliced:
+            before_opts = f"-nostdin -ss {self.VIP_START_OFFSET:.3f}"
+            extra_opts = f"-vn -t {self.VIP_PLAY_DURATION:.3f}"
 
-        was_playing = bool(voice.is_playing() and not voice.is_paused())
-        current_pos = 0.0
-        local_path = self.current_files.get(gid)
+        from .voice_recognition import DuckingAudioSource
+        mixer = getattr(voice, "_jv_mixer", None)
+        if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
+            mixer = voice.source
+            voice._jv_mixer = mixer
+        elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
+            try:
+                mixer = DuckingAudioSource(voice.source)
+                voice.source = mixer
+                if hasattr(voice, "_player") and voice._player:
+                    voice._player.source = mixer
+                voice._jv_mixer = mixer
+            except Exception:
+                mixer = None
 
-        if current and not current.get("_is_vip") and not current.get("_is_soundboard"):
-            current_pos = self.get_position(gid)
-
-            if local_path and os.path.isfile(local_path):
-                self._preserved_files.add(local_path)
-
-            resume_track = dict(
-                current,
-                _jv_seek_copy=True,
-                _cached_file=local_path,
-                _resume_position=current_pos,
-                _resume_was_playing=was_playing,
-            )
-            resume_track.pop("_jv_repeat_copy", None)
-            self.manual_queues.setdefault(gid, []).insert(0, resume_track)
-
-        vip_track = {
-            "id": f"vip:clip:{int(time.time())}",
-            "title": "VIP Greeting",
-            "artist": f"VIP: {member.display_name}",
-            "length": "0:06",
-            "file_name": "vip_clip.mp3",
-            "_cached_file": vip_audio,
-            "_is_vip": True,
-            "_is_soundboard": True,
-            "_sound_color": "#ff4d4f",
-            "_clip_start": self.VIP_START_OFFSET,
-            "_clip_duration": self.VIP_PLAY_DURATION,
-            "_is_pre_sliced": is_pre_sliced,
-            "url": self.VIP_VIDEO_URL,
-        }
-
-        self.manual_queues.setdefault(gid, []).insert(0, vip_track)
-        self.play_positions[gid] = 0.0
-        if not hasattr(self, "pause_after_seek"):
-            self.pause_after_seek = {}
-        self.pause_after_seek[gid] = False
-
-        if voice.is_playing() or voice.is_paused():
-            voice.stop()
-        else:
-            skip_evt = self.skip_events.get(gid)
-            if skip_evt:
-                skip_evt.set()
-
-        if hasattr(self, "web_remote") and self.web_remote:
-            asyncio.create_task(self.web_remote.broadcast_state(gid))
-        ui = self.bot.get_cog("JuiceVaultUI")
-        if ui:
-            asyncio.create_task(ui.update_panel(gid))
+        if voice.is_playing() and mixer is not None:
+            vip_source = discord.FFmpegPCMAudio(vip_audio, executable=exe, before_options=before_opts, options=extra_opts)
+            mixer.set_overlay(vip_source)
+            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting over ducked music (18%) in '{guild.name}'")
+        elif not voice.is_playing():
+            vip_source = discord.FFmpegPCMAudio(vip_audio, executable=exe, before_options=before_opts, options=extra_opts)
+            voice.play(vip_source)
+            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting directly in '{guild.name}'")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -1336,29 +1459,35 @@ class JuiceVault(commands.Cog):
                 if cur and not cur.get("_is_vip") and not cur.get("_is_soundboard"):
                     self._save_last_track_state(gid, cur, pos)
             return
+
         if getattr(member, "bot", False):
             return
-        if member.id not in self.VIP_USER_IDS:
-            return
+
         if before.channel == after.channel or after.channel is None:
             return
 
         guild = member.guild
-        gid = guild.id
         voice = guild.voice_client
 
         if not voice or not voice.is_connected() or voice.channel != after.channel:
             return
-        if gid not in self.tasks or self.tasks[gid].done():
+
+        # Check if user is Skizzoo
+        if self._is_skizzoo(member):
+            now = time.monotonic()
+            if now - self._skizzoo_cooldowns.get(member.id, 0.0) < self.SKIZZOO_COOLDOWN_SECONDS:
+                return
+            self._skizzoo_cooldowns[member.id] = now
+            asyncio.create_task(self._trigger_skizzoo_join(guild, member, after.channel.id))
             return
 
-        now = time.monotonic()
-        if now - self._vip_cooldowns.get(member.id, 0.0) < self.VIP_COOLDOWN_SECONDS:
-            return
-        self._vip_cooldowns[member.id] = now
-
-        target_channel_id = after.channel.id
-        asyncio.create_task(self._trigger_vip_join(guild, member, target_channel_id))
+        # Generic VIP entrance fallback (for any other VIP user)
+        if member.id in self.VIP_USER_IDS:
+            now = time.monotonic()
+            if now - self._vip_cooldowns.get(member.id, 0.0) < self.VIP_COOLDOWN_SECONDS:
+                return
+            self._vip_cooldowns[member.id] = now
+            asyncio.create_task(self._trigger_vip_join(guild, member, after.channel.id))
 
     @commands.group(name="jv", invoke_without_command=True)
     @commands.guild_only()

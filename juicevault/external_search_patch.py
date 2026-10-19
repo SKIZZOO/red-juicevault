@@ -110,7 +110,9 @@ def _parse_entry(entry, default_source="Web", info_context=None):
         "_external": True,
         "_source": source,
         "_webpage_url": url,
-        "_query": url or title,
+        "_query": info_context.get("_original_query") or title,
+        "_search_title": title,
+        "_search_artist": artist,
     }
 
 
@@ -155,7 +157,7 @@ def _extract_search(query, skip_sources=(), max_playlist_items=250):
         "playlistend": max_playlist_items if is_playlist_candidate else 5,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "ios", "mweb", "web"],
+                "player_client": ["tv_embedded", "web_embedded", "android", "ios", "mweb", "web"],
                 "player_skip": ["webpage", "configs"],
             }
         },
@@ -255,6 +257,27 @@ def _extract_search(query, skip_sources=(), max_playlist_items=250):
     raise RuntimeError("No result found on YouTube, SoundCloud, Bandcamp, or the supplied URL.")
 
 
+def _clean_track_query(info):
+    title = str(info.get("title") or info.get("fulltitle") or "").strip()
+    artist = str(info.get("artist") or info.get("uploader") or info.get("channel") or "").strip()
+    if artist.lower() in ("unknown artist", "unknown", "none", "", "web", "youtube", "soundcloud"):
+        artist = ""
+
+    # Remove brackets / parentheses with official video, music video, etc.
+    clean_title = re.sub(
+        r"\s*[\(\[](?:official\s*(?:video|music\s*video|audio|visualizer|lyric\s*video|track)|video\s*clip|lyrics?|4k|hd|hq|explicit|prod\.?[^\)\]]*)[\)\]]",
+        "",
+        title,
+        flags=re.IGNORECASE,
+    ).strip()
+    if not clean_title:
+        clean_title = title
+
+    if artist and artist.lower() not in clean_title.lower():
+        return f"{artist} - {clean_title}"
+    return clean_title
+
+
 def _download_with_ytdlp(url, tempdir):
     outtmpl = os.path.join(tempdir, "%(id)s.%(ext)s")
     base = {
@@ -271,12 +294,27 @@ def _download_with_ytdlp(url, tempdir):
         },
     }
 
+    # Order of attempts:
+    # 1. tv_embedded and web_embedded clients bypass YouTube age-gates without sign-in
+    # 2. mobile and standard web clients
+    # 3. local browser cookies (chrome, edge, firefox, etc.) if available on the system
     attempts = [
+        {**base, "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web_embedded", "android", "ios"]}}},
+        {**base, "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web_creator", "mweb"]}}},
+        {**base, "extractor_args": {"youtube": {"player_client": ["web_embedded", "android"]}}},
         {**base, "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}}},
         {**base, "extractor_args": {"youtube": {"player_client": ["ios", "android"]}}},
         {**base, "extractor_args": {"youtube": {"player_client": ["web_safari", "web"]}}},
         base,
     ]
+
+    for browser in ("chrome", "edge", "firefox", "brave", "opera"):
+        attempts.append({
+            **base,
+            "cookiesfrombrowser": (browser, None, None, None),
+            "extractor_args": {"youtube": {"player_client": ["web", "mweb"]}},
+        })
+
     last_error = None
     for opts in attempts:
         try:
@@ -292,6 +330,7 @@ def _download_with_ytdlp(url, tempdir):
             last_error = RuntimeError("yt-dlp finished without producing an audio file")
         except Exception as exc:
             last_error = exc
+
     raise last_error or RuntimeError("External download failed")
 
 
@@ -307,17 +346,39 @@ def _download_external(info):
         try:
             return _download_with_ytdlp(url, tempdir)
         except Exception as first_error:
-            query = str(info.get("_query") or info.get("title") or "").strip()
+            # Check if this came from YouTube or an age-gated URL
             source = str(info.get("_source") or "").casefold()
-            if query and source == "youtube":
-                fallback = _extract_search(query, skip_sources=("YouTube",))
-                fallback_url = fallback.get("webpage_url") or fallback.get("original_url") or fallback.get("url")
-                if fallback_url:
-                    path = _download_with_ytdlp(fallback_url, tempdir)
-                    info["_source"] = _source_name(fallback, "Web")
-                    info["_webpage_url"] = fallback_url
-                    info["url"] = fallback_url
-                    return path
+            clean_query = _clean_track_query(info)
+            is_youtube = ("youtube" in source or "youtu.be" in url or "youtube.com" in url)
+
+            if clean_query and is_youtube:
+                # 1. Try YouTube official audio/topic track (never age-restricted)
+                try:
+                    topic_query = f"{clean_query} audio"
+                    topic_info = _extract_search(topic_query)
+                    topic_url = topic_info.get("webpage_url") or topic_info.get("original_url") or topic_info.get("url")
+                    if topic_url and topic_url != url:
+                        path = _download_with_ytdlp(topic_url, tempdir)
+                        info["_source"] = "YouTube (Audio)"
+                        info["_webpage_url"] = topic_url
+                        info["url"] = topic_url
+                        return path
+                except Exception as topic_err:
+                    print(f"[JuiceVault External] YouTube audio fallback notice: {topic_err}")
+
+                # 2. Try SoundCloud / Bandcamp fallback with clean search terms (never pass YouTube URL!)
+                try:
+                    fallback = _extract_search(clean_query, skip_sources=("YouTube",))
+                    fallback_url = fallback.get("webpage_url") or fallback.get("original_url") or fallback.get("url")
+                    if fallback_url:
+                        path = _download_with_ytdlp(fallback_url, tempdir)
+                        info["_source"] = _source_name(fallback, "Web")
+                        info["_webpage_url"] = fallback_url
+                        info["url"] = fallback_url
+                        return path
+                except Exception as sc_err:
+                    print(f"[JuiceVault External] SoundCloud fallback notice: {sc_err}")
+
             raise first_error
     except Exception:
         shutil.rmtree(tempdir, ignore_errors=True)
