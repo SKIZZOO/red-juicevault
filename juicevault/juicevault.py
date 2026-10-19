@@ -1189,7 +1189,7 @@ class JuiceVault(commands.Cog):
     @commands.group(name="jv", invoke_without_command=True)
     @commands.guild_only()
     async def jv(self, ctx):
-        await ctx.send("`4jv start` `4jv stop` `4jv skip` `4jv skip10` `4jv shuffle` `4jv fav` `4jv favs` `4jv playfav <#>` `4jv categories` `4jv category <name>` `4jv search <name>` `4jv play <name>` `4jv refresh` `4jv status` `4jv remote`")
+        await ctx.send("`4jv start` `4jv stop` `4jv skip` `4jv skip10` `4jv shuffle` `4jv fav` `4jv favs` `4jv playfav <#>` `4jv vc [on/off]` `4jv categories` `4jv category <name>` `4jv search <name>` `4jv play <name>` `4jv refresh` `4jv status` `4jv remote`")
 
     @jv.command(name="start")
     async def start(self, ctx):
@@ -1396,6 +1396,55 @@ class JuiceVault(commands.Cog):
 
         self.manual_queues.setdefault(gid, []).append(dict(selected))
         await ctx.send(f"➕ Added **{selected.get('title', 'Track')}** from favorites to queue (position #{len(self.manual_queues[gid])}).")
+
+    @jv.command(name="voicecommands", aliases=["voicecontrol", "vc"])
+    async def voice_commands_cmd(self, ctx, mode: str = None):
+        """View status or toggle voice commands recognition in voice channels.
+        Modes: 'on', 'off', 'status'"""
+        from .voice_recognition import is_voice_recognition_supported, is_voice_commands_enabled_for_guild, set_voice_commands_enabled_for_guild, attach_voice_command_sink
+
+        supported, reason = is_voice_recognition_supported()
+
+        if mode is not None and mode.lower() in ("on", "enable", "true"):
+            if not supported:
+                await ctx.send(
+                    f"⚠️ **In-Discord voice commands require additional packages on your bot host:**\n"
+                    f"`{reason}`\n\n"
+                    f"💡 *Tip: Web Remote Voice Control is 100% active and available right now on your phone/browser without extra packages!*"
+                )
+                return
+            await set_voice_commands_enabled_for_guild(self, ctx.guild.id, True)
+            if ctx.guild and ctx.guild.voice_client:
+                attach_voice_command_sink(self, ctx.guild)
+            await ctx.send("🎤 **Voice Command Recognition: ENABLED in Discord voice channel!**\nYou can now speak into your mic: say **'skip'**, **'next'**, **'pause'**, **'play'**, or **'shuffle'**!")
+        elif mode is not None and mode.lower() in ("off", "disable", "false"):
+            await set_voice_commands_enabled_for_guild(self, ctx.guild.id, False)
+            await ctx.send("🔇 **Voice Command Recognition: DISABLED in Discord voice channel.**")
+        else:
+            is_enabled = await is_voice_commands_enabled_for_guild(self, ctx.guild.id)
+            embed = discord.Embed(
+                title="🎤 JuiceVault Voice Commands System",
+                color=0xA855F7 if is_enabled else 0x64748B,
+            )
+            embed.add_field(
+                name="🔊 In-Discord Voice Channel Recognition",
+                value=(
+                    f"Status: **{'🟢 ACTIVE' if (supported and is_enabled) else ('🟡 READY (Disabled)' if supported else '⚪ Missing Python Packages')}**\n"
+                    + (f"Installed & Ready!\nToggle with: `4jv vc on` or `4jv vc off`" if supported else f"Requires: `{reason}`\nInstall on host: `pip install discord-ext-voice-recv SpeechRecognition`")
+                ),
+                inline=False
+            )
+            embed.add_field(
+                name="📱 Web Remote Voice Control",
+                value="Status: **🟢 100% READY & ACTIVE!**\nOpen your Web Remote (`4jv remote`) and tap the **🎤 Voice Cmd** button or enable Hands-Free Mode on your phone or PC!",
+                inline=False
+            )
+            embed.add_field(
+                name="🗣️ Recognized Voice Commands",
+                value="• **`skip`** / **`next`** ➔ Skip current track\n• **`skip 10`** ➔ Skip 10 tracks\n• **`previous`** / **`back`** ➔ Play previous track\n• **`pause`** / **`play`** ➔ Toggle playback\n• **`shuffle`** ➔ Shuffle the queue\n• **`favorite`** ➔ Add to favorites",
+                inline=False
+            )
+            await ctx.send(embed=embed)
 
     @jv.command(name="categories")
     async def categories_cmd(self, ctx):

@@ -9,6 +9,7 @@ _submodules = [
     "ui_patch",
     "eq_ui_patch",
     "voice_patch",
+    "voice_recognition",
     "external_search_patch",
     "web_remote",
     "web_assets",

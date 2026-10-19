@@ -3122,6 +3122,168 @@ HTML_INDEX = """<!DOCTYPE html>
         max-width: none !important;
       }
     }
+
+    /* Hands-Free Voice Command HUD */
+    .btn-flat.voice-active {
+      color: #38bdf8 !important;
+      background: rgba(56, 189, 248, 0.16) !important;
+      border-color: rgba(56, 189, 248, 0.45) !important;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.3) !important;
+      animation: pulseVoiceBtn 1.8s infinite ease-in-out !important;
+    }
+    @keyframes pulseVoiceBtn {
+      0%, 100% { box-shadow: 0 0 8px rgba(56, 189, 248, 0.25); }
+      50% { box-shadow: 0 0 18px rgba(56, 189, 248, 0.6); }
+    }
+    .voice-cmd-hud {
+      position: fixed;
+      bottom: 82px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - 32px);
+      max-width: 480px;
+      background: rgba(13, 11, 24, 0.95);
+      backdrop-filter: blur(28px) saturate(190%);
+      -webkit-backdrop-filter: blur(28px) saturate(190%);
+      border: 1px solid rgba(168, 85, 247, 0.38);
+      border-radius: 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 30px rgba(168, 85, 247, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      padding: 14px 18px;
+      z-index: 1200;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      animation: voiceHudIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      font-family: inherit;
+    }
+    @keyframes voiceHudIn {
+      0% { opacity: 0; transform: translate3d(-50%, 20px, 0) scale(0.95); }
+      100% { opacity: 1; transform: translate3d(-50%, 0, 0) scale(1); }
+    }
+    .voice-hud-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .voice-hud-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .voice-pulse-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulseVoiceDot 1.4s infinite ease-in-out;
+    }
+    .voice-pulse-dot.listening {
+      background: #38bdf8;
+      box-shadow: 0 0 12px #38bdf8;
+    }
+    .voice-pulse-dot.processing {
+      background: #f59e0b;
+      box-shadow: 0 0 12px #f59e0b;
+    }
+    @keyframes pulseVoiceDot {
+      0%, 100% { transform: scale(0.9); opacity: 0.7; }
+      50% { transform: scale(1.25); opacity: 1; }
+    }
+    .voice-hud-title {
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: #fff;
+      letter-spacing: 0.02em;
+    }
+    .voice-lang-badge {
+      font-size: 0.62rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      color: var(--accent);
+      padding: 2px 6px;
+      border-radius: 999px;
+    }
+    .voice-hud-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .voice-icon-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      color: var(--text-sub);
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .voice-icon-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+    .voice-icon-btn.active {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #10b981;
+    }
+    .voice-hud-body {
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .voice-hud-transcript {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #fff;
+      line-height: 1.4;
+      min-height: 22px;
+      word-break: break-word;
+    }
+    .voice-hud-feedback {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .voice-hud-hints {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+    .voice-hud-hints::-webkit-scrollbar {
+      display: none;
+    }
+    .voice-hint-pill {
+      font-size: 0.7rem;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 999px;
+      padding: 3px 9px;
+      color: var(--text-sub);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .voice-hint-pill:hover {
+      background: rgba(168, 85, 247, 0.2);
+      border-color: rgba(168, 85, 247, 0.4);
+      color: #fff;
+    }
   </style>
 </head>
 <body>
@@ -3358,6 +3520,10 @@ HTML_INDEX = """<!DOCTYPE html>
             <button class="btn-kinetic btn-flat" id="lyricsBtn" onclick="openLyrics()">
               <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               <span>Lyrics</span>
+            </button>
+            <button class="btn-kinetic btn-flat" id="voiceCmdBtn" onclick="toggleVoiceRecognition()" title="Voice Commands (Hands-Free Control)">
+              <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              <span id="voiceCmdBtnLabel">Voice</span>
             </button>
             <button class="btn-kinetic btn-flat" id="userBtn" onclick="openUserModal()">
               <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -4789,6 +4955,35 @@ HTML_INDEX = """<!DOCTYPE html>
       <button class="btn-kinetic btn-flat" style="padding:12px; margin-top:14px; width:100%; justify-content:center;" onclick="closeStatsModal()">
         Close
       </button>
+    </div>
+  <!-- Hands-Free Voice Control HUD -->
+  <div class="voice-cmd-hud" id="voiceCmdHud" style="display:none;">
+    <div class="voice-hud-header">
+      <div class="voice-hud-title-wrap">
+        <span class="voice-pulse-dot" id="voicePulseDot"></span>
+        <span class="voice-hud-title">Voice Control</span>
+        <span class="voice-lang-badge" id="voiceLangBadge">RO / EN</span>
+      </div>
+      <div class="voice-hud-header-actions">
+        <button class="voice-icon-btn" id="voiceHandsFreeBtn" onclick="toggleVoiceHandsFree()" title="Toggle Continuous Hands-Free Listening">
+          <span id="voiceHandsFreeStatus">Hands-Free: OFF</span>
+        </button>
+        <button class="voice-icon-btn" onclick="stopVoiceRecognition()" title="Close Voice Control">
+          <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="voice-hud-body">
+      <div class="voice-hud-transcript" id="voiceTranscript">Say "Skip", "Next", "Pause", "Play", "Vol 80", "Shuffle"...</div>
+      <div class="voice-hud-feedback" id="voiceFeedback">Listening for voice commands...</div>
+    </div>
+    <div class="voice-hud-hints">
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('skip')">"Skip"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('skip 10')">"Skip 10"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('pause')">"Pause"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('play')">"Play"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('urmatoarea')">"Următoarea"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('shuffle')">"Shuffle"</span>
     </div>
   </div>
 
@@ -9911,6 +10106,283 @@ HTML_INDEX = """<!DOCTYPE html>
     } else {
       connectWS();
       fetchStatus();
+    }
+
+    // ==========================================
+    // Hands-Free Web Voice Control Engine
+    // ==========================================
+    let voiceRecognition = null;
+    let voiceIsListening = false;
+    let voiceHandsFreeMode = false;
+    let voiceRestartTimer = null;
+    let voiceLastHeardTime = 0;
+
+    function isVoiceSupported() {
+      return ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+    }
+
+    function initVoiceRecognition() {
+      if (!isVoiceSupported()) return null;
+      if (voiceRecognition) return voiceRecognition;
+
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const rec = new SpeechRec();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+
+      const userLang = (navigator.language || 'ro-RO');
+      rec.lang = userLang.startsWith('ro') ? 'ro-RO' : (userLang.startsWith('en') ? 'en-US' : userLang);
+
+      rec.onstart = function() {
+        voiceIsListening = true;
+        updateVoiceUIState(true, 'Listening... Say "skip", "pause", "play"...');
+      };
+
+      rec.onresult = function(event) {
+        let finalTranscript = '';
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const item = event.results[i];
+          if (item.isFinal) {
+            finalTranscript += item[0].transcript;
+          } else {
+            interimTranscript += item[0].transcript;
+          }
+        }
+
+        const displayText = finalTranscript || interimTranscript;
+        if (displayText) {
+          const transEl = document.getElementById('voiceTranscript');
+          if (transEl) transEl.innerText = `"${displayText.trim()}"`;
+        }
+
+        if (finalTranscript.trim()) {
+          voiceLastHeardTime = Date.now();
+          executeVoiceCommand(finalTranscript.trim().toLowerCase());
+        }
+      };
+
+      rec.onerror = function(event) {
+        console.warn('Voice recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          showToast('Microphone access denied for Voice Control');
+          stopVoiceRecognition();
+          return;
+        }
+        const fbEl = document.getElementById('voiceFeedback');
+        if (fbEl && voiceIsListening) {
+          fbEl.innerText = `Status: ${event.error}`;
+        }
+      };
+
+      rec.onend = function() {
+        voiceIsListening = false;
+        if (voiceHandsFreeMode) {
+          clearTimeout(voiceRestartTimer);
+          voiceRestartTimer = setTimeout(() => {
+            if (voiceHandsFreeMode) {
+              startVoiceListening();
+            }
+          }, 350);
+        } else {
+          updateVoiceUIState(false, 'Voice recognition paused');
+        }
+      };
+
+      voiceRecognition = rec;
+      return voiceRecognition;
+    }
+
+    function toggleVoiceRecognition() {
+      if (!isVoiceSupported()) {
+        showToast('Speech Recognition not supported in this browser. Use Chrome or Safari.');
+        return;
+      }
+      if (voiceIsListening || voiceHandsFreeMode) {
+        stopVoiceRecognition();
+      } else {
+        startVoiceRecognition();
+      }
+    }
+
+    function startVoiceRecognition() {
+      const hud = document.getElementById('voiceCmdHud');
+      if (hud) hud.style.display = 'flex';
+
+      const rec = initVoiceRecognition();
+      if (!rec) return;
+
+      try {
+        rec.start();
+        updateVoiceUIState(true, 'Listening for voice commands...');
+      } catch (e) {
+        try { rec.stop(); setTimeout(() => rec.start(), 200); } catch (_) {}
+      }
+    }
+
+    function stopVoiceRecognition() {
+      voiceHandsFreeMode = false;
+      clearTimeout(voiceRestartTimer);
+      if (voiceRecognition) {
+        try { voiceRecognition.stop(); } catch (e) {}
+      }
+      voiceIsListening = false;
+      const hud = document.getElementById('voiceCmdHud');
+      if (hud) hud.style.display = 'none';
+      updateVoiceUIState(false, 'Voice recognition closed');
+    }
+
+    function startVoiceListening() {
+      if (!voiceRecognition) initVoiceRecognition();
+      try {
+        voiceRecognition.start();
+        updateVoiceUIState(true, 'Hands-Free continuous listening active');
+      } catch (e) {}
+    }
+
+    function toggleVoiceHandsFree() {
+      voiceHandsFreeMode = !voiceHandsFreeMode;
+      const btn = document.getElementById('voiceHandsFreeBtn');
+      const status = document.getElementById('voiceHandsFreeStatus');
+      if (btn) btn.classList.toggle('active', voiceHandsFreeMode);
+      if (status) status.innerText = voiceHandsFreeMode ? 'Hands-Free: ON' : 'Hands-Free: OFF';
+
+      if (voiceHandsFreeMode && !voiceIsListening) {
+        startVoiceRecognition();
+      }
+      showToast(voiceHandsFreeMode ? 'Hands-Free Voice Listening ON' : 'Hands-Free Mode OFF');
+    }
+
+    function triggerVoiceHint(hintText) {
+      const transEl = document.getElementById('voiceTranscript');
+      if (transEl) transEl.innerText = `"${hintText}"`;
+      executeVoiceCommand(hintText.toLowerCase());
+    }
+
+    function updateVoiceUIState(isListening, statusText) {
+      const dot = document.getElementById('voicePulseDot');
+      const fb = document.getElementById('voiceFeedback');
+      const btn = document.getElementById('voiceCmdBtn');
+      if (dot) {
+        dot.className = isListening ? 'voice-pulse-dot listening' : 'voice-pulse-dot';
+      }
+      if (fb && statusText) fb.innerText = statusText;
+      if (btn) {
+        btn.classList.toggle('voice-active', isListening || voiceHandsFreeMode);
+      }
+    }
+
+    function executeVoiceCommand(text) {
+      const fb = document.getElementById('voiceFeedback');
+      const setFeedback = (msg) => { if (fb) fb.innerText = msg; };
+
+      const clean = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+      // Skip forward 10s
+      if (clean.includes('skip 10') || clean.includes('skip ten') || clean.includes('forward 10') || clean.includes('inainte 10') || clean.includes('10 secunde inainte')) {
+        setFeedback('Command: Skip +10s');
+        action('seek', { delta: 10 });
+        return;
+      }
+
+      // Rewind 10s
+      if (clean.includes('back 10') || clean.includes('inapoi 10') || clean.includes('rewind 10') || clean.includes('10 secunde inapoi')) {
+        setFeedback('Command: Rewind -10s');
+        action('seek', { delta: -10 });
+        return;
+      }
+
+      // Skip / Next track
+      if (
+        clean === 'skip' || clean.startsWith('skip') ||
+        clean === 'next' || clean.includes('next song') || clean.includes('next track') ||
+        clean.includes('urmatoarea') || clean.includes('urmatorul') ||
+        clean.includes('sari') || clean.includes('schimba') || clean.includes('treci')
+      ) {
+        setFeedback('Command: Skip Track');
+        action('skip');
+        return;
+      }
+
+      // Previous track
+      if (
+        clean === 'prev' || clean === 'previous' || clean.includes('previous song') ||
+        clean.includes('piesa anterioara') || clean.includes('inapoi') || clean.includes('melodia anterioara')
+      ) {
+        setFeedback('Command: Previous Track');
+        action('previous');
+        return;
+      }
+
+      // Pause
+      if (
+        clean === 'pause' || clean.includes('pauza') ||
+        clean === 'stop' || clean.includes('opreste') || clean.includes('taci')
+      ) {
+        setFeedback('Command: Pause');
+        action('pause');
+        return;
+      }
+
+      // Play / Resume
+      if (
+        clean === 'play' || clean === 'start' || clean === 'resume' ||
+        clean.includes('continua') || clean.includes('da drumul') || clean.includes('porneste')
+      ) {
+        setFeedback('Command: Play');
+        action('play');
+        return;
+      }
+
+      // Shuffle
+      if (clean.includes('shuffle') || clean.includes('amesteca')) {
+        setFeedback('Command: Shuffle Queue');
+        action('shuffle');
+        return;
+      }
+
+      // Repeat / Loop
+      if (clean.includes('repeat') || clean.includes('repeta') || clean.includes('loop')) {
+        setFeedback('Command: Repeat');
+        action('repeat');
+        return;
+      }
+
+      // Volume control (e.g. "volum 80", "volume 50")
+      const volMatch = clean.match(/(?:volum|volume|set volume to|sunet)\\s*(\\d{1,3})/);
+      if (volMatch) {
+        const val = Math.max(0, Math.min(100, parseInt(volMatch[1], 10)));
+        setFeedback(`Command: Volume ${val}%`);
+        action('volume', { volume: val });
+        return;
+      }
+
+      // Like / Favorite
+      if (clean.includes('favorite') || clean.includes('favorit') || clean.includes('like') || clean.includes('apreciaza')) {
+        setFeedback('Command: Toggle Favorite');
+        if (typeof toggleCurrentSongFavorite === 'function') {
+          toggleCurrentSongFavorite();
+        }
+        return;
+      }
+
+      // Search & Play query ("play Lucid Dreams", "canta Robbery", "pune All Girls Are The Same")
+      const playMatch = clean.match(/^(?:play|canta|pune|baga|asculta)\\s+(.+)$/);
+      if (playMatch && playMatch[1]) {
+        const query = playMatch[1].trim();
+        setFeedback(`Searching: "${query}"...`);
+        showToast(`Voice Search: "${query}"`);
+        if (typeof switchTab === 'function') switchTab('search');
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+          searchInput.value = query;
+          if (typeof performSearch === 'function') performSearch(query);
+        }
+        return;
+      }
+
+      setFeedback(`Recognized: "${text}" (no matching command)`);
     }
 
     // Auto-resume Listen Together stream if page was refreshed by alignment watchdog
