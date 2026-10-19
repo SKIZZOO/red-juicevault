@@ -212,50 +212,80 @@ async def add_learned_song_query(cog, guild_id: int, query: str, track: dict):
             pass
 
 
+_LISTENING_BEEP_PATH = None
+_UNDERSTOOD_BEEP_PATH = None
+_ERROR_BEEP_PATH = None
 _CHIME_FILE_PATH = None
 
 
-def _get_siri_chime_wav_path() -> str:
-    """Generate or retrieve a crisp two-tone assistant chime (D5 -> A5) WAV file."""
-    global _CHIME_FILE_PATH
-    if _CHIME_FILE_PATH and os.path.isfile(_CHIME_FILE_PATH):
-        return _CHIME_FILE_PATH
-
-    path = os.path.join(tempfile.gettempdir(), "juicevault_siri_chime.wav")
+def _generate_beep_wav(path: str, notes: list) -> str:
+    """Helper to synthesize short stereo 48kHz WAV beeps from a list of (freq, duration, volume)."""
     try:
         sample_rate = 48000
-        duration1 = 0.09
-        duration2 = 0.18
-        freq1 = 587.33  # D5
-        freq2 = 880.00  # A5
-
         frames = bytearray()
-        total_samples1 = int(sample_rate * duration1)
-        total_samples2 = int(sample_rate * duration2)
-
-        for i in range(total_samples1):
-            t = i / sample_rate
-            env = 1.0 - (i / total_samples1) ** 1.8
-            val = int(env * 18000 * math.sin(2 * math.pi * freq1 * t))
-            frames.extend(struct.pack('<hh', val, val))
-
-        for i in range(total_samples2):
-            t = i / sample_rate
-            env = 1.0 - (i / total_samples2) ** 1.3
-            val = int(env * 20000 * math.sin(2 * math.pi * freq2 * t))
-            frames.extend(struct.pack('<hh', val, val))
-
+        for freq, duration, vol in notes:
+            total_samples = int(sample_rate * duration)
+            for i in range(total_samples):
+                t = i / sample_rate
+                # Smooth attack (first 10ms) and exponential decay
+                env = (1.0 - math.cos(math.pi * min(1.0, i / (sample_rate * 0.010)))) * 0.5
+                decay = (1.0 - (i / total_samples)) ** 1.4
+                val = int(env * decay * vol * math.sin(2 * math.pi * freq * t))
+                val = max(-32767, min(32767, val))
+                frames.extend(struct.pack('<hh', val, val))
         with wave.open(path, "wb") as wf:
             wf.setnchannels(2)
             wf.setsampwidth(2)
             wf.setframerate(sample_rate)
             wf.writeframes(frames)
-
-        _CHIME_FILE_PATH = path
         return path
     except Exception as exc:
-        log.warning(f"[JuiceVault Voice] Failed generating chime: {exc}")
+        log.warning(f"[JuiceVault Voice] Failed generating beep '{path}': {exc}")
         return ""
+
+
+def _get_listening_beep_wav_path() -> str:
+    """Ascending bright chime (D5 -> A5) indicating Garmin is actively listening."""
+    global _LISTENING_BEEP_PATH
+    if _LISTENING_BEEP_PATH and os.path.isfile(_LISTENING_BEEP_PATH):
+        return _LISTENING_BEEP_PATH
+    path = os.path.join(tempfile.gettempdir(), "juicevault_beep_listening.wav")
+    # D5 (587.33Hz) for 0.08s, A5 (880.00Hz) for 0.14s
+    res = _generate_beep_wav(path, [(587.33, 0.08, 17000), (880.00, 0.14, 20000)])
+    if res:
+        _LISTENING_BEEP_PATH = res
+    return res
+
+
+def _get_understood_beep_wav_path() -> str:
+    """Bright snappy affirmative double chime (G5 -> C6) indicating Garmin understood."""
+    global _UNDERSTOOD_BEEP_PATH
+    if _UNDERSTOOD_BEEP_PATH and os.path.isfile(_UNDERSTOOD_BEEP_PATH):
+        return _UNDERSTOOD_BEEP_PATH
+    path = os.path.join(tempfile.gettempdir(), "juicevault_beep_understood.wav")
+    # G5 (783.99Hz) for 0.06s, C6 (1046.50Hz) for 0.14s
+    res = _generate_beep_wav(path, [(783.99, 0.06, 17000), (1046.50, 0.14, 21000)])
+    if res:
+        _UNDERSTOOD_BEEP_PATH = res
+    return res
+
+
+def _get_error_beep_wav_path() -> str:
+    """Descending gentle low double tone (A4 -> E4) indicating Garmin didn't understand / error."""
+    global _ERROR_BEEP_PATH
+    if _ERROR_BEEP_PATH and os.path.isfile(_ERROR_BEEP_PATH):
+        return _ERROR_BEEP_PATH
+    path = os.path.join(tempfile.gettempdir(), "juicevault_beep_error.wav")
+    # A4 (440.00Hz) for 0.08s, E4 (329.63Hz) for 0.15s
+    res = _generate_beep_wav(path, [(440.00, 0.08, 17000), (329.63, 0.15, 19000)])
+    if res:
+        _ERROR_BEEP_PATH = res
+    return res
+
+
+def _get_siri_chime_wav_path() -> str:
+    """Alias for listening chime."""
+    return _get_listening_beep_wav_path()
 
 
 def _get_ffmpeg_exe() -> str:
@@ -422,12 +452,29 @@ class DuckingAudioSource(discord.AudioSource):
                 pass
 
 
-async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = False):
-    """Play the Siri assistant chime in voice channel, then execute the command action.
-    If music is actively playing, ducks music to 18% without stopping the track."""
+async def play_beep_sound(guild, sound_type: str = "understood", action_coro=None):
+    """Play an acoustic feedback tone in the voice channel:
+    - 'listening': ascending tone indicating Garmin is actively listening
+    - 'understood': bright positive tone indicating Garmin understood the command
+    - 'error': descending gentle tone indicating Garmin didn't understand / error
+    Ducks active music to 18% volume without interrupting playback."""
     voice = getattr(guild, "voice_client", None)
-    chime_path = _get_siri_chime_wav_path()
-    if voice and voice.is_connected() and chime_path and os.path.isfile(chime_path):
+    if not voice or not voice.is_connected():
+        if action_coro is not None and asyncio.iscoroutine(action_coro):
+            await action_coro
+        return
+
+    if sound_type == "listening":
+        beep_path = _get_listening_beep_wav_path()
+        duration = 0.24
+    elif sound_type == "error":
+        beep_path = _get_error_beep_wav_path()
+        duration = 0.26
+    else:  # "understood"
+        beep_path = _get_understood_beep_wav_path()
+        duration = 0.22
+
+    if beep_path and os.path.isfile(beep_path):
         try:
             import discord
             exe = _get_ffmpeg_exe()
@@ -446,18 +493,24 @@ async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bo
                     mixer = None
 
             if voice.is_playing() and mixer is not None:
-                # Play chime over ducked music (18% volume) without stopping music!
-                chime_source = discord.FFmpegPCMAudio(chime_path, executable=exe)
-                mixer.set_overlay(chime_source)
-                await asyncio.sleep(0.35)
+                # Play beep over ducked music (18% volume) without stopping music!
+                beep_source = discord.FFmpegPCMAudio(beep_path, executable=exe)
+                mixer.set_overlay(beep_source)
+                await asyncio.sleep(duration)
             elif not voice.is_playing():
-                voice.play(discord.FFmpegPCMAudio(chime_path, executable=exe))
-                await asyncio.sleep(0.35)
+                voice.play(discord.FFmpegPCMAudio(beep_path, executable=exe))
+                await asyncio.sleep(duration)
         except Exception as exc:
-            print(f"[JuiceVault Chime] Error: {exc}")
+            print(f"[JuiceVault Beep] Error ({sound_type}): {exc}")
+
     if action_coro is not None:
         if asyncio.iscoroutine(action_coro):
             await action_coro
+
+
+async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = False, sound_type: str = "understood"):
+    """Play assistant feedback chime in voice channel and execute the command action."""
+    await play_beep_sound(guild, sound_type=sound_type, action_coro=action_coro)
 
 
 async def speak_in_voice(guild, text: str, lang: str = "ro"):
@@ -833,7 +886,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
             clean_q = query.strip()
             wait_speech = f"Caut pe YouTube {clean_q}" if lang == "ro" else f"Searching YouTube for {clean_q}"
-            await play_chime_and_proceed(guild)
+            await play_beep_sound(guild, "understood")
             await speak_in_voice(guild, wait_speech, lang=lang)
             await self._notify(guild, f"🔍 **[Garmin]** {user_name}: Caut *\"{clean_q}\"* pe YouTube... ⏳" if lang == "ro" else f"🔍 **[Garmin]** {user_name}: Searching YouTube for *\"{clean_q}\"*... ⏳")
 
@@ -849,17 +902,20 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                     if yt_track:
                         await add_learned_song_query(self.cog, self.guild_id, clean_q, yt_track)
+                        await play_beep_sound(guild, "understood")
                         await self._play_track_now(guild, yt_track)
                         title = yt_track.get("title") or clean_q
                         await self._notify(guild, f"🎥 **[Garmin]** Redare de pe YouTube: **{title}** 🎶" if lang == "ro" else f"🎥 **[Garmin]** Playing from YouTube: **{title}** 🎶")
                         return
 
                 fail_msg = f"Nu am găsit piesa {clean_q} pe YouTube." if lang == "ro" else f"Could not find {clean_q} on YouTube."
+                await play_beep_sound(guild, "error")
                 await speak_in_voice(guild, fail_msg, lang=lang)
                 await self._notify(guild, f"❌ **[Garmin]** {fail_msg}")
             except Exception as exc:
                 print(f"[Garmin YouTube] Error searching '{clean_q}': {exc}")
                 fail_msg = f"Nu am găsit rezultate pe YouTube pentru {clean_q}." if lang == "ro" else f"No YouTube results found for {clean_q}."
+                await play_beep_sound(guild, "error")
                 await speak_in_voice(guild, fail_msg, lang=lang)
                 await self._notify(guild, f"❌ **[Garmin]** {fail_msg}")
 
@@ -914,6 +970,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         if is_neg:
                             self.cog._pending_yt_voice.pop(self.guild_id, None)
                             self._wake_windows.pop(user_id, None)
+                            await play_beep_sound(guild, "error")
                             cancel_msg = "🚫 **[Garmin]** Căutare anulată." if pending_lang == "ro" else "🚫 **[Garmin]** Search cancelled."
                             await speak_in_voice(guild, "Comandă anulată." if pending_lang == "ro" else "Cancelled.", lang=pending_lang)
                             await self._notify(guild, cancel_msg)
@@ -921,6 +978,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         clean_title = re.sub(r'^(?:hey\s+|ok\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin|carmen|darmin|german|barmin)\s*', '', clean, flags=re.I).strip()
                         self.cog._pending_yt_voice.pop(self.guild_id, None)
                         self._wake_windows.pop(user_id, None)
+                        await play_beep_sound(guild, "understood")
                         await self._search_and_play_youtube(guild, clean_title or clean, user_name, lang=pending_lang)
                         return
 
@@ -929,6 +987,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     if is_negative:
                         self.cog._pending_yt_voice.pop(self.guild_id, None)
                         self._wake_windows.pop(user_id, None)
+                        await play_beep_sound(guild, "error")
                         cancel_msg = "🚫 **[Garmin]** Căutare anulată." if pending_lang == "ro" else "🚫 **[Garmin]** Search cancelled."
                         await speak_in_voice(guild, "Comandă anulată." if pending_lang == "ro" else "Cancelled.", lang=pending_lang)
                         await self._notify(guild, cancel_msg)
@@ -938,6 +997,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     if is_affirmative:
                         self.cog._pending_yt_voice.pop(self.guild_id, None)
                         self._wake_windows.pop(user_id, None)
+                        await play_beep_sound(guild, "understood")
                         target_q = pending["query"]
                         await self._search_and_play_youtube(guild, target_q, user_name, lang=pending_lang)
                         return
@@ -952,10 +1012,10 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     asyncio.create_task(add_learned_wake_word(self.cog, self.guild_id, wake_word))
 
                 if not cmd_part:
-                    # User only said "Garmin" (or "Hey Garmin", "Bă Garmin", etc.) -> wake window 12s + friendly chime + voice response
+                    # User only said "Garmin" (or "Hey Garmin", "Bă Garmin", etc.) -> wake window 12s + listening beep + voice response
                     self._wake_windows[user_id] = now + 12.0
                     print(f"[JuiceVault Voice] Wake word '{wake_word}' activated by {user_name}. Waiting for command...")
-                    await play_chime_and_proceed(guild)
+                    await play_beep_sound(guild, "listening")
                     greeting = f"Da, {user_name}? Ascult..." if is_ro else f"Yes, {user_name}? I'm listening..."
                     await speak_in_voice(guild, greeting, lang=user_lang)
                     await self._notify(guild, f"🎤 **[Garmin]** {greeting} 🟢")
@@ -984,7 +1044,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     await self._play_track_now(guild, prev_t)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Previous track! ⏮️")
                 else:
-                    await play_chime_and_proceed(guild)
+                    await play_beep_sound(guild, "error")
                     no_prev_msg = "Nu există o piesă anterioară în istoric." if is_ro else "There is no previous track in history."
                     await speak_in_voice(guild, no_prev_msg, lang=user_lang)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: {no_prev_msg}")
@@ -1116,8 +1176,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         "awaiting_title": True,
                     }
                     prompt_speech = "Ce piesă vrei să caut pe YouTube?" if is_ro else "What track would you like me to search on YouTube?"
-                    await play_chime_and_proceed(guild)
                     await speak_in_voice(guild, prompt_speech, lang=user_lang)
+                    await play_beep_sound(guild, "listening")
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: {prompt_speech} ⏳")
                     return
 
@@ -1188,12 +1248,14 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             ask_msg = f"🎤 **[Garmin]** {user_name}: Track *\"{q}\"* was not found in the JuiceVault archive. Would you like me to play it from **YouTube**? *(Say **\"Garmin, yes\"** or type **yes**)*"
 
                         await speak_in_voice(guild, ask_speech, lang=user_lang)
+                        await play_beep_sound(guild, "listening")
                         await self._notify(guild, ask_msg)
                         return
                 except Exception as e:
                     log.warning(f"[Garmin Voice Search] Error searching: {e}")
 
             # Feedback when recognized speech was addressed to Garmin but didn't match known command
+            await play_beep_sound(guild, "error")
             await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Comandă nerecunoscută.")
 
         def _recognize_speech_blocking(self, pcm_bytes):
