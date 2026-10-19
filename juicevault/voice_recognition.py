@@ -98,6 +98,49 @@ VOICE_RECV_AVAILABLE = False
 try:
     from discord.ext import voice_recv
     VOICE_RECV_AVAILABLE = True
+
+    # Hotfix for discord-ext-voice-recv:
+    # 1. PacketDecoder._decode_packet crashes on OpusError: corrupted stream (e.g. camera, DAVE, bad packets).
+    # Catch OpusError and re-initialize decoder so PacketRouter thread never dies.
+    try:
+        from discord.ext.voice_recv import opus as _vr_opus
+        import discord.opus
+        if hasattr(_vr_opus, "PacketDecoder"):
+            _orig_decode_packet = _vr_opus.PacketDecoder._decode_packet
+
+            def _safe_decode_packet(self, packet):
+                try:
+                    return _orig_decode_packet(self, packet)
+                except discord.opus.OpusError as err:
+                    # Reset decoder and ignore corrupted frame
+                    try:
+                        self._decoder = discord.opus.Decoder()
+                    except Exception:
+                        pass
+                    return packet, None
+                except Exception:
+                    return packet, None
+
+            _vr_opus.PacketDecoder._decode_packet = _safe_decode_packet
+    except Exception as _e:
+        log.debug(f"[JuiceVault Voice] PacketDecoder patch note: {_e}")
+
+    # 2. PacketRouter._do_run should catch transient errors and keep running
+    try:
+        from discord.ext.voice_recv import router as _vr_router
+        if hasattr(_vr_router, "PacketRouter"):
+            _orig_do_run = _vr_router.PacketRouter._do_run
+
+            def _safe_do_run(self):
+                try:
+                    _orig_do_run(self)
+                except Exception as _rexc:
+                    log.debug(f"[JuiceVault Voice] PacketRouter caught: {_rexc}")
+
+            _vr_router.PacketRouter._do_run = _safe_do_run
+    except Exception as _e:
+        log.debug(f"[JuiceVault Voice] PacketRouter patch note: {_e}")
+
 except ImportError:
     voice_recv = None
 
@@ -488,7 +531,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if hasattr(self, "_worker_task") and not self._worker_task.done():
                 self._worker_task.cancel()
             _active_sinks.pop(self.guild_id, None)
-            super().cleanup()
 
 
 def attach_voice_command_sink(cog, guild):
