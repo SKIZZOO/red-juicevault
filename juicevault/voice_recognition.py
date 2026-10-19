@@ -70,6 +70,27 @@ _learned_wake_words_cache = {}    # guild_id -> set of lowercase words
 _learned_song_queries_cache = {}  # guild_id -> dict of {query: track_dict}
 _user_preferred_languages = {}    # user_id -> "ro" | "en"
 
+AFFIRMATIVE_WORDS = {
+    "da", "dap", "mda", "aha", "ihi", "dai", "da-i",
+    "yes", "yeah", "yep", "yup", "sure", "ok", "okay",
+    "baga", "pune", "cauta", "canta", "play", "hai",
+    "sigur", "categoric", "normal", "clar", "bine", "please",
+    "search", "ahead"
+}
+AFFIRMATIVE_PHRASES = (
+    "da", "yes", "yep", "yeah", "yup", "sure", "sigur", "baga-o", "baga o", "baga", "pune-o", "pune o", "pune",
+    "cauta", "cauta-o", "cauta o", "hai", "da te rog", "te rog", "da frate", "da man", "of course", "play it",
+    "go ahead", "da da", "fa-o", "fa o"
+)
+NEGATIVE_WORDS = {
+    "nu", "nop", "nope", "nah", "no", "cancel", "anuleaza", "stop",
+    "lasa", "niciun", "niciuna", "dont", "not", "nevermind", "pas"
+}
+NEGATIVE_PHRASES = (
+    "nu", "no", "nope", "nah", "cancel", "anuleaza", "nu mai", "nu cauta", "las-o", "las o",
+    "lasa", "nu vreau", "niciun caz", "nici gand", "don't", "stop", "nu da", "nu baga", "las-o balta"
+)
+
 
 def _match_wake_word(text: str, custom_words: set = None) -> tuple:
     """Permissive wake word detector returning (matched: bool, cmd_part: str, wake_word: str).
@@ -735,8 +756,11 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             now = time.monotonic()
             uid = user.id
 
-            # Cooldown per user after executing a command (2.5 seconds)
-            if now - self._cooldowns.get(uid, 0.0) < 2.5:
+            pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
+            is_pending_user = bool(pending and pending.get("user_id") == uid and time.time() < pending.get("expires", 0.0))
+
+            # Cooldown per user after executing a command (1.0 second); NEVER drop audio if bot is waiting for an answer!
+            if not is_pending_user and (now - self._cooldowns.get(uid, 0.0) < 1.0):
                 return
 
             pcm = getattr(data, "pcm", None)
@@ -752,20 +776,26 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             self._last_speech[uid] = now
 
         async def _process_silence_loop(self):
-            """Monitors when a user finishes speaking (0.6s silence) and dispatches audio to STT."""
+            """Monitors when a user finishes speaking and dispatches audio to STT."""
             try:
                 while self._active:
-                    await asyncio.sleep(0.25)
+                    await asyncio.sleep(0.18)
                     now = time.monotonic()
                     uids = list(self._last_speech.keys())
+                    pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
                     for uid in uids:
                         last = self._last_speech.get(uid, 0.0)
-                        # Detected end of utterance: 0.6s silence and minimum 0.5s audio
-                        if now - last >= 0.6:
+                        is_pending = bool(pending and pending.get("user_id") == uid and time.time() < pending.get("expires", 0.0))
+                        # End-of-utterance: 0.38s silence for pending answers ("da"/"nu"), 0.55s for standard commands
+                        silence_needed = 0.38 if is_pending else 0.55
+                        if now - last >= silence_needed:
                             buf = self._buffers.pop(uid, bytearray())
                             self._last_speech.pop(uid, None)
-                            if len(buf) >= 48_000:
-                                self._cooldowns[uid] = now
+                            # Capture short single-syllable responses like "da", "nu", "yes", "no"
+                            min_bytes = 12_000 if is_pending else 16_000
+                            if len(buf) >= min_bytes:
+                                if not is_pending:
+                                    self._cooldowns[uid] = now
                                 asyncio.create_task(self._transcribe_and_dispatch(uid, bytes(buf)))
             except asyncio.CancelledError:
                 pass
@@ -858,29 +888,59 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             # Check if this utterance is answering a pending YouTube question
             pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
             if pending and time.time() < pending.get("expires", 0.0):
-                pending_lang = pending.get("lang", user_lang)
-                if pending.get("awaiting_title"):
-                    clean_title = re.sub(r'^(?:hey\s+|ok\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin|carmen|darmin|german|barmin)\s*', '', clean, flags=re.I).strip()
-                    self.cog._pending_yt_voice.pop(self.guild_id, None)
-                    await self._search_and_play_youtube(guild, clean_title or clean, user_name, lang=pending_lang)
-                    return
+                pending_uid = pending.get("user_id")
+                # REQUIREMENT: Must come from the SAME person who initiated the command!
+                if pending_uid and user_id != pending_uid:
+                    # Spoken by someone else in the voice channel
+                    tokens = set(re.findall(r'[a-z0-9]+', clean))
+                    custom_words = await get_learned_wake_words(self.cog, self.guild_id)
+                    matched_wake_other, _, _ = _match_wake_word(clean, custom_words)
+                    if matched_wake_other and (tokens & (AFFIRMATIVE_WORDS | NEGATIVE_WORDS)):
+                        initiator = pending.get("user_name", "persoana care a cerut piesa")
+                        lang_p = pending.get("lang", user_lang)
+                        await self._notify(
+                            guild,
+                            f"⚠️ **[Garmin]** {user_name}, aștept răspunsul de la **{initiator}**."
+                            if lang_p == "ro" else
+                            f"⚠️ **[Garmin]** {user_name}, I am waiting for **{initiator}** to answer."
+                        )
+                    # Do NOT allow someone else to answer or cancel the pending prompt!
+                else:
+                    # Utterance is from the SAME user who asked
+                    pending_lang = pending.get("lang", user_lang)
+                    tokens = set(re.findall(r'[a-z0-9]+', clean))
+                    if pending.get("awaiting_title"):
+                        is_neg = bool(tokens & NEGATIVE_WORDS) or clean in NEGATIVE_PHRASES
+                        if is_neg:
+                            self.cog._pending_yt_voice.pop(self.guild_id, None)
+                            self._wake_windows.pop(user_id, None)
+                            cancel_msg = "🚫 **[Garmin]** Căutare anulată." if pending_lang == "ro" else "🚫 **[Garmin]** Search cancelled."
+                            await speak_in_voice(guild, "Comandă anulată." if pending_lang == "ro" else "Cancelled.", lang=pending_lang)
+                            await self._notify(guild, cancel_msg)
+                            return
+                        clean_title = re.sub(r'^(?:hey\s+|ok\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin|carmen|darmin|german|barmin)\s*', '', clean, flags=re.I).strip()
+                        self.cog._pending_yt_voice.pop(self.guild_id, None)
+                        self._wake_windows.pop(user_id, None)
+                        await self._search_and_play_youtube(guild, clean_title or clean, user_name, lang=pending_lang)
+                        return
 
-                tokens = set(re.findall(r'[a-z0-9]+', clean))
-                # Check NEGATIVE tokens FIRST before affirmative to prevent substring false positives
-                is_negative = bool(tokens & {"nu", "no", "nope", "cancel", "anuleaza", "stop", "lasa", "nevermind", "dont", "not"}) or clean in ("nu", "no", "cancel", "anuleaza", "nu mai", "nu cauta", "las-o", "las o")
-                if is_negative:
-                    self.cog._pending_yt_voice.pop(self.guild_id, None)
-                    cancel_msg = "🚫 **[Garmin]** Căutare anulată." if pending_lang == "ro" else "🚫 **[Garmin]** Search cancelled."
-                    await speak_in_voice(guild, "Comandă anulată." if pending_lang == "ro" else "Cancelled.", lang=pending_lang)
-                    await self._notify(guild, cancel_msg)
-                    return
+                    # Check NEGATIVE tokens FIRST before affirmative to prevent false positives
+                    is_negative = bool(tokens & NEGATIVE_WORDS) or clean in NEGATIVE_PHRASES
+                    if is_negative:
+                        self.cog._pending_yt_voice.pop(self.guild_id, None)
+                        self._wake_windows.pop(user_id, None)
+                        cancel_msg = "🚫 **[Garmin]** Căutare anulată." if pending_lang == "ro" else "🚫 **[Garmin]** Search cancelled."
+                        await speak_in_voice(guild, "Comandă anulată." if pending_lang == "ro" else "Cancelled.", lang=pending_lang)
+                        await self._notify(guild, cancel_msg)
+                        return
 
-                is_affirmative = bool(tokens & {"da", "yes", "sure", "sigur", "baga", "cauta", "pune", "ok", "yep", "bine", "hai", "please", "play"}) or "youtube" in clean or "yt" in clean
-                if is_affirmative:
-                    self.cog._pending_yt_voice.pop(self.guild_id, None)
-                    target_q = pending["query"]
-                    await self._search_and_play_youtube(guild, target_q, user_name, lang=pending_lang)
-                    return
+                    is_affirmative = bool(tokens & AFFIRMATIVE_WORDS) or clean in AFFIRMATIVE_PHRASES or "youtube" in clean or "yt" in clean
+                    if is_affirmative:
+                        self.cog._pending_yt_voice.pop(self.guild_id, None)
+                        self._wake_windows.pop(user_id, None)
+                        target_q = pending["query"]
+                        await self._search_and_play_youtube(guild, target_q, user_name, lang=pending_lang)
+                        return
 
             # Check for Garmin Wake Word using permissive matcher + custom learned words + fuzzy Levenshtein
             custom_words = await get_learned_wake_words(self.cog, self.guild_id)
@@ -1150,7 +1210,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 print(f"[JuiceVault Voice] Audio conversion error: {e}")
                 return None, "ro-RO"
 
-            if not mono_16k or len(mono_16k) < 3200:
+            if not mono_16k or len(mono_16k) < 2000:
                 return None, "ro-RO"
 
             audio_data = sr.AudioData(mono_16k, 16000, 2)
@@ -1162,7 +1222,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 "play", "shuffle", "random", "repeat", "favorite", "like", "youtube", "yt",
                 "urmatoarea", "sari", "schimba", "inapoi", "dinainte", "anterioara",
                 "pauza", "opreste", "taci", "continua", "porneste", "amesteca", "cauta",
-                "baga", "pune", "canta", "da", "nu", "lasa", "anuleaza"
+                "baga", "pune", "canta", "da", "nu", "lasa", "anuleaza",
+                "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "nah", "nope", "dap", "mda"
             }
 
             for lang in ("ro-RO", "en-US"):

@@ -1724,62 +1724,96 @@ class JuiceVault(commands.Cog):
         pending = getattr(self, "_pending_yt_voice", {}).get(message.guild.id)
         if not pending or time.time() >= pending.get("expires", 0.0):
             return
+
+        pending_uid = pending.get("user_id")
         content = message.content.strip().lower()
-        if content in ("da", "yes", "y", "sure", "sigur", "baga", "pune-o", "cauta", "pune", "hai", "da te rog", "te rog", "youtube", "pe youtube", "de pe youtube", "dupa youtube", "play it"):
+
+        # REQUIREMENT: Must come from the SAME person who initiated the command!
+        if pending_uid and message.author.id != pending_uid:
+            aff_test = ("da", "yes", "y", "sure", "sigur", "baga", "pune-o", "cauta", "pune", "hai", "da te rog", "te rog", "youtube", "pe youtube", "ok", "okay", "yeah", "yep")
+            neg_test = ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa", "nah", "nope")
+            if content in aff_test or content in neg_test:
+                expected_user = pending.get("user_name", "persoana care a cerut comanda")
+                is_ro = pending.get("lang") == "ro"
+                await message.channel.send(
+                    f"⚠️ **[Garmin]** {message.author.display_name}, aștept răspunsul de la **{expected_user}**."
+                    if is_ro else
+                    f"⚠️ **[Garmin]** {message.author.display_name}, I am waiting for **{expected_user}** to respond.",
+                    delete_after=10
+                )
+            return
+
+        is_ro = pending.get("lang") == "ro"
+        target_q = None
+
+        if pending.get("awaiting_title"):
+            if content in ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa", "nah", "nope"):
+                self._pending_yt_voice.pop(message.guild.id, None)
+                await message.channel.send("🚫 **[Garmin]** Comandă anulată." if is_ro else "🚫 **[Garmin]** Cancelled.")
+                return
+            target_q = message.content.strip()
             self._pending_yt_voice.pop(message.guild.id, None)
-            target_q = pending["query"]
-            is_ro = pending.get("lang") == "ro"
-            await message.channel.send(f"🔍 **[Garmin]** Caut *\"{target_q}\"* pe YouTube... ⏳" if is_ro else f"🔍 **[Garmin]** Searching YouTube for *\"{target_q}\"*... ⏳")
-            try:
-                from .voice_recognition import play_chime_and_proceed
-                from .external_search_patch import _extract_search
-                info = await asyncio.to_thread(_extract_search, target_q)
-                if info:
-                    if info.get("_is_playlist"):
-                        entries = info.get("entries") or []
-                        yt_track = entries[0] if entries else None
+        elif content in ("da", "yes", "y", "sure", "sigur", "baga", "pune-o", "cauta", "pune", "hai", "da te rog", "te rog", "youtube", "pe youtube", "de pe youtube", "dupa youtube", "play it", "ok", "okay", "yeah", "yep", "yup", "dap", "mda"):
+            self._pending_yt_voice.pop(message.guild.id, None)
+            target_q = pending.get("query")
+        elif content in ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa", "nah", "nope"):
+            self._pending_yt_voice.pop(message.guild.id, None)
+            await message.channel.send("🚫 **[Garmin]** Comandă anulată." if is_ro else "🚫 **[Garmin]** Cancelled.")
+            return
+        else:
+            return
+
+        if not target_q:
+            return
+
+        await message.channel.send(f"🔍 **[Garmin]** Caut *\"{target_q}\"* pe YouTube... ⏳" if is_ro else f"🔍 **[Garmin]** Searching YouTube for *\"{target_q}\"*... ⏳")
+        try:
+            from .voice_recognition import play_chime_and_proceed
+            from .external_search_patch import _extract_search
+            info = await asyncio.to_thread(_extract_search, target_q)
+            if info:
+                if info.get("_is_playlist"):
+                    entries = info.get("entries") or []
+                    yt_track = entries[0] if entries else None
+                else:
+                    yt_track = info
+
+                if yt_track:
+                    gid = message.guild.id
+                    try:
+                        from .voice_recognition import add_learned_song_query
+                        asyncio.create_task(add_learned_song_query(self, gid, target_q, yt_track))
+                    except Exception:
+                        pass
+                    self.manual_queues.setdefault(gid, []).insert(0, yt_track)
+                    voice = message.guild.voice_client
+                    if gid in self.tasks:
+                        if gid in self.skip_events:
+                            self.skip_events[gid].set()
+                        if voice and (voice.is_playing() or voice.is_paused()):
+                            voice.stop()
                     else:
-                        yt_track = info
+                        if voice and voice.channel:
+                            self.stop_events[gid] = asyncio.Event()
+                            self.skip_events[gid] = asyncio.Event()
+                            self.seek_events[gid] = asyncio.Event()
+                            self.skip_counts[gid] = 0
+                            self.effects[gid] = "none"
+                            self.tasks[gid] = asyncio.create_task(self._player(message.guild, voice.channel))
 
-                    if yt_track:
-                        gid = message.guild.id
-                        try:
-                            from .voice_recognition import add_learned_song_query
-                            asyncio.create_task(add_learned_song_query(self, gid, target_q, yt_track))
-                        except Exception:
-                            pass
-                        self.manual_queues.setdefault(gid, []).insert(0, yt_track)
-                        voice = message.guild.voice_client
-                        if gid in self.tasks:
-                            if gid in self.skip_events:
-                                self.skip_events[gid].set()
-                            if voice and (voice.is_playing() or voice.is_paused()):
-                                voice.stop()
-                        else:
-                            if voice and voice.channel:
-                                self.stop_events[gid] = asyncio.Event()
-                                self.skip_events[gid] = asyncio.Event()
-                                self.seek_events[gid] = asyncio.Event()
-                                self.skip_counts[gid] = 0
-                                self.effects[gid] = "none"
-                                self.tasks[gid] = asyncio.create_task(self._player(message.guild, voice.channel))
+                    await play_chime_and_proceed(message.guild)
+                    title = yt_track.get('title') or target_q
+                    await message.channel.send(f"🎥 **[Garmin]** Redare de pe YouTube: **{title}** 🎶" if is_ro else f"🎥 **[Garmin]** Playing from YouTube: **{title}** 🎶")
+                    ui = self.bot.get_cog("JuiceVaultUI")
+                    if ui:
+                        asyncio.create_task(ui.update_panel(gid))
+                    if hasattr(self, "web_remote") and self.web_remote:
+                        asyncio.create_task(self.web_remote.broadcast_state(gid))
+                    return
 
-                        await play_chime_and_proceed(message.guild)
-                        title = yt_track.get('title') or target_q
-                        await message.channel.send(f"🎥 **[Garmin]** Redare de pe YouTube: **{title}** 🎶" if is_ro else f"🎥 **[Garmin]** Playing from YouTube: **{title}** 🎶")
-                        ui = self.bot.get_cog("JuiceVaultUI")
-                        if ui:
-                            asyncio.create_task(ui.update_panel(gid))
-                        if hasattr(self, "web_remote") and self.web_remote:
-                            asyncio.create_task(self.web_remote.broadcast_state(gid))
-                        return
-
-                await message.channel.send(f"❌ Nu am găsit pe YouTube: *\"{target_q}\"*")
-            except Exception as e:
-                await message.channel.send(f"❌ YouTube error: `{e}`")
-        elif content in ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa"):
-            self._pending_yt_voice.pop(message.guild.id, None)
-            await message.channel.send("🚫 **[Garmin]** Comandă anulată." if pending.get("lang") == "ro" else "🚫 **[Garmin]** Cancelled.")
+            await message.channel.send(f"❌ Nu am găsit pe YouTube: *\"{target_q}\"*")
+        except Exception as e:
+            await message.channel.send(f"❌ YouTube error: `{e}`")
 
     @jv.command(name="categories")
     async def categories_cmd(self, ctx):
