@@ -59,40 +59,143 @@ def _resolve_artist_phonetics(text: str) -> str:
     """Normalize common phonetic misrecognitions of artist names from Romanian and English STT."""
     if not text:
         return ""
-    # 1. Yeat variations: 'yet', 'ieat', 'iet', 'yeet', 'yit', 'iat'
-    resolved = re.sub(r'\b(?:yet|ieat|iet|yeet|yit|iat)\b', 'yeat', text, flags=re.I)
-    # Standalone 'eat' or 'it' in music query context
+    resolved = text
+
+    # 1. Quavo: 'cuavo', 'cu avo', 'cu aveau', 'cu abu', 'cu alb', 'coavo', 'cuevo', 'quave', 'clavo', 'kwavo', 'kwa vo', 'quao', 'cuoavo', 'cu abo'
+    resolved = re.sub(r'\b(?:cu\s+avo|cuavo|cu\s+aveau|cu\s+abu|cu\s+alb|coavo|cuevo|quave|clavo|kwavo|kwa\s+vo|quao|cuoavo|cu\s+abo)\b', 'quavo', resolved, flags=re.I)
+
+    # 2. Yeat variations: 'yet', 'ieat', 'iet', 'yeet', 'yit', 'iat'
+    resolved = re.sub(r'\b(?:yet|ieat|iet|yeet|yit|iat)\b', 'yeat', resolved, flags=re.I)
     if resolved.strip().lower() in {"eat", "it"}:
         resolved = "yeat"
-    # 2. Carti / Playboi Carti variations: 'karti', 'cardi'
-    resolved = re.sub(r'\b(?:playboy\s+carti|playboy\s+karti|playboi\s+karti)\b', 'playboi carti', resolved, flags=re.I)
+
+    # 3. Playboi Carti / Carti: 'playboy carti', 'plei boi carti', 'pleiboi carti', 'karti', 'cardi'
+    resolved = re.sub(r'\b(?:playboy\s+carti|plei\s*boi\s*carti|pleiboi\s+carti|playboy\s+karti|playboi\s+karti)\b', 'playboi carti', resolved, flags=re.I)
     resolved = re.sub(r'\b(?:karti)\b', 'carti', resolved, flags=re.I)
-    # 3. Drake variations
-    resolved = re.sub(r'\b(?:dreik|drek|drec)\b', 'drake', resolved, flags=re.I)
-    # 4. Travis Scott variations
-    resolved = re.sub(r'\b(?:trevis\s+scott|travis\s+scot|trevis\s+scot)\b', 'travis scott', resolved, flags=re.I)
-    # 5. Juice WRLD variations
-    resolved = re.sub(r'\b(?:gius\s+wrld|gius\s+world|juice\s+world|jus\s+wrld)\b', 'juice wrld', resolved, flags=re.I)
+
+    # 4. Travis Scott: 'trevis scott', 'travis scot', 'trevis scot', 'trave scott', 'trevis cot', 'travis cot'
+    resolved = re.sub(r'\b(?:trevis\s+scott|travis\s+scot|trevis\s+scot|trave\s+scott|trevis\s+cot|travis\s+cot)\b', 'travis scott', resolved, flags=re.I)
+
+    # 5. Lil Uzi Vert / Uzi: 'lil use it', 'lil uzi', 'uzi vert', 'usi vert', 'lil uzzy'
+    resolved = re.sub(r'\b(?:lil\s+use\s+it|lil\s+uzi\s+vert|lil\s+usi\s+vert|uzi\s+vert|usi\s+vert|lil\s+uzzy|uzy\s+vert)\b', 'lil uzi vert', resolved, flags=re.I)
+    resolved = re.sub(r'\b(?:lil\s+usi|lil\s+use)\b', 'lil uzi', resolved, flags=re.I)
+
+    # 6. Ken Carson: 'ken carsen', 'chian carson', 'chen carson', 'ken karsan', 'ken car son'
+    resolved = re.sub(r'\b(?:ken\s+carsen|chian\s+carson|chen\s+carson|ken\s+karsan|ken\s+car\s+son|kian\s+carson)\b', 'ken carson', resolved, flags=re.I)
+
+    # 7. Destroy Lonely: 'destroy loni', 'distroi lonli', 'distroi lonely', 'destroy lonli', 'destroi lonely'
+    resolved = re.sub(r'\b(?:destroy\s+loni|distroi\s+lonli|distroi\s+lonely|destroy\s+lonli|destroi\s+lonely)\b', 'destroy lonely', resolved, flags=re.I)
+
+    # 8. Gunna: 'gana', 'guna', 'gona'
+    resolved = re.sub(r'\b(?:guna|gana|gona)\b', 'gunna', resolved, flags=re.I)
+
+    # 9. Young Thug: 'iang tag', 'yang tag', 'young tag', 'young tog', 'yang tog', 'ion tag'
+    resolved = re.sub(r'\b(?:iang\s+tag|yang\s+tag|young\s+tag|young\s+tog|yang\s+tog|ion\s+tag)\b', 'young thug', resolved, flags=re.I)
+
+    # 10. Metro Boomin: 'metro bumin', 'metrou bumin', 'metro boomy', 'metro bumen'
+    resolved = re.sub(r'\b(?:metro\s+bumin|metrou\s+bumin|metro\s+boomy|metro\s+bumen)\b', 'metro boomin', resolved, flags=re.I)
+
+    # 11. Future: 'fiucer', 'fiutur', 'feuture'
+    resolved = re.sub(r'\b(?:fiucer|fiutur|feuture)\b', 'future', resolved, flags=re.I)
+
+    # 12. Trippie Redd: 'tripi red', 'trippy red', 'tripe red', 'tripi redd'
+    resolved = re.sub(r'\b(?:tripi\s+red|trippy\s+red|tripe\s+red|tripi\s+redd)\b', 'trippie redd', resolved, flags=re.I)
+
+    # 13. Don Toliver: 'dantoliver', 'dan toliver', 'dantolivar', 'don toliver'
+    resolved = re.sub(r'\b(?:dantoliver|dan\s+toliver|dantolivar)\b', 'don toliver', resolved, flags=re.I)
+
+    # 14. Chief Keef: 'cif chif', 'chief kif', 'cif kif', 'chef keef', 'chif chif'
+    resolved = re.sub(r'\b(?:cif\s+chif|chief\s+kif|cif\s+kif|chef\s+keef|chif\s+chif)\b', 'chief keef', resolved, flags=re.I)
+
+    # 15. 21 Savage: '21 savagi', 'twenty one savage', 'tueni uan sevegi', '21 sevegi', '21 sevidgi'
+    resolved = re.sub(r'\b(?:21\s+savagi|twenty\s+one\s+savage|tueni\s+uan\s+sevegi|21\s+sevegi|21\s+sevidgi)\b', '21 savage', resolved, flags=re.I)
+
+    # 16. Juice WRLD: 'gius wrld', 'gius world', 'jus wrld', 'juice world', 'gius uorld', 'gius vorld'
+    resolved = re.sub(r'\b(?:gius\s+wrld|gius\s+world|juice\s+world|jus\s+wrld|gius\s+uorld|gius\s+vorld)\b', 'juice wrld', resolved, flags=re.I)
+
+    # 17. XXXTentacion: 'x tentacion', 'tentacion', 'tentasion', 'triplu x tentacion', 'xxx tentacion'
+    resolved = re.sub(r'\b(?:triplu\s+x\s+tentacion|xxx\s+tentacion|ex\s+tentacion|x\s+tentacion|tentasion)\b', 'xxxtentacion', resolved, flags=re.I)
+
+    # 18. Ski Mask The Slump God: 'schi masc', 'schi mesc', 'ski masc', 'schi mask'
+    resolved = re.sub(r'\b(?:schi\s+masc|schi\s+mesc|ski\s+masc|schi\s+mask)\b', 'ski mask', resolved, flags=re.I)
+
+    # 19. Kodak Black: 'codac blec', 'codac black', 'kodak blec'
+    resolved = re.sub(r'\b(?:codac\s+blec|codac\s+black|kodak\s+blec)\b', 'kodak black', resolved, flags=re.I)
+
+    # 20. Lil Yachty: 'lil iati', 'lil yachti', 'lil ioti', 'lil iahti'
+    resolved = re.sub(r'\b(?:lil\s+iati|lil\s+yachti|lil\s+ioti|lil\s+iahti)\b', 'lil yachty', resolved, flags=re.I)
+
+    # 21. NLE Choppa: 'enele copa', 'nle copa', 'nle ciopa', 'enele ciopa'
+    resolved = re.sub(r'\b(?:enele\s+copa|nle\s+copa|nle\s+ciopa|enele\s+ciopa)\b', 'nle choppa', resolved, flags=re.I)
+
+    # 22. Central Cee: 'central si', 'central ci', 'sentral si'
+    resolved = re.sub(r'\b(?:central\s+si|central\s+ci|sentral\s+si)\b', 'central cee', resolved, flags=re.I)
+
+    # 23. Offset: 'ofset', 'of set'
+    resolved = re.sub(r'\b(?:ofset|of\s+set)\b', 'offset', resolved, flags=re.I)
+
+    # 24. Takeoff: 'teic of', 'teicof', 'take of'
+    resolved = re.sub(r'\b(?:teic\s+of|teicof|take\s+of)\b', 'takeoff', resolved, flags=re.I)
+
+    # 25. Roddy Ricch: 'rodi rici', 'rodi rich', 'roddy rici'
+    resolved = re.sub(r'\b(?:rodi\s+rici|rodi\s+rich|roddy\s+rici)\b', 'roddy ricch', resolved, flags=re.I)
+
+    # 26. Polo G: 'polo gi', 'polo ji'
+    resolved = re.sub(r'\b(?:polo\s+gi|polo\s+ji)\b', 'polo g', resolved, flags=re.I)
+
+    # 27. DaBaby: 'da beibi', 'da baby'
+    resolved = re.sub(r'\b(?:da\s+beibi|da\s+baby)\b', 'dababy', resolved, flags=re.I)
+
+    # 28. Nettspend: 'net spend', 'netspend'
+    resolved = re.sub(r'\b(?:net\s+spend|netspend)\b', 'nettspend', resolved, flags=re.I)
+
+    # 29. Osamason: 'osama son', 'osama sonn'
+    resolved = re.sub(r'\b(?:osama\s+son|osama\s+sonn)\b', 'osamason', resolved, flags=re.I)
+
+    # 30. Tory Lanez: 'tori leinz', 'tori lanez', 'tory leinz'
+    resolved = re.sub(r'\b(?:tori\s+leinz|tori\s+lanez|tory\s+leinz)\b', 'tory lanez', resolved, flags=re.I)
+
+    # 31. Lil Durk: 'lil dărc', 'lil darc', 'lil derk', 'lil durck'
+    resolved = re.sub(r'\b(?:lil\s+darc|lil\s+derk|lil\s+durck)\b', 'lil durk', resolved, flags=re.I)
+
+    # 32. A$AP Rocky: 'esap rochi', 'asap rochi', 'a sap rocky', 'asap roki'
+    resolved = re.sub(r'\b(?:esap\s+rochi|asap\s+rochi|a\s+sap\s+rocky|asap\s+roki)\b', 'asap rocky', resolved, flags=re.I)
+
+    # 33. Drake: 'dreic', 'dreik', 'drek', 'drec'
+    resolved = re.sub(r'\b(?:dreic|dreik|drek|drec)\b', 'drake', resolved, flags=re.I)
+
+    # 34. Post Malone: 'post melon', 'post meilon', 'post malon'
+    resolved = re.sub(r'\b(?:post\s+melon|post\s+meilon|post\s+malon)\b', 'post malone', resolved, flags=re.I)
+
+    # 35. Kendrick Lamar: 'chendric lamar', 'kendric lamar', 'kendrik lamar'
+    resolved = re.sub(r'\b(?:chendric\s+lamar|kendric\s+lamar|kendrik\s+lamar)\b', 'kendrick lamar', resolved, flags=re.I)
+
+    # 36. Kanye West: 'canie vest', 'canie uest', 'kanie vest', 'kanie uest'
+    resolved = re.sub(r'\b(?:canie\s+vest|canie\s+uest|kanie\s+vest|kanie\s+uest)\b', 'kanye west', resolved, flags=re.I)
+
     return resolved.strip()
 
 
 def _clean_music_query(query: str) -> str:
     """Cleanly extract song or artist search query by stripping YouTube indicators,
     command verbs ('bagă', 'pune', 'play'), filler words ('muzică', 'piesa', 'melodia', 'ceva de la'),
-    and resolving phonetic artist aliases (e.g. 'yet' -> 'yeat')."""
+    and resolving phonetic artist aliases (e.g. 'cu avo' -> 'quavo', 'yet' -> 'yeat')."""
     if not query:
         return ""
     q = _normalize_speech(query)
 
-    # 1. Remove wake words if present at start
+    # 1. Resolve artist phonetics FIRST (e.g. 'cu avo' -> 'quavo') BEFORE stripping prepositions!
+    q = _resolve_artist_phonetics(q)
+
+    # 2. Remove wake words if present at start
     q = re.sub(r'^(?:hey\s+|ok\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin|carmen|darmin|german|barmin)\s*', '', q, flags=re.I).strip()
 
-    # 2. Remove YouTube references anywhere in the query
+    # 3. Remove YouTube references anywhere in the query
     q = re.sub(r'\b(?:pe|de\s+pe|dupa|din|on|from)\s+(?:youtube|yt)\b', '', q, flags=re.I)
     q = re.sub(r'\b(?:youtube|yt)\b', '', q, flags=re.I)
     q = re.sub(r'\s+', ' ', q).strip()
 
-    # 3. Strip conversational request prefixes iteratively
+    # 4. Strip conversational request prefixes iteratively
     prefix_patterns = [
         r'^(?:te\s+rog|please|hai|ba|bai|alo|yo|si\s+tu|si\s+mie)\s+',
         r'^(?:vreau\s+sa\s+ascult|as\s+vrea\s+sa\s+ascult|da-i\s+drumul\s+la|dai\s+drumul\s+la|da\s+drumul\s+la|da-i\s+play\s+la|dai\s+play\s+la|da\s+play\s+la)\s+',
@@ -112,11 +215,11 @@ def _clean_music_query(query: str) -> str:
                 q = new_q
                 changed = True
 
-    # 4. Strip trailing fillers like "te rog", "please", "frate", "man", "bro"
+    # 5. Strip trailing fillers like "te rog", "please", "frate", "man", "bro"
     q = re.sub(r'\s+(?:te\s+rog|please|frate|man|bro)$', '', q, flags=re.I).strip()
     q = q.strip(" ,.:;!?-")
 
-    # 5. Resolve artist phonetics
+    # 6. Re-resolve artist phonetics once more in case stripped prefixes exposed them
     q = _resolve_artist_phonetics(q)
 
     return q.strip()
@@ -130,7 +233,7 @@ _MULTI_WORD_WAKE_REGEX = re.compile(
 )
 
 _SINGLE_WORD_WAKE_REGEX = re.compile(
-    r'\b(?:hey\s+|ok\s+|okay\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+|bre\s+|ma\s+|fa\s+|auzi\s+|zi\s+|spune\s+|hi\s+|hello\s+|e\s+|a\s+|the\s+|de\s+)?(?:garmin|garmen|garmon|garmyn|garminn|garmy|garminu|garminul|garmini|carmin|carmen|carmina|carman|carme|carmyn|darmin|damin|darmon|barmin|karmin|karmen|jarmin|parmin|garden|gardon|gardi|gardin|gaming|germain|german|germane|elgar|edgar|eggar|egger|egr|eger|calmin|starmin|sharmin)\b',
+    r'\b(?:(?:hey|ok|okay|hei|ba|bai|alo|yo|bre|ma|fa|auzi|zi|spune|hi|hello|e|a|the|de)\s+){0,3}(?:garmin|garmen|garmon|garmyn|garminn|garmy|garminu|garminul|garmini|carmin|carmen|carmina|carman|carme|carmyn|darmin|damin|darmon|barmin|karmin|karmen|jarmin|parmin|garden|gardon|gardi|gardin|gaming|germain|german|germane|elgar|edgar|eggar|egger|egr|eger|calmin|starmin|sharmin)\b',
     re.IGNORECASE
 )
 
@@ -169,7 +272,7 @@ NEGATIVE_PHRASES = (
 
 def _match_wake_word(text: str, custom_words: set = None) -> tuple:
     """Permissive wake word detector returning (matched: bool, cmd_part: str, wake_word: str).
-    Matches standard 'Garmin', Romanian salutations ('bă Garmin', 'hei Garmin'),
+    Matches standard 'Garmin', Romanian salutations ('bă Garmin', 'ok Garmin', 'băi Garmin'),
     misrecognized English STT phrases ('hey god i'm in', 'egger man', 'a garden', 'carmen'),
     learned custom words, and Levenshtein edit distance <= 2."""
     clean = _normalize_speech(text)
@@ -183,7 +286,7 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
         cmd = clean[m.end():].strip().lstrip(",.:;!?- ")
         return True, cmd, wake
 
-    # 2. Single-word names with optional prefixes
+    # 2. Single-word names with optional multi-prefix salutations ('bă Garmin', 'ok Garmin', etc.)
     m = _SINGLE_WORD_WAKE_REGEX.search(clean)
     if m:
         wake = m.group(0).strip()
@@ -204,18 +307,51 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
     # 4. Levenshtein fuzzy distance matching on leading words (distance <= 2 to 'garmin')
     tokens = clean.split()
     if tokens:
-        prefix_tokens = {"hey", "hei", "ok", "okay", "ba", "bai", "alo", "yo", "a", "the", "e", "de"}
-        cand = tokens[0]
-        rest_idx = 1
-        if cand in prefix_tokens and len(tokens) > 1:
-            cand = tokens[1]
-            rest_idx = 2
-        cand_clean = re.sub(r'[^a-z0-9]', '', cand)
-        if 4 <= len(cand_clean) <= 8:
-            if _levenshtein(cand_clean, "garmin") <= 2 or _levenshtein(cand_clean, "carmen") <= 1:
-                return True, " ".join(tokens[rest_idx:]).strip(), cand_clean
+        prefix_tokens = {"hey", "hei", "ok", "okay", "ba", "bai", "alo", "yo", "a", "the", "e", "de", "bre", "ma", "fa", "auzi", "zi"}
+        cand_idx = 0
+        while cand_idx < len(tokens) and tokens[cand_idx] in prefix_tokens:
+            cand_idx += 1
+        if cand_idx < len(tokens):
+            cand = tokens[cand_idx]
+            cand_clean = re.sub(r'[^a-z0-9]', '', cand)
+            if 4 <= len(cand_clean) <= 8:
+                if _levenshtein(cand_clean, "garmin") <= 2 or _levenshtein(cand_clean, "carmen") <= 1:
+                    cmd_tokens = tokens[cand_idx + 1:]
+                    return True, " ".join(cmd_tokens).strip(), cand_clean
 
     return False, "", ""
+
+
+def _is_unambiguous_direct_command(text: str) -> bool:
+    """Return True if utterance is an unmistakable music control command that should
+    execute immediately even without saying 'Garmin' (e.g. 'da-i skip la piesa', 'salveaza piesa asta')."""
+    clean = _normalize_speech(text)
+    if not clean:
+        return False
+
+    # 1. Direct skip commands
+    if re.search(r'^(?:te\s+rog\s+)?(?:da-i\s+skip|dai\s+skip|da\s+skip|skip|treci\s+peste|treci\s+la\s+urmatoarea|schimba|schimb-o|urmatoarea)\s*(?:la\s+piesa|la\s+melodie|la\s+track|piesa\s+asta|piesa|melodia|track|song|this\s+song|the\s+song)?(?:\s+te\s+rog|\s+frate|\s+man)?$', clean, re.I):
+        return True
+    if any(w in clean for w in ("da-i skip", "dai skip", "da skip", "skip la piesa", "skip piesa", "skip this song", "skip the song", "urmatoarea piesa", "schimba piesa")):
+        return True
+    if clean.strip() in {"skip", "next", "urmatoarea", "sari", "schimba", "schimb-o", "da-i skip", "dai skip", "da skip"}:
+        return True
+
+    # 2. Direct favorite / save commands
+    if re.search(r'^(?:te\s+rog\s+)?(?:salveaza|adauga\s+la|pune\s+la|baga\s+la|favorite|save)\s*(?:piesa\s+asta|melodia\s+asta|piesa|melodia|favorite|preferate|this\s+song|song|track)?(?:\s+la\s+favorite|\s+la\s+preferate)?(?:\s+te\s+rog)?$', clean, re.I):
+        return True
+    if any(p in clean for p in ("salveaza piesa", "salveaza melodia", "favorite this song", "save this song", "adauga la favorite", "pune la favorite", "baga la favorite", "baga din favorite", "play my favorite", "piesa favorita", "melodie preferata")):
+        return True
+
+    # 3. Direct pause / stop commands
+    if re.search(r'^(?:te\s+rog\s+)?(?:pauza|opreste|stop|taci|shut\s+up|pause)\s*(?:la\s+muzica|la\s+piesa|muzica|piesa|the\s+music)?(?:\s+din\s+gura)?$', clean, re.I):
+        return True
+
+    # 4. Direct resume commands
+    if re.search(r'^(?:te\s+rog\s+)?(?:continua|porneste|da-i\s+drumul|dai\s+drumul|resume)\s*(?:la\s+muzica|la\s+piesa|muzica|piesa|the\s+music)?$', clean, re.I):
+        return True
+
+    return False
 
 
 async def get_learned_wake_words(cog, guild_id: int) -> set:
@@ -1150,6 +1286,9 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
 
+            # Direct commands that execute immediately even without saying 'Garmin' (e.g. 'da-i skip la piesa', 'salveaza piesa asta')
+            is_direct_cmd = _is_unambiguous_direct_command(clean)
+
             # Check for Garmin Wake Word using permissive matcher + custom learned words + fuzzy Levenshtein
             custom_words = await get_learned_wake_words(self.cog, self.guild_id)
             matched_wake, cmd_part, wake_word = _match_wake_word(clean, custom_words)
@@ -1161,7 +1300,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     asyncio.create_task(add_learned_wake_word(self.cog, self.guild_id, wake_word))
 
                 if not cmd_part:
-                    # User only said "Garmin" (or "Hey Garmin", "Bă Garmin", etc.) -> wake window 12s + listening beep + voice response
+                    # User only said "Garmin" (or "Hey Garmin", "Bă Garmin", "Ok Garmin", etc.) -> wake window 12s + listening beep + voice response
                     self._wake_windows[user_id] = now + 12.0
                     self._lock_session(user_id, duration=15.0)
                     print(f"[JuiceVault Voice] Wake word '{wake_word}' activated by {user_name}. Waiting for command...")
@@ -1172,6 +1311,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return
                 clean_cmd = cmd_part
                 self._wake_windows.pop(user_id, None)
+            elif is_direct_cmd:
+                # Direct voice command executed immediately even without wake word!
+                self._lock_session(user_id, duration=20.0)
+                clean_cmd = clean
+                self._wake_windows.pop(user_id, None)
+                print(f"[JuiceVault Voice] Direct command detected from {user_name} (no wake word needed): '{clean}'")
             else:
                 # Check if within active wake window from a previous greeting
                 if now < self._wake_windows.get(user_id, 0.0):
@@ -1204,8 +1349,9 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 2: SKIP / NEXT
-            # Handles: "skip", "skip this song", "next", "urmatoarea", "sari", "schimba", "da-i skip", etc.
-            if re.search(r'\b(?:skip|next|urmatoarea|sari|treci peste|schimba|schimb-o|alta piesa|alta melodie|da-i skip|dai skip|skip this|next song)\b', clean_cmd, re.I):
+            # Handles: "skip", "skip this song", "next", "urmatoarea", "sari", "schimba", "da-i skip", "da skip la piesa", etc.
+            skip_pattern = r'\b(?:skip|next|urmatoarea|sari|treci\s+peste|treci\s+la\s+urmatoarea|schimba|schimb-o|alta\s+piesa|alta\s+melodie|da-i\s+skip|dai\s+skip|da\s+skip|skip\s+la\s+piesa|skip\s+piesa|skip\s+this|skip\s+song|next\s+song|next\s+track)\b'
+            if re.search(skip_pattern, clean_cmd, re.I) or any(w in clean_cmd for w in ("da-i skip", "dai skip", "da skip", "skip la piesa", "skip piesa", "urmatoarea piesa", "schimba piesa")):
                 if any(w in clean_cmd for w in ("10", "ten", "zece")):
                     await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 10))
                     self._unlock_session()
@@ -1258,8 +1404,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Deconectat din voice! 👋" if is_ro else f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Left voice channel! 👋")
                 return
 
-            # PRECEDENCE 6: RESUME / PLAY (bare play command)
-            # Handles: "play", "resume", "continua", "porneste", "da drumul"
+            # PRECEDENCE 6: RESUME / PLAY (bare play command, e.g. "Garmin bagă", "bă Garmin bagă")
             if clean_cmd.strip() in {"play", "resume", "continua", "porneste", "da drumul", "baga"} or clean_cmd.strip() == "play":
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_paused():
@@ -1291,6 +1436,25 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     else:
                         self._unlock_session()
                     return
+                else:
+                    # Voice is active and playing: user said "bă Garmin bagă" -> ask what to play!
+                    self._lock_session(user_id, duration=25.0)
+                    self._wake_windows[user_id] = now + 15.0
+                    if not hasattr(self.cog, "_pending_yt_voice"):
+                        self.cog._pending_yt_voice = {}
+                    self.cog._pending_yt_voice[self.guild_id] = {
+                        "user_id": user_id,
+                        "query": "",
+                        "lang": user_lang,
+                        "expires": time.time() + 20.0,
+                        "user_name": user_name,
+                        "awaiting_title": True,
+                    }
+                    prompt_speech = "Ce piesă vrei să bag?" if is_ro else "What track would you like me to play?"
+                    await speak_in_voice(guild, prompt_speech, lang=user_lang)
+                    await play_beep_sound(guild, "listening")
+                    await self._notify(guild, f"🎤 **[Garmin]** {user_name}: {prompt_speech} ⏳")
+                    return
 
             # PRECEDENCE 7: SEEK / DERULARE 10s
             if any(w in clean_cmd for w in ("inainte 10", "forward 10", "skip 10s", "10 secunde inainte")):
@@ -1306,23 +1470,119 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Rewind -10s ⏪")
                     return
 
-            # PRECEDENCE 8: FAVORITE
-            if any(w in clean_cmd for w in ("favorite", "fav", "like", "place", "iubeste", "favorit", "apreciaza")):
+            # PRECEDENCE 8A: PLAY FROM FAVORITES
+            # Handles: "play my favorites", "baga o piesa favorita", "pune o piesa din favorite", "play a favorite song", etc.
+            is_play_fav = bool(re.search(
+                r'\b(?:play\s+my\s+favorites|play\s+my\s+favorite\s+song|play\s+my\s+favorite|play\s+a\s+favorite\s+song|play\s+a\s+favorite|play\s+favorite\s+song|play\s+favorite|play\s+favorites|baga\s+o\s+piesa\s+favorita|baga\s+o\s+piesa\s+din\s+favorite|baga\s+din\s+favorite|baga\s+favoritele\s+mele|pune\s+o\s+piesa\s+favorita|pune\s+o\s+piesa\s+din\s+favorite|pune\s+favoritele\s+mele|baga\s+o\s+melodie\s+preferata|pune\s+o\s+melodie\s+preferata|baga\s+melodiile\s+mele\s+preferate|pune\s+preferatele\s+mele|da\s+drumul\s+la\s+favorite|baga\s+piesele\s+mele\s+favorite|baga\s+o\s+piesa\s+de\s+la\s+favorite|pune\s+o\s+piesa\s+din\s+preferatele\s+mele)\b',
+                clean_cmd,
+                re.I
+            )) or (
+                any(p in clean_cmd for p in ("play", "baga", "pune", "reda", "da drumul", "canta"))
+                and any(f in clean_cmd for f in ("favorite", "favorita", "preferata", "preferate", "favorit", "favorites"))
+                and not any(s in clean_cmd for s in ("salveaza", "adauga", "save", "add", "baga la", "pune la"))
+            )
+
+            if is_play_fav:
+                uid_str = str(user_id)
+                bot_favs = getattr(self.bot, "_jv_data", {}).get("favorites", {})
+                user_list = bot_favs.get(uid_str) or bot_favs.get(user_name.lower()) or bot_favs.get("default", [])
+
+                if not user_list:
+                    no_favs_speech = "Nu ai nicio piesă salvată la favorite încă. Poți spune Garmin, salvează piesa asta când asculți o piesă!" if is_ro else "You don't have any favorite songs saved yet. Say Garmin, favorite this song while listening to a track!"
+                    await play_beep_sound(guild, "error")
+                    await speak_in_voice(guild, no_favs_speech, lang=user_lang)
+                    await self._notify(guild, f"💔 **[Garmin]** {user_name}: Nu ai nicio piesă în favorite. Folosește *„Garmin, salvează piesa asta”* când asculți o piesă!")
+                    self._unlock_session()
+                    return
+
+                import random
+                fav_track = random.choice(user_list)
+                track_name = fav_track.get("title") or "Favorite Track"
+                artist_name = fav_track.get("artist") or "Juice WRLD"
+
+                play_speech = f"Redau din favoritele tale: {track_name}." if is_ro else f"Playing from your favorites: {track_name}."
+                await play_beep_sound(guild, "understood")
+                await speak_in_voice(guild, play_speech, lang=user_lang)
+                await self._play_track_now(guild, dict(fav_track))
+                self._unlock_session()
+                await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Redau din favorite: **{track_name}** — *{artist_name}* 🎶")
+                return
+
+            # PRECEDENCE 8B: SAVE / FAVORITE CURRENT SONG
+            # Handles: "save this song", "favorite this song", "salveaza piesa asta", "adauga la favorite", "pune la favorite", etc.
+            is_save_fav = bool(re.search(
+                r'\b(?:save\s+this\s+song|save\s+song|save\s+this|save\s+track|favorite\s+this\s+song|favorite\s+this|favorite\s+song|favorite\s+track|add\s+to\s+favorites|add\s+to\s+favorite|love\s+this\s+song|like\s+this\s+song|salveaza\s+piesa\s+asta|salveaza\s+piesa|salveaza\s+melodia|salveaz-o|adauga\s+la\s+favorite|pune\s+la\s+favorite|baga\s+la\s+favorite|adauga\s+la\s+preferate|pune\s+la\s+preferate|baga\s+la\s+preferate|favoriteaza|imi\s+place\s+piesa|imi\s+place\s+melodia)\b',
+                clean_cmd,
+                re.I
+            )) or (
+                any(f in clean_cmd for f in ("favorite", "fav", "favorit", "like", "salveaza", "save"))
+                and any(s in clean_cmd for s in ("song", "track", "this", "piesa", "melodia", "asta", "o"))
+            )
+
+            if is_save_fav:
                 cur = self.cog.current.get(self.guild_id)
-                if cur:
-                    bot_favs = getattr(self.bot, "_jv_data", {}).setdefault("favorites", {})
-                    u_list = bot_favs.setdefault(str(user_id), [])
-                    if not any(str(x.get("id")) == str(cur.get("id")) for x in u_list):
-                        u_list.insert(0, dict(cur))
-                        if hasattr(self.cog, "web_remote") and self.cog.web_remote:
-                            try:
-                                await self.cog.web_remote.config.favorites.set(bot_favs)
-                            except Exception:
-                                pass
-                        await play_chime_and_proceed(guild)
-                        self._unlock_session()
-                        await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Added to favorites! ❤️")
-                        return
+                if not cur:
+                    no_music_msg = "Nu cântă nicio piesă în acest moment." if is_ro else "No track is playing right now."
+                    await play_beep_sound(guild, "error")
+                    await speak_in_voice(guild, no_music_msg, lang=user_lang)
+                    await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
+                    self._unlock_session()
+                    return
+
+                uid_str = str(user_id)
+                if not hasattr(self.bot, "_jv_data"):
+                    self.bot._jv_data = {}
+                bot_favs = self.bot._jv_data.setdefault("favorites", {})
+                user_list = bot_favs.setdefault(uid_str, [])
+
+                track_id = str(cur.get("id") or cur.get("songId") or "").strip()
+                track_title = str(cur.get("title") or cur.get("name") or "Untitled").strip()
+                track_artist = str(cur.get("artist") or "Juice WRLD").strip()
+
+                existing_idx = next(
+                    (i for i, t in enumerate(user_list)
+                     if (track_id and str(t.get("id")) == track_id)
+                     or (track_title and str(t.get("title", "")).lower() == track_title.lower())),
+                    None
+                )
+
+                if existing_idx is not None:
+                    already_msg = f"Piesa {track_title} este deja în favoritele tale." if is_ro else f"{track_title} is already in your favorites."
+                    await play_beep_sound(guild, "understood")
+                    await speak_in_voice(guild, already_msg, lang=user_lang)
+                    await self._notify(guild, f"❤️ **[Garmin]** {user_name}: Piesa **{track_title}** este deja în favoritele tale! ({len(user_list)} salvate)")
+                    self._unlock_session()
+                    return
+
+                clean_fav = {
+                    "id": cur.get("id") or track_id or track_title,
+                    "title": track_title,
+                    "artist": track_artist,
+                    "length": cur.get("length") or "—",
+                    "cover_url": cur.get("cover_url") or (f"https://api.juicevault.xyz/cdn/music/covers/{cur.get('id')}" if cur.get("id") else ""),
+                    "url": cur.get("url") or cur.get("webpage_url") or "",
+                    "_external": cur.get("_external", False),
+                    "_source": cur.get("_source", "JuiceVault"),
+                    "added_at": int(time.time()),
+                }
+                user_list.insert(0, clean_fav)
+
+                # Mirror under display_name for Web Remote convenience
+                bot_favs[user_name.lower()] = user_list
+
+                # Persist to Config
+                if hasattr(self.cog, "web_remote") and self.cog.web_remote:
+                    self.cog.web_remote._user_favorites = bot_favs
+                    try:
+                        await self.cog.web_remote.config.favorites.set(bot_favs)
+                    except Exception:
+                        pass
+
+                count = len(user_list)
+                success_speech = f"Am adăugat piesa {track_title} la favoritele tale!" if is_ro else f"Added {track_title} to your favorites!"
+                await play_beep_sound(guild, "understood")
+                await speak_in_voice(guild, success_speech, lang=user_lang)
+                await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Am salvat **{track_title}** de {track_artist} la favorite! ({count} salvate) ⭐")
                 self._unlock_session()
                 return
 
@@ -1459,9 +1719,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 "play", "shuffle", "random", "repeat", "favorite", "like", "youtube", "yt",
                 "urmatoarea", "sari", "schimba", "inapoi", "dinainte", "anterioara",
                 "pauza", "opreste", "taci", "continua", "porneste", "amesteca", "cauta",
-                "baga", "pune", "canta", "da", "nu", "lasa", "anuleaza",
+                "baga", "pune", "canta", "da", "nu", "lasa", "anuleaza", "salveaza",
+                "preferata", "preferate", "favoriteaza", "favorit", "save",
                 "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "nah", "nope", "dap", "mda",
                 "yeat", "yet", "ieat", "yeet", "drake", "carti", "karti", "travis", "breathe",
+                "quavo", "cuavo", "kwavo", "uzi", "gunna", "future", "metro", "trippie",
+                "chief", "savage", "ken", "carson", "don", "toliver",
                 "muzica", "melodia", "melodie", "piesa", "track", "song", "music"
             }
 
@@ -1475,6 +1738,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         matched_wake, _, _ = _match_wake_word(clean, custom_words)
                         if matched_wake:
                             score += 150
+                        if _is_unambiguous_direct_command(clean):
+                            score += 160
                         tokens = set(re.findall(r'[a-z0-9]+', clean))
                         score += len(tokens & control_words) * 30
                         score += min(len(clean), 25)
