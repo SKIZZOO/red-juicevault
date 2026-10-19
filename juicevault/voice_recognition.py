@@ -144,20 +144,26 @@ AFFIRMATIVE_WORDS = {
     "yes", "yeah", "yep", "yup", "sure", "ok", "okay",
     "baga", "pune", "cauta", "canta", "play", "hai",
     "sigur", "categoric", "normal", "clar", "bine", "please",
-    "search", "ahead"
+    "search", "ahead", "bag-o", "bago", "bagao", "pune-o",
+    "puneo", "pun-o", "cauta-o", "cautao", "fa-o", "fao",
+    "ia-o", "ia", "merge", "exact", "corect"
 }
 AFFIRMATIVE_PHRASES = (
     "da", "yes", "yep", "yeah", "yup", "sure", "sigur", "baga-o", "baga o", "baga", "pune-o", "pune o", "pune",
     "cauta", "cauta-o", "cauta o", "hai", "da te rog", "te rog", "da frate", "da man", "of course", "play it",
-    "go ahead", "da da", "fa-o", "fa o"
+    "go ahead", "da da", "fa-o", "fa o", "da baga", "da pune", "da cauta", "da bag-o", "da pune-o", "da caut-o",
+    "da ma", "da ba", "da bro", "da normal", "da-i drumul", "dai drumul", "baga pe youtube", "pune pe youtube",
+    "cauta pe youtube", "da pe youtube", "da o vreau", "da vreau", "yes please", "yes play"
 )
 NEGATIVE_WORDS = {
     "nu", "nop", "nope", "nah", "no", "cancel", "anuleaza", "stop",
-    "lasa", "niciun", "niciuna", "dont", "not", "nevermind", "pas"
+    "lasa", "niciun", "niciuna", "dont", "not", "nevermind", "pas",
+    "las-o", "laso", "opreste"
 }
 NEGATIVE_PHRASES = (
     "nu", "no", "nope", "nah", "cancel", "anuleaza", "nu mai", "nu cauta", "las-o", "las o",
-    "lasa", "nu vreau", "niciun caz", "nici gand", "don't", "stop", "nu da", "nu baga", "las-o balta"
+    "lasa", "nu vreau", "niciun caz", "nici gand", "don't", "stop", "nu da", "nu baga", "las-o balta",
+    "nu te rog", "nu frate", "nu ma", "nu ba", "nu pune"
 )
 
 
@@ -369,20 +375,29 @@ def _get_ffmpeg_exe() -> str:
 
 
 def _detect_user_language(text: str, default_lang: str = "ro-RO") -> str:
-    """Return 'ro' or 'en' based on vocabulary and detected speech recognition locale."""
+    """Return 'ro' or 'en' based on vocabulary. Defaults to 'ro' unless clear English command keywords are used."""
     clean = _normalize_speech(text)
     words = set(re.findall(r'[a-z0-9]+', clean))
-    ro_markers = {"ba", "bai", "hei", "cauta", "baga", "pune", "canta", "da", "nu", "piesa", "melodia", "urmatoarea", "sari", "schimba", "dupa", "de", "pe", "te", "rog", "sigur", "bine", "hai", "inapoi", "vreau", "ascult"}
-    en_markers = {"hey", "hi", "search", "play", "skip", "next", "pause", "resume", "forward", "back", "rewind", "on", "from", "yes", "yeah", "yep", "no", "sure", "please", "track", "song", "what", "shuffle", "like"}
+    ro_markers = {
+        "ba", "bai", "hei", "cauta", "baga", "pune", "canta", "da", "nu", "piesa",
+        "melodia", "melodie", "urmatoarea", "sari", "schimba", "dupa", "de", "pe",
+        "te", "rog", "sigur", "bine", "hai", "inapoi", "vreau", "ascult", "da-i",
+        "dai", "opreste", "taci", "liniste", "amesteca", "lasa"
+    }
+    en_markers = {
+        "search", "skip", "next", "pause", "resume", "forward", "back", "rewind",
+        "shuffle", "what", "please", "leave", "disconnect", "cancel"
+    }
 
     ro_score = len(words & ro_markers)
     en_score = len(words & en_markers)
 
     if ro_score > en_score:
         return "ro"
-    if en_score > ro_score:
+    if en_score > ro_score and en_score >= 1:
         return "en"
-    return "en" if "en" in default_lang.lower() else "ro"
+    return "ro"
+
 
 
 def _mix_pcm(music_pcm: bytes, overlay_pcm: bytes, music_vol: float) -> bytes:
@@ -1065,65 +1080,75 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if pending and time.time() < pending.get("expires", 0.0):
                 pending_uid = pending.get("user_id")
                 # REQUIREMENT: Must come from the SAME person who initiated the command!
+                # Do NOT respond to anyone else in voice ("sa nu raspunda la altcineva")
                 if pending_uid and user_id != pending_uid:
-                    # Spoken by someone else in the voice channel
-                    tokens = set(re.findall(r'[a-z0-9]+', clean))
-                    custom_words = await get_learned_wake_words(self.cog, self.guild_id)
-                    matched_wake_other, _, _ = _match_wake_word(clean, custom_words)
-                    if matched_wake_other and (tokens & (AFFIRMATIVE_WORDS | NEGATIVE_WORDS)):
-                        initiator = pending.get("user_name", "persoana care a cerut piesa")
-                        lang_p = pending.get("lang", user_lang)
-                        await self._notify(
-                            guild,
-                            f"⚠️ **[Garmin]** {user_name}, aștept răspunsul de la **{initiator}**."
-                            if lang_p == "ro" else
-                            f"⚠️ **[Garmin]** {user_name}, I am waiting for **{initiator}** to answer."
-                        )
                     return
-                else:
-                    # Utterance is from the SAME user who asked
-                    pending_lang = pending.get("lang", user_lang)
-                    tokens = set(re.findall(r'[a-z0-9]+', clean))
-                    if pending.get("awaiting_title"):
-                        is_neg = bool(tokens & NEGATIVE_WORDS) or clean in NEGATIVE_PHRASES
-                        if is_neg:
-                            self.cog._pending_yt_voice.pop(self.guild_id, None)
-                            self._wake_windows.pop(user_id, None)
-                            self._unlock_session()
-                            await play_beep_sound(guild, "error")
-                            cancel_msg = "🚫 **[Garmin]** Căutare anulată." if pending_lang == "ro" else "🚫 **[Garmin]** Search cancelled."
-                            await speak_in_voice(guild, "Comandă anulată." if pending_lang == "ro" else "Cancelled.", lang=pending_lang)
-                            await self._notify(guild, cancel_msg)
-                            return
-                        clean_title = _clean_music_query(clean)
-                        self.cog._pending_yt_voice.pop(self.guild_id, None)
-                        self._wake_windows.pop(user_id, None)
-                        self._lock_session(user_id, duration=35.0)
-                        await play_beep_sound(guild, "understood")
-                        await self._search_and_play_youtube(guild, clean_title or clean, user_name, lang=pending_lang)
-                        return
 
-                    # Check NEGATIVE tokens FIRST before affirmative to prevent false positives
-                    is_negative = bool(tokens & NEGATIVE_WORDS) or clean in NEGATIVE_PHRASES
-                    if is_negative:
+                # Utterance is from the SAME user who asked: strictly preserve language ("sa NU schimbe limba")
+                pending_lang = pending.get("lang", "ro")
+                user_lang = pending_lang
+                is_ro = (pending_lang == "ro")
+                _user_preferred_languages[user_id] = pending_lang
+
+                tokens = set(re.findall(r'[a-z0-9]+', clean))
+                if pending.get("awaiting_title"):
+                    is_neg = bool(tokens & NEGATIVE_WORDS) or any(p in clean for p in NEGATIVE_PHRASES)
+                    if is_neg:
                         self.cog._pending_yt_voice.pop(self.guild_id, None)
                         self._wake_windows.pop(user_id, None)
                         self._unlock_session()
                         await play_beep_sound(guild, "error")
-                        cancel_msg = "🚫 **[Garmin]** Căutare anulată." if pending_lang == "ro" else "🚫 **[Garmin]** Search cancelled."
-                        await speak_in_voice(guild, "Comandă anulată." if pending_lang == "ro" else "Cancelled.", lang=pending_lang)
+                        cancel_msg = "🚫 **[Garmin]** Căutare anulată." if is_ro else "🚫 **[Garmin]** Search cancelled."
+                        await speak_in_voice(guild, "Comandă anulată." if is_ro else "Cancelled.", lang=pending_lang)
                         await self._notify(guild, cancel_msg)
                         return
-
-                    is_affirmative = bool(tokens & AFFIRMATIVE_WORDS) or clean in AFFIRMATIVE_PHRASES or "youtube" in clean or "yt" in clean
-                    if is_affirmative:
+                    clean_title = _clean_music_query(clean)
+                    if clean_title:
                         self.cog._pending_yt_voice.pop(self.guild_id, None)
                         self._wake_windows.pop(user_id, None)
                         self._lock_session(user_id, duration=35.0)
                         await play_beep_sound(guild, "understood")
-                        target_q = pending["query"]
-                        await self._search_and_play_youtube(guild, target_q, user_name, lang=pending_lang)
+                        await self._search_and_play_youtube(guild, clean_title, user_name, lang=pending_lang)
                         return
+                    # Empty or unclear title: do not fall through to other commands
+                    return
+
+                # Waiting strictly for DA or NU ("sa astepte doar da sau nu, si sa nu caute alt ceva")
+                is_negative = bool(tokens & NEGATIVE_WORDS) or any(p in clean for p in NEGATIVE_PHRASES)
+                if is_negative:
+                    self.cog._pending_yt_voice.pop(self.guild_id, None)
+                    self._wake_windows.pop(user_id, None)
+                    self._unlock_session()
+                    await play_beep_sound(guild, "error")
+                    cancel_msg = "🚫 **[Garmin]** Căutare anulată." if is_ro else "🚫 **[Garmin]** Search cancelled."
+                    await speak_in_voice(guild, "Comandă anulată." if is_ro else "Cancelled.", lang=pending_lang)
+                    await self._notify(guild, cancel_msg)
+                    return
+
+                is_affirmative = bool(tokens & AFFIRMATIVE_WORDS) or any(p in clean for p in AFFIRMATIVE_PHRASES) or "youtube" in clean or "yt" in clean
+                if is_affirmative:
+                    target_q = pending["query"]
+                    self.cog._pending_yt_voice.pop(self.guild_id, None)
+                    self._wake_windows.pop(user_id, None)
+                    self._lock_session(user_id, duration=35.0)
+                    await play_beep_sound(guild, "understood")
+                    await self._search_and_play_youtube(guild, target_q, user_name, lang=pending_lang)
+                    return
+
+                # Spoken words were NEITHER "da" nor "nu":
+                # DO NOT fall through to normal song search or commands! NEVER search for other words!
+                rem = pending.get("expires", 0.0) - time.time()
+                if rem > 0:
+                    self._lock_session(user_id, duration=max(15.0, rem))
+                    self._wake_windows[user_id] = now + max(15.0, rem)
+                    custom_words = await get_learned_wake_words(self.cog, self.guild_id)
+                    matched_wake_self, _, _ = _match_wake_word(clean, custom_words)
+                    if matched_wake_self:
+                        await play_beep_sound(guild, "listening")
+                        remind_speech = f"Răspunde doar cu da sau nu pentru piesa {pending['query']}." if is_ro else f"Please answer with yes or no for track {pending['query']}."
+                        await speak_in_voice(guild, remind_speech, lang=pending_lang)
+                return
+
 
             # Check for Garmin Wake Word using permissive matcher + custom learned words + fuzzy Levenshtein
             custom_words = await get_learned_wake_words(self.cog, self.guild_id)

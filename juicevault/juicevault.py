@@ -1729,26 +1729,22 @@ class JuiceVault(commands.Cog):
         content = message.content.strip().lower()
 
         # REQUIREMENT: Must come from the SAME person who initiated the command!
+        # Do not respond to anyone else ("sa nu raspunda la altcineva")
         if pending_uid and message.author.id != pending_uid:
-            aff_test = ("da", "yes", "y", "sure", "sigur", "baga", "pune-o", "cauta", "pune", "hai", "da te rog", "te rog", "youtube", "pe youtube", "ok", "okay", "yeah", "yep")
-            neg_test = ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa", "nah", "nope")
-            if content in aff_test or content in neg_test:
-                expected_user = pending.get("user_name", "persoana care a cerut comanda")
-                is_ro = pending.get("lang") == "ro"
-                await message.channel.send(
-                    f"⚠️ **[Garmin]** {message.author.display_name}, aștept răspunsul de la **{expected_user}**."
-                    if is_ro else
-                    f"⚠️ **[Garmin]** {message.author.display_name}, I am waiting for **{expected_user}** to respond.",
-                    delete_after=10
-                )
             return
+
 
         is_ro = pending.get("lang") == "ro"
         target_q = None
 
+        from .voice_recognition import _active_sinks
+        sink = _active_sinks.get(message.guild.id)
+
         if pending.get("awaiting_title"):
             if content in ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa", "nah", "nope"):
                 self._pending_yt_voice.pop(message.guild.id, None)
+                if sink:
+                    sink._unlock_session()
                 await message.channel.send("🚫 **[Garmin]** Comandă anulată." if is_ro else "🚫 **[Garmin]** Cancelled.")
                 return
             target_q = message.content.strip()
@@ -1758,12 +1754,16 @@ class JuiceVault(commands.Cog):
             target_q = pending.get("query")
         elif content in ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa", "nah", "nope"):
             self._pending_yt_voice.pop(message.guild.id, None)
+            if sink:
+                sink._unlock_session()
             await message.channel.send("🚫 **[Garmin]** Comandă anulată." if is_ro else "🚫 **[Garmin]** Cancelled.")
             return
         else:
             return
 
         if not target_q:
+            if sink:
+                sink._unlock_session()
             return
 
         await message.channel.send(f"🔍 **[Garmin]** Caut *\"{target_q}\"* pe YouTube... ⏳" if is_ro else f"🔍 **[Garmin]** Searching YouTube for *\"{target_q}\"*... ⏳")
@@ -1771,11 +1771,12 @@ class JuiceVault(commands.Cog):
             from .voice_recognition import play_chime_and_proceed
             from .external_search_patch import _extract_search
             info = await asyncio.to_thread(_extract_search, target_q)
+            yt_track = None
             if info:
-                if info.get("_is_playlist"):
+                if info.get("_is_playlist") or "entries" in info:
                     entries = info.get("entries") or []
                     yt_track = entries[0] if entries else None
-                else:
+                elif not yt_track and (info.get("url") or info.get("title")):
                     yt_track = info
 
                 if yt_track:
@@ -1809,11 +1810,17 @@ class JuiceVault(commands.Cog):
                         asyncio.create_task(ui.update_panel(gid))
                     if hasattr(self, "web_remote") and self.web_remote:
                         asyncio.create_task(self.web_remote.broadcast_state(gid))
+                    if sink:
+                        sink._unlock_session()
                     return
 
-            await message.channel.send(f"❌ Nu am găsit pe YouTube: *\"{target_q}\"*")
+            await message.channel.send(f"❌ Nu am găsit pe YouTube: *\"{target_q}\"*" if is_ro else f"❌ Not found on YouTube: *\"{target_q}\"*")
         except Exception as e:
             await message.channel.send(f"❌ YouTube error: `{e}`")
+        finally:
+            if sink:
+                sink._unlock_session()
+
 
     @jv.command(name="categories")
     async def categories_cmd(self, ctx):
