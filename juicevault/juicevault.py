@@ -1416,14 +1416,14 @@ class JuiceVault(commands.Cog):
             await set_voice_commands_enabled_for_guild(self, ctx.guild.id, True)
             if ctx.guild and ctx.guild.voice_client:
                 attach_voice_command_sink(self, ctx.guild)
-            await ctx.send("🎤 **Voice Command Recognition: ENABLED in Discord voice channel!**\nYou can now speak into your mic: say **'skip'**, **'next'**, **'pause'**, **'play'**, or **'shuffle'**!")
+            await ctx.send("🎤 **Voice Command Recognition: ENABLED in Discord voice channel!**\n🎙️ **Wake Word: \"Garmin\"**\nSay **'Garmin, skip'**, **'Garmin, următoarea'**, **'Garmin, pause'**, **'Garmin, play'**, or **'Garmin, shuffle'**!")
         elif mode is not None and mode.lower() in ("off", "disable", "false"):
             await set_voice_commands_enabled_for_guild(self, ctx.guild.id, False)
             await ctx.send("🔇 **Voice Command Recognition: DISABLED in Discord voice channel.**")
         else:
             is_enabled = await is_voice_commands_enabled_for_guild(self, ctx.guild.id)
             embed = discord.Embed(
-                title="🎤 JuiceVault Voice Commands System",
+                title="🎤 JuiceVault Voice Commands System (Wake Word: 'Garmin')",
                 color=0xA855F7 if is_enabled else 0x64748B,
             )
             embed.add_field(
@@ -1436,12 +1436,22 @@ class JuiceVault(commands.Cog):
             )
             embed.add_field(
                 name="📱 Web Remote Voice Control",
-                value="Status: **🟢 100% READY & ACTIVE!**\nOpen your Web Remote (`4jv remote`) and tap the **🎤 Voice Cmd** button or enable Hands-Free Mode on your phone or PC!",
+                value="Status: **🟢 100% READY & ACTIVE!**\nOpen your Web Remote (`4jv remote`) and tap the **🎤 Voice** button or enable Hands-Free Mode on your phone or PC!",
                 inline=False
             )
             embed.add_field(
-                name="🗣️ Recognized Voice Commands",
-                value="• **`skip`** / **`next`** ➔ Skip current track\n• **`skip 10`** ➔ Skip 10 tracks\n• **`previous`** / **`back`** ➔ Play previous track\n• **`pause`** / **`play`** ➔ Toggle playback\n• **`shuffle`** ➔ Shuffle the queue\n• **`favorite`** ➔ Add to favorites",
+                name="🗣️ Wake Word & Voice Commands (RO / EN)",
+                value=(
+                    "🎙️ **Wake Word**: Say **`Garmin`** before any command!\n"
+                    "• **`Garmin, skip`** / **`Garmin, următoarea`** ➔ Skip current track\n"
+                    "• **`Garmin, skip 10`** / **`Garmin, înainte 10`** ➔ Forward +10s / Skip 10 tracks\n"
+                    "• **`Garmin, back 10`** / **`Garmin, înapoi 10`** ➔ Rewind -10s\n"
+                    "• **`Garmin, previous`** ➔ Play previous track\n"
+                    "• **`Garmin, pause`** / **`Garmin, pauză`** ➔ Pause playback\n"
+                    "• **`Garmin, play`** / **`Garmin, continuă`** ➔ Resume playback\n"
+                    "• **`Garmin, shuffle`** / **`Garmin, amestecă`** ➔ Shuffle the queue\n"
+                    "• **`Garmin, favorite`** / **`Garmin, like`** ➔ Add to favorites"
+                ),
                 inline=False
             )
             await ctx.send(embed=embed)

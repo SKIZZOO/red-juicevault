@@ -3183,6 +3183,11 @@ HTML_INDEX = """<!DOCTYPE html>
       background: #38bdf8;
       box-shadow: 0 0 12px #38bdf8;
     }
+    .voice-pulse-dot.wake-active {
+      background: #c084fc !important;
+      box-shadow: 0 0 16px #c084fc, 0 0 24px rgba(168, 85, 247, 0.7) !important;
+      animation: pulseVoiceDot 0.65s infinite ease-in-out !important;
+    }
     .voice-pulse-dot.processing {
       background: #f59e0b;
       box-shadow: 0 0 12px #f59e0b;
@@ -4962,6 +4967,7 @@ HTML_INDEX = """<!DOCTYPE html>
       <div class="voice-hud-title-wrap">
         <span class="voice-pulse-dot" id="voicePulseDot"></span>
         <span class="voice-hud-title">Voice Control</span>
+        <span class="voice-wake-badge" id="voiceWakeBadge" style="font-size:0.62rem; font-weight:800; background:rgba(56,189,248,0.18); border:1px solid rgba(56,189,248,0.4); color:#38bdf8; border-radius:999px; padding:2px 7px; font-family:'JetBrains Mono',monospace;">Wake: "Garmin"</span>
         <span class="voice-lang-badge" id="voiceLangBadge">RO / EN</span>
       </div>
       <div class="voice-hud-header-actions">
@@ -4974,16 +4980,16 @@ HTML_INDEX = """<!DOCTYPE html>
       </div>
     </div>
     <div class="voice-hud-body">
-      <div class="voice-hud-transcript" id="voiceTranscript">Say "Skip", "Next", "Pause", "Play", "Vol 80", "Shuffle"...</div>
-      <div class="voice-hud-feedback" id="voiceFeedback">Listening for voice commands...</div>
+      <div class="voice-hud-transcript" id="voiceTranscript">Say "Garmin" + command (e.g. "Garmin, skip" or "Garmin, pause")</div>
+      <div class="voice-hud-feedback" id="voiceFeedback">Listening for wake word "Garmin"...</div>
     </div>
     <div class="voice-hud-hints">
-      <span class="voice-hint-pill" onclick="triggerVoiceHint('skip')">"Skip"</span>
-      <span class="voice-hint-pill" onclick="triggerVoiceHint('skip 10')">"Skip 10"</span>
-      <span class="voice-hint-pill" onclick="triggerVoiceHint('pause')">"Pause"</span>
-      <span class="voice-hint-pill" onclick="triggerVoiceHint('play')">"Play"</span>
-      <span class="voice-hint-pill" onclick="triggerVoiceHint('urmatoarea')">"Următoarea"</span>
-      <span class="voice-hint-pill" onclick="triggerVoiceHint('shuffle')">"Shuffle"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('skip')">"Garmin Skip"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('urmatoarea')">"Garmin Următoarea"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('skip 10')">"Garmin +10s"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('pause')">"Garmin Pause"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('play')">"Garmin Play"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('shuffle')">"Garmin Shuffle"</span>
     </div>
   </div>
 
@@ -10116,6 +10122,7 @@ HTML_INDEX = """<!DOCTYPE html>
     let voiceHandsFreeMode = false;
     let voiceRestartTimer = null;
     let voiceLastHeardTime = 0;
+    let voiceWakeActiveUntil = 0;
 
     function isVoiceSupported() {
       return ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
@@ -10136,7 +10143,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
       rec.onstart = function() {
         voiceIsListening = true;
-        updateVoiceUIState(true, 'Listening... Say "skip", "pause", "play"...');
+        updateVoiceUIState(true, 'Listening... Say "Garmin" (e.g. "Garmin, skip")');
       };
 
       rec.onresult = function(event) {
@@ -10159,7 +10166,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
         if (finalTranscript.trim()) {
           voiceLastHeardTime = Date.now();
-          executeVoiceCommand(finalTranscript.trim().toLowerCase());
+          handleVoiceInput(finalTranscript.trim().toLowerCase());
         }
       };
 
@@ -10215,7 +10222,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
       try {
         rec.start();
-        updateVoiceUIState(true, 'Listening for voice commands...');
+        updateVoiceUIState(true, 'Listening... Say "Garmin" + command');
       } catch (e) {
         try { rec.stop(); setTimeout(() => rec.start(), 200); } catch (_) {}
       }
@@ -10223,6 +10230,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
     function stopVoiceRecognition() {
       voiceHandsFreeMode = false;
+      voiceWakeActiveUntil = 0;
       clearTimeout(voiceRestartTimer);
       if (voiceRecognition) {
         try { voiceRecognition.stop(); } catch (e) {}
@@ -10251,21 +10259,27 @@ HTML_INDEX = """<!DOCTYPE html>
       if (voiceHandsFreeMode && !voiceIsListening) {
         startVoiceRecognition();
       }
-      showToast(voiceHandsFreeMode ? 'Hands-Free Voice Listening ON' : 'Hands-Free Mode OFF');
+      showToast(voiceHandsFreeMode ? 'Hands-Free Voice Listening ON (Wake: "Garmin")' : 'Hands-Free Mode OFF');
     }
 
     function triggerVoiceHint(hintText) {
       const transEl = document.getElementById('voiceTranscript');
-      if (transEl) transEl.innerText = `"${hintText}"`;
-      executeVoiceCommand(hintText.toLowerCase());
+      if (transEl) transEl.innerText = `"Garmin ${hintText}"`;
+      executeVoiceCommand(hintText.toLowerCase(), `Garmin ${hintText}`);
     }
 
-    function updateVoiceUIState(isListening, statusText) {
+    function updateVoiceUIState(isListening, statusText, isWakeActive) {
       const dot = document.getElementById('voicePulseDot');
       const fb = document.getElementById('voiceFeedback');
       const btn = document.getElementById('voiceCmdBtn');
       if (dot) {
-        dot.className = isListening ? 'voice-pulse-dot listening' : 'voice-pulse-dot';
+        if (isWakeActive || Date.now() < voiceWakeActiveUntil) {
+          dot.className = 'voice-pulse-dot wake-active';
+        } else if (isListening) {
+          dot.className = 'voice-pulse-dot listening';
+        } else {
+          dot.className = 'voice-pulse-dot';
+        }
       }
       if (fb && statusText) fb.innerText = statusText;
       if (btn) {
@@ -10273,22 +10287,65 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
+    function handleVoiceInput(rawText) {
+      const clean = rawText.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const fb = document.getElementById('voiceFeedback');
+      const now = Date.now();
+
+      // Check for wake word "garmin" (or common speech recognition variants)
+      const wakeRegex = /\\b(?:hey\\s+|ok\\s+|hei\\s+)?(?:garmin|garmen|garmon|garmyn|carmin)\\b/i;
+      const wakeMatch = clean.match(wakeRegex);
+
+      let commandPart = '';
+      if (wakeMatch) {
+        // Wake word detected! Extract everything after the wake word
+        const afterWakeIndex = wakeMatch.index + wakeMatch[0].length;
+        commandPart = clean.substring(afterWakeIndex).trim().replace(/^[,.:;!?-]+/, '').trim();
+
+        if (!commandPart) {
+          // User only said "Garmin!" -> open 7-second wake listening window
+          voiceWakeActiveUntil = now + 7000;
+          updateVoiceUIState(true, 'Yes? Garmin is listening... 🟢', true);
+          showToast('Garmin is listening... Say your command!');
+          return;
+        }
+        // User provided inline command: "Garmin skip", "Garmin pause", etc.
+        voiceWakeActiveUntil = 0;
+      } else {
+        // No wake word in this sentence: check if within active wake window
+        if (now < voiceWakeActiveUntil) {
+          commandPart = clean;
+          voiceWakeActiveUntil = 0;
+        } else {
+          // Ignored: wake word was not spoken
+          if (fb) fb.innerText = 'Say "Garmin" first (e.g. "Garmin, skip")';
+          return;
+        }
+      }
+
+      executeVoiceCommand(commandPart, rawText);
+    }
+
     function executeVoiceCommand(text) {
       const fb = document.getElementById('voiceFeedback');
       const setFeedback = (msg) => { if (fb) fb.innerText = msg; };
 
       const clean = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      if (!clean) {
+        setFeedback('Garmin is listening... Say your command!');
+        return;
+      }
 
       // Skip forward 10s
       if (clean.includes('skip 10') || clean.includes('skip ten') || clean.includes('forward 10') || clean.includes('inainte 10') || clean.includes('10 secunde inainte')) {
-        setFeedback('Command: Skip +10s');
+        setFeedback('Garmin: Skip +10s');
         action('seek', { delta: 10 });
         return;
       }
 
       // Rewind 10s
       if (clean.includes('back 10') || clean.includes('inapoi 10') || clean.includes('rewind 10') || clean.includes('10 secunde inapoi')) {
-        setFeedback('Command: Rewind -10s');
+        setFeedback('Garmin: Rewind -10s');
         action('seek', { delta: -10 });
         return;
       }
@@ -10300,7 +10357,7 @@ HTML_INDEX = """<!DOCTYPE html>
         clean.includes('urmatoarea') || clean.includes('urmatorul') ||
         clean.includes('sari') || clean.includes('schimba') || clean.includes('treci')
       ) {
-        setFeedback('Command: Skip Track');
+        setFeedback('Garmin: Skip Track');
         action('skip');
         return;
       }
@@ -10310,7 +10367,7 @@ HTML_INDEX = """<!DOCTYPE html>
         clean === 'prev' || clean === 'previous' || clean.includes('previous song') ||
         clean.includes('piesa anterioara') || clean.includes('inapoi') || clean.includes('melodia anterioara')
       ) {
-        setFeedback('Command: Previous Track');
+        setFeedback('Garmin: Previous Track');
         action('previous');
         return;
       }
@@ -10320,7 +10377,7 @@ HTML_INDEX = """<!DOCTYPE html>
         clean === 'pause' || clean.includes('pauza') ||
         clean === 'stop' || clean.includes('opreste') || clean.includes('taci')
       ) {
-        setFeedback('Command: Pause');
+        setFeedback('Garmin: Pause');
         action('pause');
         return;
       }
@@ -10330,21 +10387,21 @@ HTML_INDEX = """<!DOCTYPE html>
         clean === 'play' || clean === 'start' || clean === 'resume' ||
         clean.includes('continua') || clean.includes('da drumul') || clean.includes('porneste')
       ) {
-        setFeedback('Command: Play');
+        setFeedback('Garmin: Play');
         action('play');
         return;
       }
 
       // Shuffle
       if (clean.includes('shuffle') || clean.includes('amesteca')) {
-        setFeedback('Command: Shuffle Queue');
+        setFeedback('Garmin: Shuffle Queue');
         action('shuffle');
         return;
       }
 
       // Repeat / Loop
       if (clean.includes('repeat') || clean.includes('repeta') || clean.includes('loop')) {
-        setFeedback('Command: Repeat');
+        setFeedback('Garmin: Repeat');
         action('repeat');
         return;
       }
@@ -10353,14 +10410,14 @@ HTML_INDEX = """<!DOCTYPE html>
       const volMatch = clean.match(/(?:volum|volume|set volume to|sunet)\\s*(\\d{1,3})/);
       if (volMatch) {
         const val = Math.max(0, Math.min(100, parseInt(volMatch[1], 10)));
-        setFeedback(`Command: Volume ${val}%`);
+        setFeedback(`Garmin: Volume ${val}%`);
         action('volume', { volume: val });
         return;
       }
 
       // Like / Favorite
       if (clean.includes('favorite') || clean.includes('favorit') || clean.includes('like') || clean.includes('apreciaza')) {
-        setFeedback('Command: Toggle Favorite');
+        setFeedback('Garmin: Toggle Favorite');
         if (typeof toggleCurrentSongFavorite === 'function') {
           toggleCurrentSongFavorite();
         }
@@ -10371,8 +10428,8 @@ HTML_INDEX = """<!DOCTYPE html>
       const playMatch = clean.match(/^(?:play|canta|pune|baga|asculta)\\s+(.+)$/);
       if (playMatch && playMatch[1]) {
         const query = playMatch[1].trim();
-        setFeedback(`Searching: "${query}"...`);
-        showToast(`Voice Search: "${query}"`);
+        setFeedback(`Garmin Searching: "${query}"...`);
+        showToast(`Garmin Search: "${query}"`);
         if (typeof switchTab === 'function') switchTab('search');
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
@@ -10382,7 +10439,7 @@ HTML_INDEX = """<!DOCTYPE html>
         return;
       }
 
-      setFeedback(`Recognized: "${text}" (no matching command)`);
+      setFeedback(`Garmin: Recognized "${text}" (no matching command)`);
     }
 
     // Auto-resume Listen Together stream if page was refreshed by alignment watchdog
