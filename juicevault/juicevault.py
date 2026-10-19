@@ -49,7 +49,13 @@ class JuiceVault(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=918273645, force_registration=True)
-        self.config.register_guild(enabled=False, channel_id=None, category="all")
+        self.config.register_guild(
+            enabled=False,
+            channel_id=None,
+            category="all",
+            last_track=None,
+            last_position=0.0,
+        )
         self.session = None
         self.tasks = {}
         self.restore_task = None
@@ -61,6 +67,8 @@ class JuiceVault(commands.Cog):
         self.current = {}
         self.current_files = {}
         self._last_played_files = {}
+        self._last_played_tracks = {}
+        self._last_positions = {}
         self.last_error = {}
         self.search_results = {}
         self.failure_counts = {}
@@ -650,7 +658,114 @@ class JuiceVault(commands.Cog):
         }
         return filters.get(key, filters["none"])
 
+    def _clean_track_for_config(self, track: dict) -> dict:
+        if not isinstance(track, dict):
+            return {}
+        clean = {}
+        for k, v in track.items():
+            if k in ("_cached_file", "_jv_seek_copy", "_retry_count"):
+                continue
+            if isinstance(v, (str, int, float, bool)) or v is None:
+                clean[k] = v
+            elif isinstance(v, (list, tuple)):
+                clean[k] = [x for x in v if isinstance(x, (str, int, float, bool))]
+            elif isinstance(v, dict):
+                clean[k] = {str(dk): dv for dk, dv in v.items() if isinstance(dv, (str, int, float, bool))}
+        return clean
+
+    def _save_last_track_state(self, guild_id: int, track: dict, position: float = 0.0):
+        if not track or not isinstance(track, dict):
+            return
+        if track.get("_is_vip") or track.get("_is_soundboard"):
+            return
+        clean_track = self._clean_track_for_config(track)
+        if not clean_track:
+            return
+        pos = max(0.0, float(position or 0.0))
+        self._last_played_tracks[guild_id] = clean_track
+        self._last_positions[guild_id] = pos
+        asyncio.create_task(self._persist_last_track(guild_id, clean_track, pos))
+
+    async def _persist_last_track(self, guild_id: int, clean_track: dict, position: float):
+        try:
+            guild = self.bot.get_guild(guild_id)
+            if guild:
+                await self.config.guild(guild).last_track.set(clean_track)
+                await self.config.guild(guild).last_position.set(float(position))
+        except Exception as e:
+            print(f"[JuiceVault] Error persisting last track state for guild {guild_id}: {e}")
+
+    async def _persist_last_position(self, guild_id: int, position: float):
+        try:
+            guild = self.bot.get_guild(guild_id)
+            if guild:
+                await self.config.guild(guild).last_position.set(float(position))
+        except Exception:
+            pass
+
+    async def _get_last_track_to_resume(self, guild):
+        gid = guild.id
+        track = self._last_played_tracks.get(gid)
+        pos = self._last_positions.get(gid)
+
+        if not track:
+            try:
+                track = await self.config.guild(guild).last_track()
+            except Exception:
+                track = None
+
+        if pos is None:
+            try:
+                pos = await self.config.guild(guild).last_position()
+            except Exception:
+                pos = 0.0
+
+        if not track or not isinstance(track, dict):
+            return None
+
+        resume_track = dict(track)
+        pos = max(0.0, float(pos or 0.0))
+        duration = self._parse_duration(resume_track.get("length") or resume_track.get("duration"))
+
+        # If it was stopped within the last 5 seconds of the song or past duration, start from beginning:
+        if duration and (pos >= duration - 5.0):
+            resume_track["_resume_position"] = 0.0
+        elif pos > 3.0:
+            resume_track["_resume_position"] = pos
+        else:
+            resume_track["_resume_position"] = 0.0
+
+        return resume_track
+
+    def _align_queue_with_last_track(self, gid: int, last_t: dict):
+        q = self.queues.get(gid) or []
+        if not q or not last_t:
+            return
+        target_id = str(last_t.get("id") or "")
+        idx = -1
+        if target_id:
+            for i, item in enumerate(q):
+                if str(item.get("id")) == target_id:
+                    idx = i
+                    break
+        if idx == -1:
+            target_url = last_t.get("url") or last_t.get("webpage_url")
+            if target_url:
+                for i, item in enumerate(q):
+                    if item.get("url") == target_url or item.get("webpage_url") == target_url:
+                        idx = i
+                        break
+        if idx != -1:
+            # Reorder queue so the track following last_t plays next:
+            self.queues[gid] = q[idx + 1:] + q[:idx]
+
     async def _disconnect(self, guild):
+        if guild:
+            gid = guild.id
+            cur = self.current.get(gid)
+            pos = self.get_position(gid)
+            if cur and not cur.get("_is_vip") and not cur.get("_is_soundboard"):
+                self._save_last_track_state(gid, cur, pos)
         voice = guild.voice_client
         if voice:
             try:
@@ -662,6 +777,10 @@ class JuiceVault(commands.Cog):
                 pass
 
     async def _stop(self, guild_id):
+        cur = self.current.get(guild_id)
+        pos = self.get_position(guild_id)
+        if cur and not cur.get("_is_vip") and not cur.get("_is_soundboard"):
+            self._save_last_track_state(guild_id, cur, pos)
         if guild_id in self.stop_events:
             self.stop_events[guild_id].set()
         if guild_id in self.skip_events:
@@ -702,6 +821,7 @@ class JuiceVault(commands.Cog):
         seek = self.seek_events.setdefault(gid, asyncio.Event())
         self.manual_queues.setdefault(gid, [])
         self.effects.setdefault(gid, "none")
+        is_first_track = True
         try:
             while not stop.is_set():
                 if self.tasks.get(gid) is not task:
@@ -747,6 +867,13 @@ class JuiceVault(commands.Cog):
                         self.manual_queues.setdefault(gid, []).insert(0, dict(current, _jv_seek_copy=True, _cached_file=self.current_files.get(gid)))
                     self.play_positions[gid] = target
                     continue
+                if is_first_track:
+                    is_first_track = False
+                    if not self.manual_queues.get(gid):
+                        last_t = await self._get_last_track_to_resume(guild)
+                        if last_t:
+                            self._align_queue_with_last_track(gid, last_t)
+                            self.manual_queues.setdefault(gid, []).insert(0, last_t)
                 if self.manual_queues.get(gid):
                     track = self.manual_queues[gid].pop(0)
                     source_type = "external" if track.get("_external") else "manual"
@@ -784,6 +911,8 @@ class JuiceVault(commands.Cog):
                 else:
                     start_offset = 0.0
                 self.play_positions[gid] = start_offset
+                if not track.get("_is_vip") and not track.get("_is_soundboard"):
+                    self._save_last_track_state(gid, track, start_offset)
                 duration = self._parse_duration(track.get("length"))
                 if duration is not None:
                     start_offset = min(start_offset, max(0.0, duration - 0.25))
@@ -967,6 +1096,10 @@ class JuiceVault(commands.Cog):
         except asyncio.CancelledError:
             raise
         finally:
+            cur = self.current.get(gid)
+            pos = self.get_position(gid)
+            if cur and not cur.get("_is_vip") and not cur.get("_is_soundboard"):
+                self._save_last_track_state(gid, cur, pos)
             if self.tasks.get(gid) is task:
                 await self._disconnect(guild)
                 self.current.pop(gid, None)
@@ -1192,6 +1325,14 @@ class JuiceVault(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
+        if self.bot.user and member.id == self.bot.user.id:
+            if before.channel is not None and after.channel is None:
+                gid = member.guild.id
+                cur = self.current.get(gid)
+                pos = self.get_position(gid)
+                if cur and not cur.get("_is_vip") and not cur.get("_is_soundboard"):
+                    self._save_last_track_state(gid, cur, pos)
+            return
         if getattr(member, "bot", False):
             return
         if member.id not in self.VIP_USER_IDS:

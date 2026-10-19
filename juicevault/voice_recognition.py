@@ -848,7 +848,10 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_playing():
                     await play_chime_and_proceed(guild)
-                    voice.pause()
+                    if hasattr(self.cog, "pause_playback"):
+                        self.cog.pause_playback(self.guild_id)
+                    else:
+                        voice.pause()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Paused! ⏸️")
                 return
 
@@ -857,8 +860,35 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_paused():
                     await play_chime_and_proceed(guild)
-                    voice.resume()
+                    if hasattr(self.cog, "resume_playback"):
+                        self.cog.resume_playback(self.guild_id)
+                    else:
+                        voice.resume()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Resumed playback! ▶️")
+                elif voice and not voice.is_playing() and (self.guild_id not in self.cog.tasks or self.cog.tasks[self.guild_id].done()):
+                    category = await self.cog.config.guild(guild).category()
+                    tracks = await self.cog.fetch_tracks(category)
+                    if category not in getattr(self.cog, "CATEGORY_URLS", {}) and category != "all":
+                        tracks = self.cog._filter_tracks(tracks, category)
+                    if tracks:
+                        self.cog.queues[self.guild_id] = tracks
+                        self.cog.manual_queues[self.guild_id] = []
+                        self.cog.stop_events[self.guild_id] = asyncio.Event()
+                        self.cog.skip_events[self.guild_id] = asyncio.Event()
+                        self.cog.seek_events[self.guild_id] = asyncio.Event()
+                        self.cog.skip_counts[self.guild_id] = 0
+                        self.cog.effects[self.guild_id] = "none"
+                        await play_chime_and_proceed(guild)
+                        self.cog.tasks[self.guild_id] = asyncio.create_task(self.cog._player(guild, voice.channel))
+                        await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Pornesc redarea! ▶️" if is_ro else f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Started playback! ▶️")
+                return
+
+            # 7b. LEAVE / DISCONNECT
+            elif any(w in clean_cmd for w in ("leave", "pleaca", "iesi", "deconecteaza", "deconecteaza-te", "disconnect")):
+                await play_chime_and_proceed(guild)
+                await self.cog.config.guild(guild).enabled.set(False)
+                await self.cog._stop(self.guild_id)
+                await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Deconectat din voice! 👋" if is_ro else f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Left voice channel! 👋")
                 return
 
             # 8. SHUFFLE
