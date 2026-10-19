@@ -20,6 +20,10 @@ import wave
 
 log = logging.getLogger("red.juicevault.voice_recognition")
 
+# Silence noisy RTCP telemetry spam (SenderReportPacket type=200) from discord-ext-voice-recv
+logging.getLogger("discord.ext.voice_recv.reader").setLevel(logging.WARNING)
+logging.getLogger("discord.ext.voice_recv").setLevel(logging.WARNING)
+
 
 def _normalize_speech(text: str) -> str:
     """Normalize text by stripping diacritics and extra punctuation for robust command matching."""
