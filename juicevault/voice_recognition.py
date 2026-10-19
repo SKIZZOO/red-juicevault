@@ -61,12 +61,12 @@ async def is_voice_commands_enabled_for_guild(cog, guild_id):
         return _guild_voice_cmd_enabled[guild_id]
     if hasattr(cog, "config"):
         try:
-            val = await cog.config.guild_from_id(guild_id).get_raw("voice_commands_enabled", default=True)
+            val = await cog.config.guild_from_id(guild_id).get_raw("voice_commands_enabled", default=False)
             _guild_voice_cmd_enabled[guild_id] = bool(val)
             return bool(val)
         except Exception:
             pass
-    return True
+    return False
 
 
 async def set_voice_commands_enabled_for_guild(cog, guild_id, enabled: bool):

@@ -69,6 +69,7 @@ class JuiceVault(commands.Cog):
         self.pause_after_seek = {}
         self.play_positions = {}
         self.effects = {}
+        self.loops = {}
         self.history = {}
         self.history_pos = {}
         self.web_remote = None
@@ -104,30 +105,36 @@ class JuiceVault(commands.Cog):
         saved_sessions = self.bot._jv_data.setdefault("saved_sessions", {})
 
         for gid in list(self.tasks):
-            guild = self.bot.get_guild(gid)
-            voice = guild.voice_client if guild else None
-            cur_track = self.current.get(gid)
-            cur_pos = self.play_positions.get(gid, 0.0)
-            res_track = None
-            if cur_track:
-                res_track = dict(cur_track)
-                res_track["_resume_position"] = cur_pos
-                res_track["_resume_was_playing"] = bool(voice and (voice.is_playing() or not voice.is_paused()))
+            try:
+                guild = self.bot.get_guild(gid)
+                voice = guild.voice_client if guild else None
+                cur_track = self.current.get(gid)
+                cur_pos = self.play_positions.get(gid, 0.0)
+                res_track = None
+                if cur_track:
+                    res_track = dict(cur_track)
+                    res_track["_resume_position"] = cur_pos
+                    res_track["_resume_was_playing"] = bool(voice and (voice.is_playing() or not voice.is_paused()))
 
-            saved_sessions[gid] = {
-                "channel_id": voice.channel.id if (voice and voice.channel) else None,
-                "current_track": res_track,
-                "queue": list(self.queues.get(gid, [])),
-                "manual_queue": list(self.manual_queues.get(gid, [])),
-                "loop": self.loops.get(gid, "off"),
-                "effects": self.effects.get(gid, "none"),
-                "position": cur_pos,
-                "history": list(self.history.get(gid, [])),
-                "saved_at": time.time(),
-            }
+                saved_sessions[gid] = {
+                    "channel_id": voice.channel.id if (voice and voice.channel) else None,
+                    "current_track": res_track,
+                    "queue": list(self.queues.get(gid, [])),
+                    "manual_queue": list(self.manual_queues.get(gid, [])),
+                    "loop": getattr(self, "loops", {}).get(gid, "off"),
+                    "effects": self.effects.get(gid, "none"),
+                    "position": cur_pos,
+                    "history": list(self.history.get(gid, [])),
+                    "saved_at": time.time(),
+                }
+            except Exception as e:
+                print(f"[JuiceVault] Error saving session for guild {gid}: {e}")
 
         for guild_id in list(self.tasks):
-            await self._stop(guild_id)
+            try:
+                await self._stop(guild_id)
+            except Exception as e:
+                print(f"[JuiceVault] Error stopping guild {guild_id}: {e}")
         if self.session and not self.session.closed:
             await self.session.close()
         self.session = None
