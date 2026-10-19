@@ -14,9 +14,22 @@ from .voice_recognition import (
 async def stay_in_current_voice(self, guild, channel):
     """Respect manual Discord voice moves; only use channel as a reconnect fallback."""
     voice = guild.voice_client
+    supported, _ = is_voice_recognition_supported()
+    vc_enabled = await is_voice_commands_enabled_for_guild(self, guild.id)
+
     if voice and voice.is_connected():
-        # The user may have moved the bot to another VC. Never force it back
-        # to the channel where the 24/7 player was originally started.
+        # If voice recognition is supported & enabled, but current voice_client cannot receive audio, upgrade:
+        if supported and vc_enabled and not hasattr(voice, "listen"):
+            try:
+                ch = voice.channel
+                print(f"[JuiceVault Voice] Upgrading voice connection in '{guild.name}' to VoiceRecvClient for voice commands...")
+                await voice.disconnect(force=True)
+                await asyncio.sleep(0.5)
+                voice_cls = get_voice_client_cls()
+                voice = await ch.connect(reconnect=True, timeout=15, cls=voice_cls)
+            except Exception as exc:
+                print(f"[JuiceVault Voice] Failed upgrading voice client: {exc}")
+
         if not hasattr(voice, "_jv_connected_at"):
             voice._jv_connected_at = time.time()
         attach_voice_command_sink(self, guild)
@@ -30,25 +43,21 @@ async def stay_in_current_voice(self, guild, channel):
             pass
         await asyncio.sleep(0.5)
 
-    # Check if in-Discord voice commands are explicitly enabled and supported
-    vc_enabled = await is_voice_commands_enabled_for_guild(self, guild.id)
-    supported, _ = is_voice_recognition_supported()
-
     connected_voice = None
-    if vc_enabled and supported:
-        voice_cls = get_voice_client_cls()
-        if voice_cls is not discord.VoiceClient:
-            try:
-                connected_voice = await channel.connect(reconnect=True, timeout=12, cls=voice_cls)
-            except Exception:
-                # Fallback to standard discord.VoiceClient so music playback NEVER fails!
-                if guild.voice_client:
-                    try:
-                        await guild.voice_client.disconnect(force=True)
-                    except Exception:
-                        pass
-                    await asyncio.sleep(0.5)
-                connected_voice = None
+    voice_cls = get_voice_client_cls() if (vc_enabled and supported) else discord.VoiceClient
+    if voice_cls is not discord.VoiceClient:
+        try:
+            connected_voice = await channel.connect(reconnect=True, timeout=15, cls=voice_cls)
+        except Exception as exc:
+            print(f"[JuiceVault Voice] VoiceRecvClient connection error: {exc}")
+            # Fallback to standard discord.VoiceClient so music playback NEVER fails!
+            if guild.voice_client:
+                try:
+                    await guild.voice_client.disconnect(force=True)
+                except Exception:
+                    pass
+                await asyncio.sleep(0.5)
+            connected_voice = None
 
     if connected_voice is None:
         try:

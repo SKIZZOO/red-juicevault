@@ -6,6 +6,7 @@ Play, Previous, Shuffle, Favorite) with graceful fallback when optional audio
 receiving packages are not installed on the host.
 """
 
+import array
 import asyncio
 import logging
 import re
@@ -71,12 +72,12 @@ async def is_voice_commands_enabled_for_guild(cog, guild_id):
         return _guild_voice_cmd_enabled[guild_id]
     if hasattr(cog, "config"):
         try:
-            val = await cog.config.guild_from_id(guild_id).get_raw("voice_commands_enabled", default=False)
+            val = await cog.config.guild_from_id(guild_id).get_raw("voice_commands_enabled", default=True)
             _guild_voice_cmd_enabled[guild_id] = bool(val)
             return bool(val)
         except Exception:
             pass
-    return False
+    return True
 
 
 async def set_voice_commands_enabled_for_guild(cog, guild_id, enabled: bool):
@@ -161,7 +162,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             loop = asyncio.get_running_loop()
             try:
                 text = await loop.run_in_executor(None, self._recognize_speech_blocking, pcm_bytes)
-            except Exception:
+            except Exception as exc:
+                print(f"[JuiceVault Voice] Transcribe executor error: {exc}")
                 return
 
             if not text:
@@ -172,16 +174,17 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             user = guild.get_member(user_id) if guild else None
             user_name = user.display_name if user else f"User {user_id}"
             now = time.monotonic()
+            print(f"[JuiceVault Voice] Received speech from {user_name}: '{text}' (normalized: '{clean}')")
 
-            # Check for Garmin Wake Word: "garmin", "ba garmin", "hey garmin", "ok garmin", "garmen", etc.
-            wake_match = re.search(r'\b(?:hey\s+|ok\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin)\b', clean, re.IGNORECASE)
+            # Check for Garmin Wake Word: "garmin", "ba garmin", "hey garmin", "ok garmin", "carmen", "darmin", etc.
+            wake_match = re.search(r'\b(?:hey\s+|ok\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin|carmen|darmin|german|barmin)\b', clean, re.IGNORECASE)
 
             if wake_match:
                 cmd_part = clean[wake_match.end():].strip().lstrip(",.:;!?- ")
                 if not cmd_part:
                     # User only said "Garmin" -> wake up for 8 seconds
                     self._wake_windows[user_id] = now + 8.0
-                    log.info(f"[JuiceVault Voice] Wake word 'Garmin' activated by {user_name}. Waiting for command...")
+                    print(f"[JuiceVault Voice] Wake word 'Garmin' activated by {user_name}. Waiting for command...")
                     await self._notify(guild, f"🎤 **[Garmin]** Da, {user_name}? Ascult... (Listening...) 🟢")
                     return
                 clean_cmd = cmd_part
@@ -192,11 +195,11 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     clean_cmd = clean
                     self._wake_windows.pop(user_id, None)
                 else:
-                    # Utterance did NOT contain Garmin and not in wake window -> ignore
-                    log.debug(f"[JuiceVault Voice] Ignored utterance from {user_name} (no 'Garmin' wake word): '{clean}'")
+                    # Utterance did NOT contain Garmin and not in wake window -> log and ignore
+                    print(f"[JuiceVault Voice] Ignored utterance from {user_name} (no 'Garmin' wake word): '{clean}'")
                     return
 
-            log.info(f"[JuiceVault Voice Command] {user_name} -> Garmin command: '{clean_cmd}' (full: '{clean}')")
+            print(f"[JuiceVault Voice Command] {user_name} -> Garmin command: '{clean_cmd}' (full: '{clean}')")
 
             # 1. SEEK / DERULARE 10s
             if any(w in clean_cmd for w in ("inainte 10", "forward 10", "skip 10s", "10 secunde inainte")):
@@ -298,20 +301,38 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Comandă nerecunoscută.")
 
         def _recognize_speech_blocking(self, pcm_bytes):
-            """Synchronously pass PCM audio data to Google Speech Recognition."""
-            audio_data = sr.AudioData(pcm_bytes, 48000, 2)
+            """Convert Discord 48kHz stereo PCM to 16kHz mono PCM, then recognize with Google."""
+            try:
+                a = array.array('h')
+                a.frombytes(pcm_bytes)
+                # Discord sends 48kHz 16-bit stereo (2 channels interleaved).
+                # To get 16kHz mono (downsampled 3x): taking every 3rd left-channel sample: index [0::6]!
+                mono_16k = a[0::6].tobytes()
+            except Exception as e:
+                print(f"[JuiceVault Voice] Audio conversion error: {e}")
+                return None
+
+            if not mono_16k or len(mono_16k) < 3200:
+                return None
+
+            audio_data = sr.AudioData(mono_16k, 16000, 2)
             first_cand = None
             for lang in ("ro-RO", "en-US"):
                 try:
                     res = self._recognizer.recognize_google(audio_data, language=lang)
                     if res:
+                        print(f"[JuiceVault Voice] Google STT recognized ({lang}): '{res}'")
                         lower_res = res.lower()
-                        if any(k in lower_res for k in ("garmin", "garmen", "garmon", "skip", "next", "pause", "play", "urmatoarea", "sari")):
+                        if any(k in lower_res for k in ("garmin", "garmen", "garmon", "skip", "next", "pause", "play", "canta", "pune", "urmatoarea", "sari")):
                             return res
                         if first_cand is None:
                             first_cand = res
-                except Exception:
+                except sr.UnknownValueError:
                     pass
+                except sr.RequestError as exc:
+                    print(f"[JuiceVault Voice] Google STT network/API error: {exc}")
+                except Exception as exc:
+                    print(f"[JuiceVault Voice] Google STT exception: {type(exc).__name__}: {exc}")
             return first_cand
 
         async def _notify(self, guild, message):
@@ -319,14 +340,22 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if not guild:
                 return
             try:
-                channel_id = await self.cog.config.guild(guild).channel_id()
-                target_channel = guild.get_channel(channel_id)
+                target_channel = None
+                voice = guild.voice_client
+                # 1. Prefer voice channel text chat (built-in Discord VC chat)
+                if voice and voice.channel and hasattr(voice.channel, "send"):
+                    target_channel = voice.channel
+                # 2. Configured text channel fallback
+                if not target_channel:
+                    channel_id = await self.cog.config.guild(guild).channel_id()
+                    target_channel = guild.get_channel(channel_id)
+                # 3. Default text channel fallback
                 if not target_channel and guild.text_channels:
                     target_channel = guild.text_channels[0]
                 if target_channel:
                     await target_channel.send(message, delete_after=12)
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[JuiceVault Voice] Failed sending notification: {exc}")
 
         def cleanup(self):
             self._active = False
@@ -339,6 +368,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 def attach_voice_command_sink(cog, guild):
     """Attach VoiceCommandAudioSink to the active voice client if supported and enabled."""
     if not VOICE_RECV_AVAILABLE or not SPEECH_RECOGNITION_AVAILABLE:
+        print(f"[JuiceVault Voice] Cannot attach voice sink in {getattr(guild, 'name', 'unknown')}: missing discord-ext-voice-recv or SpeechRecognition")
         return
     if not guild or not guild.voice_client:
         return
@@ -346,6 +376,7 @@ def attach_voice_command_sink(cog, guild):
 
     # Check if voice client supports listening
     if not hasattr(voice, "listen") or not hasattr(voice, "is_listening"):
+        print(f"[JuiceVault Voice] VoiceClient in {guild.name} does not support listen() (current type: {type(voice).__name__})")
         return
 
     # Check if already listening
@@ -356,6 +387,6 @@ def attach_voice_command_sink(cog, guild):
     _active_sinks[guild.id] = sink
     try:
         voice.listen(sink)
-        log.info(f"[JuiceVault Voice Recognition] Listening for voice commands in {guild.name}...")
+        print(f"[JuiceVault Voice Recognition] 🟢 ACTIVE: Listening for voice commands in '{guild.name}' (Wake Word: 'Garmin')...")
     except Exception as exc:
-        log.warning(f"[JuiceVault Voice Recognition] Failed attaching sink: {exc}")
+        print(f"[JuiceVault Voice Recognition] Failed attaching sink in '{guild.name}': {exc}")

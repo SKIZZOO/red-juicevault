@@ -1422,7 +1422,7 @@ class JuiceVault(commands.Cog):
     async def voice_commands_cmd(self, ctx, mode: str = None):
         """View status or toggle voice commands recognition in voice channels.
         Modes: 'on', 'off', 'status'"""
-        from .voice_recognition import is_voice_recognition_supported, is_voice_commands_enabled_for_guild, set_voice_commands_enabled_for_guild, attach_voice_command_sink
+        from .voice_recognition import is_voice_recognition_supported, is_voice_commands_enabled_for_guild, set_voice_commands_enabled_for_guild, attach_voice_command_sink, get_voice_client_cls
 
         supported, reason = is_voice_recognition_supported()
 
@@ -1436,6 +1436,16 @@ class JuiceVault(commands.Cog):
                 return
             await set_voice_commands_enabled_for_guild(self, ctx.guild.id, True)
             if ctx.guild and ctx.guild.voice_client:
+                voice = ctx.guild.voice_client
+                if not hasattr(voice, "listen"):
+                    try:
+                        ch = voice.channel
+                        await voice.disconnect(force=True)
+                        await asyncio.sleep(0.5)
+                        voice_cls = get_voice_client_cls()
+                        await ch.connect(reconnect=True, timeout=15, cls=voice_cls)
+                    except Exception as exc:
+                        print(f"[JuiceVault Voice] Reconnect on enable failed: {exc}")
                 attach_voice_command_sink(self, ctx.guild)
             await ctx.send("🎤 **Voice Command Recognition: ENABLED in Discord voice channel!**\n🎙️ **Wake Word: \"Garmin\"**\nSay **'Garmin, skip'**, **'Garmin, următoarea'**, **'Garmin, pause'**, **'Garmin, play'**, or **'Garmin, shuffle'**!")
         elif mode is not None and mode.lower() in ("off", "disable", "false"):
