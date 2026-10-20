@@ -1044,15 +1044,18 @@ class JuiceVault(commands.Cog):
                 playback_error = {"value": None}
                 local_path = None
                 log_file = None
-                try:
+                async def _start_playback_worker():
+                    nonlocal local_path, log_file, start_offset
                     local_path = await self._download_track(track)
                     self.current_files[gid] = local_path
                     log_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".juicevault-ffmpeg.log", delete=False)
+
                     def after(error):
                         if error:
                             playback_error["value"] = error
                             print(f"[JuiceVault] playback worker error: {type(error).__name__}: {error}")
                         self.bot.loop.call_soon_threadsafe(finished.set)
+
                     before = "-nostdin -probesize 32k -analyzeduration 0"
                     clip_start = track.get("_clip_start")
                     if clip_start is not None and not track.get("_is_pre_sliced", False):
@@ -1077,12 +1080,40 @@ class JuiceVault(commands.Cog):
                     self.play_positions[gid] = start_offset
                     if self.pause_after_seek.pop(gid, False) and voice.is_playing():
                         voice.pause()
+
+                try:
+                    # Strict 30-second hard timeout for track download, preparation, and playback startup
+                    # "Daca piesa nu continua dupa 30 sec, dai skip si canta alta."
+                    await asyncio.wait_for(_start_playback_worker(), timeout=30.0)
                     self._trigger_next_prefetch(gid)
                     if hasattr(self, "web_remote") and self.web_remote:
                         asyncio.create_task(self.web_remote.broadcast_state(gid))
                     ui = self.bot.get_cog("JuiceVaultUI")
                     if ui:
                         asyncio.create_task(ui.update_panel(gid))
+                except asyncio.TimeoutError:
+                    t_title = self._track_text(track)
+                    print(f"[JuiceVault] ⚠️ Track '{t_title}' did not start/continue within 30s. Skipping to next track!")
+                    self.last_error[gid] = f"Timeout (>30s): {t_title}"
+                    if log_file:
+                        try:
+                            log_file.close()
+                        except OSError:
+                            pass
+                    self.current_files.pop(gid, None)
+                    self._remove_file(local_path)
+                    skip_msg = f"⚠️ Piesa **{t_title}** nu a pornit în 30s ➔ Skip automat la următoarea piesă! ⏭️"
+                    ui = self.bot.get_cog("JuiceVaultUI")
+                    if ui:
+                        asyncio.create_task(ui.update_panel(gid))
+                    try:
+                        cfg_ch = await self.config.guild(guild).channel_id()
+                        ch = guild.get_channel(cfg_ch) if cfg_ch else None
+                        if ch and hasattr(ch, "send"):
+                            asyncio.create_task(ch.send(skip_msg))
+                    except Exception:
+                        pass
+                    continue
                 except Exception as exc:
                     self.last_error[gid] = f"Playback: {type(exc).__name__}: {exc}"
                     if log_file:
@@ -1092,16 +1123,18 @@ class JuiceVault(commands.Cog):
                             pass
                     self.current_files.pop(gid, None)
                     self._remove_file(local_path)
+                    is_resumed_track = bool(track.get("_resume_position") is not None or track.get("_is_seek_copy"))
+                    if is_resumed_track or source_type == "external":
+                        t_title = self._track_text(track)
+                        print(f"[JuiceVault] Failed starting '{t_title}': {exc}. Skipping to next track!")
+                        continue
                     retries = track.get("_retry_count", 0) + 1
                     track["_retry_count"] = retries
                     if retries > 2:
                         print(f"[JuiceVault] dropping failed track {self._track_text(track)} after {retries} attempts: {type(exc).__name__}: {exc}")
                     else:
-                        if source_type == "external":
-                            print(f"[JuiceVault] dropping unavailable external track {self._track_text(track)}: {type(exc).__name__}: {exc}")
-                        else:
-                            target = self.manual_queues if source_type == "manual" else self.queues
-                            target.setdefault(gid, []).insert(0, track)
+                        target = self.manual_queues if source_type == "manual" else self.queues
+                        target.setdefault(gid, []).insert(0, track)
                     await asyncio.sleep(self.FAILURE_BACKOFF_SECONDS)
                     continue
                 stop_task = asyncio.create_task(stop.wait())
