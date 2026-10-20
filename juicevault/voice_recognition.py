@@ -46,13 +46,44 @@ logging.getLogger("discord.ext.voice_recv.reader").setLevel(logging.CRITICAL)
 logging.getLogger("discord.ext.voice_recv").setLevel(logging.CRITICAL)
 
 
+def _resolve_command_phonetics(text: str) -> str:
+    """Normalize frequent phonetic misrecognitions for Garmin wake words and control commands."""
+    if not text:
+        return ""
+    t = text
+
+    # Wake word misrecognitions from Romanian "bă Garmin" / "Garmin":
+    # "beggar man", "bag armin", "bad garmin", "by garmin", "big armin", "back garmin", "barman"
+    t = re.sub(r'\b(?:beggar\s+man|bag\s+armin|bad\s+garmin|by\s+garmin|big\s+armin|back\s+garmin|barman)\b', 'ba garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:garment|garments|garmon|garmend|garnet)\b', 'garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:ba|bai)\s+(?:armin|armen|arman)\b', 'ba garmin', t, flags=re.I)
+
+    # Romanian "dă skip" / "dă-i skip" phonetic English STT mappings:
+    # "the escape" -> "da skip"
+    # "the scape" -> "da skip"
+    # "they skip" -> "dai skip"
+    # "the skip" -> "da skip"
+    # "day skip" -> "dai skip"
+    # "they scape" -> "dai skip"
+    # "they skep" -> "dai skip"
+    # "the skep" -> "da skip"
+    # "the scale" -> "da skip"
+    # "the skate" -> "da skip"
+    t = re.sub(r'\b(?:the\s+escape|the\s+scape|they\s+scape|they\s+skep|the\s+skep|the\s+skate|they\s+skate)\b', 'da skip', t, flags=re.I)
+    t = re.sub(r'\b(?:they\s+skip|day\s+skip)\b', 'dai skip', t, flags=re.I)
+    t = re.sub(r'\bthe\s+skip\b', 'da skip', t, flags=re.I)
+
+    return t
+
+
 def _normalize_speech(text: str) -> str:
     """Normalize text by stripping diacritics and extra punctuation for robust command matching."""
     if not text:
         return ""
     decomposed = unicodedata.normalize("NFD", text)
     stripped = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
-    return stripped.lower().strip()
+    cleaned = stripped.lower().strip()
+    return _resolve_command_phonetics(cleaned)
 
 
 def _levenshtein(s1: str, s2: str) -> int:
@@ -251,7 +282,7 @@ _MULTI_WORD_WAKE_REGEX = re.compile(
 )
 
 _SINGLE_WORD_WAKE_REGEX = re.compile(
-    r'\b(?:(?:hey|ok|okay|hei|ba|bai|alo|yo|bre|ma|fa|auzi|zi|spune|hi|hello|e|a|the|de)\s+){0,3}(?:garmin|garmen|garmon|garmyn|garminn|garmy|garminu|garminul|garmini|carmin|carmen|carmina|carman|carme|carmyn|darmin|damin|darmon|barmin|karmin|karmen|jarmin|parmin|garden|gardon|gardi|gardin|gaming|germain|german|germane|elgar|edgar|eggar|egger|egr|eger|calmin|starmin|sharmin)\b',
+    r'\b(?:(?:hey|ok|okay|hei|ba|bai|alo|yo|bre|ma|fa|auzi|zi|spune|hi|hello|e|a|the|de)\s+){0,3}(?:garmin|garmen|garmon|garmyn|garminn|garmy|garminu|garminul|garmini|carmin|carmen|carmina|carman|carme|carmyn|darmin|damin|darmon|barmin|karmin|karmen|jarmin|parmin|garden|gardon|gardi|gardin|gaming|germain|german|germane|elgar|edgar|eggar|egger|egr|eger|calmin|starmin|sharmin|barman|beggar|garment|garments|armin)\b',
     re.IGNORECASE
 )
 
@@ -1313,8 +1344,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                         last = self._last_speech.get(uid, 0.0)
                         is_pending = bool(pending and pending.get("user_id") == uid and time.time() < pending.get("expires", 0.0))
-                        # End-of-utterance: 0.18s silence for pending answers ("da"/"nu"), 0.28s for standard commands
-                        silence_needed = 0.18 if is_pending else 0.28
+                        # End-of-utterance: 0.18s silence for pending answers ("da"/"nu"), 0.42s for standard commands
+                        silence_needed = 0.18 if is_pending else 0.42
                         if now - last >= silence_needed:
                             buf = self._buffers.pop(uid, bytearray())
                             self._last_speech.pop(uid, None)
@@ -1565,9 +1596,9 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 2: SKIP / NEXT
-            # Handles: "skip", "skip this song", "next", "urmatoarea", "sari", "schimba", "da-i skip", "da skip la piesa", etc.
-            skip_pattern = r'\b(?:skip|next|urmatoarea|sari|treci\s+peste|treci\s+la\s+urmatoarea|schimba|schimb-o|alta\s+piesa|alta\s+melodie|da-i\s+skip|dai\s+skip|da\s+skip|skip\s+la\s+piesa|skip\s+piesa|skip\s+this|skip\s+song|next\s+song|next\s+track)\b'
-            if re.search(skip_pattern, clean_cmd, re.I) or any(w in clean_cmd for w in ("da-i skip", "dai skip", "da skip", "skip la piesa", "skip piesa", "urmatoarea piesa", "schimba piesa")):
+            # Handles: "skip", "skip this song", "next", "urmatoarea", "sari", "schimba", "da-i skip", "da skip la piesa", "the escape", "they skip", etc.
+            skip_pattern = r'\b(?:skip|next|urmatoarea|sari|treci\s+peste|treci\s+la\s+urmatoarea|schimba|schimb-o|alta\s+piesa|alta\s+melodie|da-i\s+skip|dai\s+skip|da\s+skip|skip\s+la\s+piesa|skip\s+piesa|skip\s+this|skip\s+song|next\s+song|next\s+track|the\s+escape|the\s+scape|they\s+skip|the\s+skip|day\s+skip|they\s+scape|they\s+skep|the\s+skep|escape|scape)\b'
+            if re.search(skip_pattern, clean_cmd, re.I) or any(w in clean_cmd for w in ("da-i skip", "dai skip", "da skip", "skip la piesa", "skip piesa", "urmatoarea piesa", "schimba piesa", "the escape", "escape", "they skip", "the scape")):
                 if any(w in clean_cmd for w in ("10", "ten", "zece")):
                     await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 10))
                     self._unlock_session()
@@ -1579,15 +1610,34 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 3: SHUFFLE / RANDOM
-            # Handles: "shuffle", "amesteca", "random", "play random song", "la intamplare", etc.
-            if re.search(r'\b(?:shuffle|amesteca|random|mix|la intamplare|random song|piesa la intamplare)\b', clean_cmd, re.I):
+            # Handles: "shuffle", "amesteca", "amesteca piesele", "random", "play random song", "la intamplare", etc.
+            if re.search(r'\b(?:shuffle|amesteca|amesteca\s+piesele|amesteca\s+coada|random|mix|la intamplare|random song|piesa la intamplare)\b', clean_cmd, re.I):
                 q = self.cog.queues.get(self.guild_id, [])
-                if q:
+                if not q:
+                    try:
+                        category = await self.cog.config.guild(guild).category()
+                        tracks = await self.cog.fetch_tracks(category)
+                        if tracks:
+                            self.cog.queues[self.guild_id] = list(tracks)
+                            q = self.cog.queues[self.guild_id]
+                    except Exception:
+                        pass
+                if q or self.cog.manual_queues.get(self.guild_id):
                     import random
-                    random.shuffle(q)
+                    if q:
+                        random.shuffle(q)
+                    mq = self.cog.manual_queues.get(self.guild_id)
+                    if mq:
+                        random.shuffle(mq)
                     self.cog._cleanup_prefetch(self.guild_id)
                     self.cog._trigger_next_prefetch(self.guild_id)
                     await play_chime_and_proceed(guild)
+                    await self.cog._request_skip(self.guild_id, 1)
+                    ui = self.bot.get_cog("JuiceVaultUI")
+                    if ui:
+                        asyncio.create_task(ui.update_panel(self.guild_id))
+                    if hasattr(self.cog, "web_remote") and self.cog.web_remote:
+                        asyncio.create_task(self.cog.web_remote.broadcast_state(self.guild_id))
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Shuffled queue! 🔀")
                 else:
@@ -1952,6 +2002,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 "yeat", "yet", "ieat", "yeet", "drake", "carti", "karti", "travis", "breathe",
                 "quavo", "cuavo", "kwavo", "uzi", "gunna", "future", "metro", "trippie",
                 "chief", "savage", "ken", "carson", "don", "toliver",
+                "escape", "scape", "dai", "amesteca",
                 "muzica", "melodia", "melodie", "piesa", "track", "song", "music"
             }
 
@@ -2014,42 +2065,26 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return None, "ro-RO"
 
         async def _notify(self, guild, message):
-            """Send feedback message in the configured text channel and active voice channel."""
+            """Send feedback message strictly to the active voice channel chat where the bot is connected."""
             if not guild:
                 return
             try:
                 target_channels = []
-                # 1. Configured music text channel (where panel / commands live)
-                if hasattr(self.cog, "config"):
-                    try:
-                        channel_id = await self.cog.config.guild(guild).channel_id()
-                        if channel_id:
-                            ch = guild.get_channel(channel_id)
-                            if ch and hasattr(ch, "send"):
-                                target_channels.append(ch)
-                    except Exception:
-                        pass
-
-                # Check JuiceVaultUI panel text channel
-                ui = self.bot.get_cog("JuiceVaultUI")
-                if ui and hasattr(ui, "config"):
-                    try:
-                        pch_id = await ui.config.guild(guild).panel_channel_id()
-                        if pch_id:
-                            pch = guild.get_channel(pch_id)
-                            if pch and hasattr(pch, "send") and pch not in target_channels:
-                                target_channels.append(pch)
-                    except Exception:
-                        pass
-
-                # 2. Voice channel chat if different
                 voice = getattr(guild, "voice_client", None)
-                if voice and voice.channel and hasattr(voice.channel, "send") and voice.channel not in target_channels:
+                # Send ONLY to the voice channel's chat where the bot and user are talking
+                if voice and voice.channel and hasattr(voice.channel, "send"):
                     target_channels.append(voice.channel)
-
-                # 3. Default text channel fallback
-                if not target_channels and guild.text_channels:
-                    target_channels.append(guild.text_channels[0])
+                else:
+                    # Fallback ONLY if the voice channel doesn't support chat
+                    if hasattr(self.cog, "config"):
+                        try:
+                            channel_id = await self.cog.config.guild(guild).channel_id()
+                            if channel_id:
+                                ch = guild.get_channel(channel_id)
+                                if ch and hasattr(ch, "send"):
+                                    target_channels.append(ch)
+                        except Exception:
+                            pass
 
                 for ch in target_channels:
                     try:
