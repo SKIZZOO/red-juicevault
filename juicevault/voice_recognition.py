@@ -159,8 +159,9 @@ def _resolve_artist_phonetics(text: str) -> str:
     # 15. 21 Savage: '21 savagi', 'twenty one savage', 'tueni uan sevegi', '21 sevegi', '21 sevidgi'
     resolved = re.sub(r'\b(?:21\s+savagi|twenty\s+one\s+savage|tueni\s+uan\s+sevegi|21\s+sevegi|21\s+sevidgi)\b', '21 savage', resolved, flags=re.I)
 
-    # 16. Juice WRLD: 'gius wrld', 'gius world', 'jus wrld', 'juice world', 'gius uorld', 'gius vorld'
-    resolved = re.sub(r'\b(?:gius\s+wrld|gius\s+world|juice\s+world|jus\s+wrld|gius\s+uorld|gius\s+vorld)\b', 'juice wrld', resolved, flags=re.I)
+    # 16. Juice WRLD: 'gius wrld', 'gius world', 'jus wrld', 'juice world', 'gius uorld', 'gius vorld', 'djius wrld', 'djuice wrld', 'giusuorld', 'giuswrld'
+    resolved = re.sub(r'\b(?:gius\s+uorld|gius\s+wrld|gius\s+world|jus\s+wrld|jus\s+world|djius\s+wrld|djius\s+world|djuice\s+wrld|juis\s+uorld|juis\s+wrld|juis\s+world|giusuorld|giuswrld|juice\s+world|gius\s+vorld)\b', 'juice wrld', resolved, flags=re.I)
+    resolved = re.sub(r'\b(?:gius|djius|juis)\b', 'juice', resolved, flags=re.I)
 
     # 17. XXXTentacion: 'x tentacion', 'tentacion', 'tentasion', 'triplu x tentacion', 'xxx tentacion'
     resolved = re.sub(r'\b(?:triplu\s+x\s+tentacion|xxx\s+tentacion|ex\s+tentacion|x\s+tentacion|tentasion)\b', 'xxxtentacion', resolved, flags=re.I)
@@ -228,12 +229,13 @@ def _resolve_artist_phonetics(text: str) -> str:
 def _clean_music_query(query: str) -> str:
     """Cleanly extract song or artist search query by stripping YouTube indicators,
     command verbs ('bagă', 'pune', 'play'), filler words ('muzică', 'piesa', 'melodia', 'ceva de la'),
+    artist prepositions ('de la Juice WRLD', 'by Juice WRLD'),
     and resolving phonetic artist aliases (e.g. 'cu avo' -> 'quavo', 'yet' -> 'yeat')."""
     if not query:
         return ""
     q = _normalize_speech(query)
 
-    # 1. Resolve artist phonetics FIRST (e.g. 'cu avo' -> 'quavo') BEFORE stripping prepositions!
+    # 1. Resolve artist phonetics FIRST (e.g. 'cu avo' -> 'quavo', 'gius uorld' -> 'juice wrld') BEFORE stripping prepositions!
     q = _resolve_artist_phonetics(q)
 
     # 2. Remove wake words if present at start
@@ -271,6 +273,23 @@ def _clean_music_query(query: str) -> str:
     # 6. Re-resolve artist phonetics once more in case stripped prefixes exposed them
     q = _resolve_artist_phonetics(q)
 
+    # 7. Strip trailing & leading Juice WRLD artist specifiers (e.g. "robbery de la juice wrld" -> "robbery")
+    # while preserving "juice wrld" if that was the entire query
+    is_only_juice = bool(re.match(r'^(?:juice\s+wrld|juice\s+world|juice|gius\s+wrld|gius\s+uorld|jus\s+wrld|juicewrld)$', q.strip(), flags=re.I))
+    if not is_only_juice:
+        juice_trailing = r'\s+(?:de\s+la|by|de|cu|canta(?:ta)?\s+de)\s+(?:juice\s+wrld|juice\s+world|juice|gius\s+wrld|gius\s+uorld|jus\s+wrld|juicewrld)$'
+        sub_q = re.sub(juice_trailing, '', q, flags=re.I).strip()
+        if sub_q:
+            q = sub_q
+        juice_leading = r'^(?:juice\s+wrld|juice\s+world|juice|gius\s+wrld|gius\s+uorld|jus\s+wrld|juicewrld)\s*[-:]?\s+'
+        sub_q = re.sub(juice_leading, '', q, flags=re.I).strip()
+        if sub_q:
+            q = sub_q
+
+    # 8. Convert Romanian 'de la' / 'cantata de' before any other artist into clean spacing
+    # e.g. "magnolia de la carti" -> "magnolia carti", "fein de la travis scott" -> "fein travis scott"
+    q = re.sub(r'\s+(?:de\s+la|cantata\s+de)\s+', ' ', q, flags=re.I).strip()
+
     return q.strip()
 
 
@@ -292,17 +311,19 @@ _learned_song_queries_cache = {}  # guild_id -> dict of {query: track_dict}
 _user_preferred_languages = {}    # user_id -> "ro" | "en"
 
 AFFIRMATIVE_WORDS = {
-    "da", "dap", "mda", "aha", "ihi", "dai", "da-i",
+    "da", "dap", "mda", "aha", "ihi", "dai", "da-i", "dă",
     "yes", "yeah", "yep", "yup", "sure", "ok", "okay",
     "baga", "pune", "cauta", "canta", "play", "hai",
     "sigur", "categoric", "normal", "clar", "bine", "please",
     "search", "ahead", "bag-o", "bago", "bagao", "pune-o",
     "puneo", "pun-o", "cauta-o", "cautao", "fa-o", "fao",
-    "ia-o", "ia", "merge", "exact", "corect"
+    "ia-o", "ia", "merge", "exact", "corect",
+    # Phonetic STT misrecognitions of short "da" / "yes" from Romanian speakers
+    "the", "that", "duh", "dar", "de", "dada", "done", "does", "dust", "go"
 }
 AFFIRMATIVE_PHRASES = (
-    "da", "yes", "yep", "yeah", "yup", "sure", "sigur", "baga-o", "baga o", "baga", "pune-o", "pune o", "pune",
-    "cauta", "cauta-o", "cauta o", "hai", "da te rog", "te rog", "da frate", "da man", "of course", "play it",
+    "baga-o", "baga o", "pune-o", "pune o", "cauta-o", "cauta o",
+    "da te rog", "te rog", "da frate", "da man", "of course", "play it",
     "go ahead", "da da", "fa-o", "fa o", "da baga", "da pune", "da cauta", "da bag-o", "da pune-o", "da caut-o",
     "da ma", "da ba", "da bro", "da normal", "da-i drumul", "dai drumul", "baga pe youtube", "pune pe youtube",
     "cauta pe youtube", "da pe youtube", "da o vreau", "da vreau", "yes please", "yes play"
@@ -310,13 +331,75 @@ AFFIRMATIVE_PHRASES = (
 NEGATIVE_WORDS = {
     "nu", "nop", "nope", "nah", "no", "cancel", "anuleaza", "stop",
     "lasa", "niciun", "niciuna", "dont", "not", "nevermind", "pas",
-    "las-o", "laso", "opreste"
+    "las-o", "laso", "opreste", "nimic", "nici",
+    # Phonetic STT misrecognitions of short "nu" / "no"
+    "new", "know", "now", "nuu"
 }
 NEGATIVE_PHRASES = (
-    "nu", "no", "nope", "nah", "cancel", "anuleaza", "nu mai", "nu cauta", "las-o", "las o",
-    "lasa", "nu vreau", "niciun caz", "nici gand", "don't", "stop", "nu da", "nu baga", "las-o balta",
-    "nu te rog", "nu frate", "nu ma", "nu ba", "nu pune"
+    "nu mai", "nu cauta", "las-o", "las o", "nu vreau", "niciun caz", "nici gand",
+    "don't", "nu da", "nu baga", "las-o balta", "nu te rog", "nu frate", "nu ma", "nu ba",
+    "nu pune", "nu mersi", "mersi nu", "lasa asa"
 )
+
+
+def _find_best_archive_track(tracks, query: str, cog):
+    """Intelligently match query against JuiceVault internal track archive.
+    Supports exact titles, artist-stripped queries ('robbery de la juice wrld' -> 'robbery'),
+    and token-based word matching with intelligent candidate scoring."""
+    if not tracks or not query:
+        return None
+    clean_q = _normalize_speech(query).strip()
+    if not clean_q:
+        return None
+
+    # Variants of query to try
+    queries_to_try = [clean_q]
+    q_no_juice = re.sub(r'\b(?:juice\s+wrld|juice\s+world|juice|gius\s+wrld|gius\s+uorld|jus\s+wrld|juicewrld)\b', '', clean_q, flags=re.I).strip()
+    q_no_juice = re.sub(r'\s+', ' ', q_no_juice).strip()
+    if q_no_juice and q_no_juice != clean_q and len(q_no_juice) >= 2:
+        queries_to_try.append(q_no_juice)
+
+    # 1. Substring matching
+    matched = []
+    for q_try in queries_to_try:
+        found = [t for t in tracks if q_try in _normalize_speech(cog._search_text(t))]
+        if found:
+            matched = found
+            break
+
+    # 2. Token / word-level matching
+    if not matched:
+        for q_try in queries_to_try:
+            tokens = [tok for tok in q_try.split() if tok not in {"de", "la", "by", "cu", "si", "and", "the", "a", "o", "un"} and len(tok) >= 2]
+            if tokens:
+                found = [t for t in tracks if all(tok in _normalize_speech(cog._search_text(t)) for tok in tokens)]
+                if found:
+                    matched = found
+                    break
+
+    if not matched:
+        return None
+
+    # 3. Score candidates to pick the best match
+    def score_track(t):
+        title = _normalize_speech(str(t.get("title") or t.get("name") or "")).strip()
+        s = 0
+        for target in queries_to_try:
+            if title == target:
+                s = max(s, 100)
+            elif title.startswith(target):
+                s = max(s, 60)
+            elif target in title:
+                s = max(s, 40)
+            elif all(tok in title for tok in target.split() if len(tok) >= 2):
+                s = max(s, 25)
+        # Penalize acoustic/remix/slowed if user did not request it
+        if any(w in title for w in ("remix", "acoustic", "slowed", "reverb", "snippet")) and not any(w in clean_q for w in ("remix", "acoustic", "slowed", "reverb", "snippet")):
+            s -= 20
+        return s
+
+    matched.sort(key=score_track, reverse=True)
+    return matched[0]
 
 
 def _match_wake_word(text: str, custom_words: set = None) -> tuple:
@@ -1350,7 +1433,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             buf = self._buffers.pop(uid, bytearray())
                             self._last_speech.pop(uid, None)
                             # Capture short single-syllable responses like "da", "nu", "yes", "no"
-                            min_bytes = 10_000 if is_pending else 14_000
+                            min_bytes = 4_000 if is_pending else 14_000
                             if len(buf) >= min_bytes:
                                 if not is_pending:
                                     self._cooldowns[uid] = now
@@ -1483,8 +1566,9 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 _user_preferred_languages[user_id] = pending_lang
 
                 tokens = set(re.findall(r'[a-z0-9]+', clean))
+                padded = f" {clean} "
                 if pending.get("awaiting_title"):
-                    is_neg = bool(tokens & NEGATIVE_WORDS) or any(p in clean for p in NEGATIVE_PHRASES)
+                    is_neg = bool(tokens & NEGATIVE_WORDS) or any(f" {p} " in padded for p in NEGATIVE_PHRASES)
                     if is_neg:
                         self.cog._pending_yt_voice.pop(self.guild_id, None)
                         self._wake_windows.pop(user_id, None)
@@ -1506,7 +1590,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return
 
                 # Waiting strictly for DA or NU ("sa astepte doar da sau nu, si sa nu caute alt ceva")
-                is_negative = bool(tokens & NEGATIVE_WORDS) or any(p in clean for p in NEGATIVE_PHRASES)
+                is_negative = bool(tokens & NEGATIVE_WORDS) or any(f" {p} " in padded for p in NEGATIVE_PHRASES)
                 if is_negative:
                     self.cog._pending_yt_voice.pop(self.guild_id, None)
                     self._wake_windows.pop(user_id, None)
@@ -1517,7 +1601,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     await self._notify(guild, cancel_msg)
                     return
 
-                is_affirmative = bool(tokens & AFFIRMATIVE_WORDS) or any(p in clean for p in AFFIRMATIVE_PHRASES) or "youtube" in clean or "yt" in clean
+                is_affirmative = bool(tokens & AFFIRMATIVE_WORDS) or any(f" {p} " in padded for p in AFFIRMATIVE_PHRASES) or "youtube" in clean or "yt" in clean
                 if is_affirmative:
                     target_q = pending["query"]
                     self.cog._pending_yt_voice.pop(self.guild_id, None)
@@ -1724,6 +1808,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     prompt_speech = "Ce piesă vrei să bag?" if is_ro else "What track would you like me to play?"
                     await speak_in_voice(guild, prompt_speech, lang=user_lang)
                     await play_beep_sound(guild, "listening")
+                    self._buffers.pop(user_id, None)
+                    self._last_speech.pop(user_id, None)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: {prompt_speech} ⏳")
                     return
 
@@ -1879,6 +1965,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     prompt_speech = "Ce piesă vrei să caut pe YouTube?" if is_ro else "What track would you like me to search on YouTube?"
                     await speak_in_voice(guild, prompt_speech, lang=user_lang)
                     await play_beep_sound(guild, "listening")
+                    self._buffers.pop(user_id, None)
+                    self._last_speech.pop(user_id, None)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: {prompt_speech} ⏳")
                     return
 
@@ -1919,8 +2007,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                         # 2. Search JuiceVault internal archive
                         tracks = await self.cog.fetch_tracks()
-                        candidates = [item for item in tracks if clean_q in _normalize_speech(self.cog._search_text(item))]
-                        track = candidates[0] if candidates else None
+                        track = _find_best_archive_track(tracks, clean_q, self.cog)
                         if track:
                             await play_chime_and_proceed(guild)
                             await self._play_track_now(guild, track)
@@ -1954,6 +2041,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                             await speak_in_voice(guild, ask_speech, lang=user_lang)
                             await play_beep_sound(guild, "listening")
+                            self._buffers.pop(user_id, None)
+                            self._last_speech.pop(user_id, None)
                             await self._notify(guild, ask_msg)
                             return
                 except Exception as e:
@@ -1985,7 +2074,14 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 print(f"[JuiceVault Voice] Audio conversion error: {e}")
                 return None, "ro-RO"
 
-            if not mono_16k or len(mono_16k) < 2000:
+            pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
+            is_pending = bool(pending and time.time() < pending.get("expires", 0.0))
+            awaiting_title = bool(pending and pending.get("awaiting_title"))
+            pending_lang = pending.get("lang") if is_pending else None
+
+            # Lower audio length check for short single-syllable answers ("da", "nu", "yes", "no")
+            min_mono = 600 if is_pending else 1800
+            if not mono_16k or len(mono_16k) < min_mono:
                 return None, "ro-RO"
 
             audio_data = sr.AudioData(mono_16k, 16000, 2)
@@ -2041,6 +2137,16 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         tokens = set(re.findall(r'[a-z0-9]+', clean))
                         score += len(tokens & control_words) * 30
                         score += min(len(clean), 25)
+
+                        if is_pending and not awaiting_title:
+                            padded = f" {clean} "
+                            is_aff = bool(tokens & AFFIRMATIVE_WORDS) or any(f" {p} " in padded for p in AFFIRMATIVE_PHRASES)
+                            is_neg = bool(tokens & NEGATIVE_WORDS) or any(f" {p} " in padded for p in NEGATIVE_PHRASES)
+                            if is_aff or is_neg:
+                                score += 500
+                            if pending_lang and lang.startswith(pending_lang):
+                                score += 150
+
                         if preferred_lang and lang.startswith(preferred_lang):
                             score += 15
                         candidates.append((score, res, lang))
