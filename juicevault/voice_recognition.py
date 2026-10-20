@@ -8,6 +8,7 @@ receiving packages are not installed on the host.
 
 import array
 import asyncio
+import concurrent.futures
 import logging
 import math
 import os
@@ -21,7 +22,19 @@ import wave
 
 import discord
 
+try:
+    import numpy as np
+    HAVE_NUMPY = True
+except ImportError:
+    HAVE_NUMPY = False
+
 log = logging.getLogger("red.juicevault.voice_recognition")
+
+# High-concurrency thread pool for STT, audio downsampling, and parallel API queries to utilize all available CPU cores
+_VOICE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=min(32, max(8, (os.cpu_count() or 4) * 4)),
+    thread_name_prefix="JuiceVault-Voice"
+)
 
 # Silence noisy RTCP telemetry and decoder key crypto errors from discord-ext-voice-recv
 logging.getLogger("discord.ext.voice_recv.reader").setLevel(logging.CRITICAL)
@@ -401,28 +414,83 @@ _LISTENING_BEEP_PATH = None
 _UNDERSTOOD_BEEP_PATH = None
 _ERROR_BEEP_PATH = None
 _CHIME_FILE_PATH = None
+_FFMPEG_EXE_CACHE = None
+
+# In-memory pre-rendered 48kHz 16-bit stereo PCM cache for instant zero-overhead audio playback
+_BEEP_PCM_CACHE = {}
+
+
+class MemoryPCMAudioSource(discord.AudioSource):
+    """Zero-overhead in-memory PCM audio source that streams pre-rendered 48kHz 16-bit stereo
+    PCM audio frames from RAM without spawning FFmpeg subprocesses or touching the disk."""
+
+    def __init__(self, pcm_bytes: bytes):
+        super().__init__()
+        self._data = pcm_bytes
+        self._offset = 0
+
+    def is_opus(self) -> bool:
+        return False
+
+    def read(self) -> bytes:
+        if self._offset >= len(self._data):
+            return b''
+        chunk = self._data[self._offset:self._offset + 3840]
+        self._offset += 3840
+        if len(chunk) < 3840:
+            chunk = chunk + b'\x00' * (3840 - len(chunk))
+        return chunk
+
+    def cleanup(self):
+        self._offset = len(self._data)
+
+
+def _synthesize_beep_pcm(notes: list) -> bytes:
+    """Synthesize raw 48kHz 16-bit stereo PCM bytes directly in RAM from a list of (freq, duration, volume)."""
+    sample_rate = 48000
+    frames = bytearray()
+    for freq, duration, vol in notes:
+        total_samples = int(sample_rate * duration)
+        for i in range(total_samples):
+            t = i / sample_rate
+            env = (1.0 - math.cos(math.pi * min(1.0, i / (sample_rate * 0.010)))) * 0.5
+            decay = (1.0 - (i / total_samples)) ** 1.4
+            val = int(env * decay * vol * math.sin(2 * math.pi * freq * t))
+            val = max(-32767, min(32767, val))
+            frames.extend(struct.pack('<hh', val, val))
+    return bytes(frames)
+
+
+def _get_beep_pcm(sound_type: str) -> bytes:
+    """Retrieve pre-rendered raw 48kHz PCM audio for acoustic feedback chimes directly from RAM."""
+    if sound_type in _BEEP_PCM_CACHE:
+        return _BEEP_PCM_CACHE[sound_type]
+
+    if sound_type == "listening":
+        # Ascending bright chime (D5 -> A5)
+        notes = [(587.33, 0.08, 17000), (880.00, 0.14, 20000)]
+    elif sound_type == "error":
+        # Descending gentle low tone (A4 -> E4)
+        notes = [(440.00, 0.08, 17000), (329.63, 0.15, 19000)]
+    else:  # "understood"
+        # Bright snappy affirmative double chime (G5 -> C6)
+        notes = [(783.99, 0.06, 17000), (1046.50, 0.14, 21000)]
+
+    pcm = _synthesize_beep_pcm(notes)
+    _BEEP_PCM_CACHE[sound_type] = pcm
+    return pcm
 
 
 def _generate_beep_wav(path: str, notes: list) -> str:
     """Helper to synthesize short stereo 48kHz WAV beeps from a list of (freq, duration, volume)."""
     try:
         sample_rate = 48000
-        frames = bytearray()
-        for freq, duration, vol in notes:
-            total_samples = int(sample_rate * duration)
-            for i in range(total_samples):
-                t = i / sample_rate
-                # Smooth attack (first 10ms) and exponential decay
-                env = (1.0 - math.cos(math.pi * min(1.0, i / (sample_rate * 0.010)))) * 0.5
-                decay = (1.0 - (i / total_samples)) ** 1.4
-                val = int(env * decay * vol * math.sin(2 * math.pi * freq * t))
-                val = max(-32767, min(32767, val))
-                frames.extend(struct.pack('<hh', val, val))
+        pcm = _synthesize_beep_pcm(notes)
         with wave.open(path, "wb") as wf:
             wf.setnchannels(2)
             wf.setsampwidth(2)
             wf.setframerate(sample_rate)
-            wf.writeframes(frames)
+            wf.writeframes(pcm)
         return path
     except Exception as exc:
         log.warning(f"[JuiceVault Voice] Failed generating beep '{path}': {exc}")
@@ -435,7 +503,6 @@ def _get_listening_beep_wav_path() -> str:
     if _LISTENING_BEEP_PATH and os.path.isfile(_LISTENING_BEEP_PATH):
         return _LISTENING_BEEP_PATH
     path = os.path.join(tempfile.gettempdir(), "juicevault_beep_listening.wav")
-    # D5 (587.33Hz) for 0.08s, A5 (880.00Hz) for 0.14s
     res = _generate_beep_wav(path, [(587.33, 0.08, 17000), (880.00, 0.14, 20000)])
     if res:
         _LISTENING_BEEP_PATH = res
@@ -448,7 +515,6 @@ def _get_understood_beep_wav_path() -> str:
     if _UNDERSTOOD_BEEP_PATH and os.path.isfile(_UNDERSTOOD_BEEP_PATH):
         return _UNDERSTOOD_BEEP_PATH
     path = os.path.join(tempfile.gettempdir(), "juicevault_beep_understood.wav")
-    # G5 (783.99Hz) for 0.06s, C6 (1046.50Hz) for 0.14s
     res = _generate_beep_wav(path, [(783.99, 0.06, 17000), (1046.50, 0.14, 21000)])
     if res:
         _UNDERSTOOD_BEEP_PATH = res
@@ -461,7 +527,6 @@ def _get_error_beep_wav_path() -> str:
     if _ERROR_BEEP_PATH and os.path.isfile(_ERROR_BEEP_PATH):
         return _ERROR_BEEP_PATH
     path = os.path.join(tempfile.gettempdir(), "juicevault_beep_error.wav")
-    # A4 (440.00Hz) for 0.08s, E4 (329.63Hz) for 0.15s
     res = _generate_beep_wav(path, [(440.00, 0.08, 17000), (329.63, 0.15, 19000)])
     if res:
         _ERROR_BEEP_PATH = res
@@ -475,13 +540,19 @@ def _get_siri_chime_wav_path() -> str:
 
 def _get_ffmpeg_exe() -> str:
     """Find FFmpeg executable via imageio_ffmpeg, which is standard in Red-DiscordBot envs, or system PATH."""
+    global _FFMPEG_EXE_CACHE
+    if _FFMPEG_EXE_CACHE:
+        return _FFMPEG_EXE_CACHE
     try:
         import imageio_ffmpeg
-        return imageio_ffmpeg.get_ffmpeg_exe()
+        _FFMPEG_EXE_CACHE = imageio_ffmpeg.get_ffmpeg_exe()
+        return _FFMPEG_EXE_CACHE
     except Exception:
         pass
     import shutil
-    return shutil.which("ffmpeg") or "ffmpeg"
+    res = shutil.which("ffmpeg") or "ffmpeg"
+    _FFMPEG_EXE_CACHE = res
+    return res
 
 
 def _detect_user_language(text: str, default_lang: str = "ro-RO") -> str:
@@ -511,7 +582,30 @@ def _detect_user_language(text: str, default_lang: str = "ro-RO") -> str:
 
 
 def _mix_pcm(music_pcm: bytes, overlay_pcm: bytes, music_vol: float) -> bytes:
-    """Mix 48kHz 16-bit stereo PCM bytes with ducking volume scaling."""
+    """Mix 48kHz 16-bit stereo PCM bytes with ducking volume scaling using SIMD/NumPy when available."""
+    if HAVE_NUMPY:
+        try:
+            target_len = max(len(music_pcm), len(overlay_pcm))
+            if not target_len:
+                return b''
+            if target_len % 4 != 0:
+                target_len += 4 - (target_len % 4)
+
+            if len(music_pcm) < target_len:
+                music_pcm = music_pcm + b'\x00' * (target_len - len(music_pcm))
+            arr_m = np.frombuffer(music_pcm, dtype=np.int16).astype(np.float32) * music_vol
+
+            if overlay_pcm:
+                if len(overlay_pcm) < target_len:
+                    overlay_pcm = overlay_pcm + b'\x00' * (target_len - len(overlay_pcm))
+                arr_o = np.frombuffer(overlay_pcm, dtype=np.int16).astype(np.float32)
+                arr_res = np.clip(arr_m + arr_o, -32768, 32767).astype(np.int16)
+            else:
+                arr_res = arr_m.astype(np.int16)
+            return arr_res.tobytes()
+        except Exception:
+            pass
+
     try:
         import audioop
         m = audioop.mul(music_pcm, 2, max(0.0, min(1.0, music_vol)))
@@ -646,120 +740,137 @@ class DuckingAudioSource(discord.AudioSource):
                 pass
 
 
+# In-memory RAM caches for TTS audio (MP3 and pre-decoded raw 48kHz stereo PCM)
+_TTS_RAM_CACHE = {}  # (clean_tts, lang) -> bytes of MP3
+_TTS_PCM_CACHE = {}  # (clean_tts, lang) -> bytes of raw 48kHz 16-bit stereo PCM
+
+
+def _decode_mp3_to_pcm(mp3_data: bytes) -> bytes:
+    """Use FFmpeg in a background thread to decode MP3 audio bytes into raw 48kHz 16-bit stereo PCM for zero-overhead RAM playback."""
+    if not mp3_data:
+        return b''
+    try:
+        import subprocess
+        exe = _get_ffmpeg_exe()
+        cmd = [exe, "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "-ac", "2", "-loglevel", "quiet", "pipe:1"]
+        proc = subprocess.run(cmd, input=mp3_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4)
+        if proc.returncode == 0 and proc.stdout:
+            return proc.stdout
+    except Exception as exc:
+        log.debug(f"[JuiceVault Voice] PCM decode error: {exc}")
+    return b''
+
+
+async def _fetch_tts_bytes(clean_tts: str, lang: str) -> bytes:
+    """Fetch TTS audio from Google Translate with RAM caching and asynchronous PCM pre-decoding."""
+    cache_key = (clean_tts, lang)
+    if cache_key in _TTS_RAM_CACHE:
+        return _TTS_RAM_CACHE[cache_key]
+
+    import urllib.parse
+    encoded_q = urllib.parse.quote(clean_tts)
+    tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded_q}&tl={lang}&client=tw-ob"
+
+    data = None
+    try:
+        import aiohttp
+        timeout = aiohttp.ClientTimeout(total=3.5)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(tts_url, headers={"User-Agent": "Mozilla/5.0"}) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+    except Exception:
+        pass
+
+    if not data:
+        try:
+            import urllib.request
+            req = urllib.request.Request(tts_url, headers={"User-Agent": "Mozilla/5.0"})
+            def _dl():
+                with urllib.request.urlopen(req, timeout=3.5) as resp:
+                    if resp.status == 200:
+                        return resp.read()
+                return None
+            data = await asyncio.to_thread(_dl)
+        except Exception as exc:
+            print(f"[JuiceVault Voice TTS] Download error for '{clean_tts}': {exc}")
+
+    if data and len(data) >= 100:
+        _TTS_RAM_CACHE[cache_key] = data
+        try:
+            loop = asyncio.get_running_loop()
+            pcm = await loop.run_in_executor(_VOICE_EXECUTOR, _decode_mp3_to_pcm, data)
+            if pcm:
+                _TTS_PCM_CACHE[cache_key] = pcm
+        except Exception:
+            pass
+        return data
+
+    return b''
+
+
+_COMMON_SYSTEM_PHRASES = [
+    # Romanian
+    ("Da? Ascult...", "ro"),
+    ("Comandă anulată.", "ro"),
+    ("Ce piesă vrei să bag?", "ro"),
+    ("Ce piesă vrei să caut pe YouTube?", "ro"),
+    ("Nu există o piesă anterioară în istoric.", "ro"),
+    ("Nu cântă nicio piesă în acest moment.", "ro"),
+    ("Am adăugat piesa la favoritele tale!", "ro"),
+    ("Piesa se află deja în lista ta de favorite!", "ro"),
+    ("Lista ta de favorite este goală.", "ro"),
+    # English
+    ("Yes? I'm listening...", "en"),
+    ("Cancelled.", "en"),
+    ("What track would you like me to play?", "en"),
+    ("What track would you like me to search on YouTube?", "en"),
+    ("There is no previous track in history.", "en"),
+    ("No music is currently playing.", "en"),
+    ("Added to your favorites!", "en"),
+    ("Track is already in your favorites!", "en"),
+    ("Your favorites list is empty.", "en"),
+]
+
+
+def prewarm_voice_cache():
+    """Background task to pre-generate beep PCM and pre-load/decode common system voice phrases into RAM."""
+    def _run():
+        # 1. Pre-synthesize all beeps into RAM PCM
+        for st in ("listening", "understood", "error"):
+            _get_beep_pcm(st)
+
+        # 2. Pre-fetch and decode common phrases
+        loop = asyncio.new_event_loop()
+        try:
+            for text, lang in _COMMON_SYSTEM_PHRASES:
+                try:
+                    loop.run_until_complete(_fetch_tts_bytes(text, lang))
+                except Exception:
+                    pass
+        finally:
+            loop.close()
+        print(f"[JuiceVault Voice] 🚀 Pre-warmed {len(_TTS_PCM_CACHE)} system voice phrases and PCM chimes into RAM.")
+
+    _VOICE_EXECUTOR.submit(_run)
+
+
 async def play_beep_sound(guild, sound_type: str = "understood", action_coro=None):
-    """Play an acoustic feedback tone in the voice channel:
+    """Play an acoustic feedback tone in the voice channel using pre-rendered RAM PCM buffers:
     - 'listening': ascending tone indicating Garmin is actively listening
     - 'understood': bright positive tone indicating Garmin understood the command
     - 'error': descending gentle tone indicating Garmin didn't understand / error
-    Ducks active music to 18% volume without interrupting playback."""
+    Ducks active music to 18% volume without interrupting playback and with zero FFmpeg overhead."""
     voice = getattr(guild, "voice_client", None)
     if not voice or not voice.is_connected():
         if action_coro is not None and asyncio.iscoroutine(action_coro):
             await action_coro
         return
 
-    if sound_type == "listening":
-        beep_path = _get_listening_beep_wav_path()
-        duration = 0.24
-    elif sound_type == "error":
-        beep_path = _get_error_beep_wav_path()
-        duration = 0.26
-    else:  # "understood"
-        beep_path = _get_understood_beep_wav_path()
-        duration = 0.22
-
-    if beep_path and os.path.isfile(beep_path):
-        try:
-            import discord
-            exe = _get_ffmpeg_exe()
-            mixer = getattr(voice, "_jv_mixer", None)
-            if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
-                mixer = voice.source
-                voice._jv_mixer = mixer
-            elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
-                try:
-                    mixer = DuckingAudioSource(voice.source)
-                    voice.source = mixer
-                    if hasattr(voice, "_player") and voice._player:
-                        voice._player.source = mixer
-                    voice._jv_mixer = mixer
-                except Exception:
-                    mixer = None
-
-            if voice.is_playing() and mixer is not None:
-                # Play beep over ducked music (18% volume) without stopping music!
-                beep_source = discord.FFmpegPCMAudio(beep_path, executable=exe)
-                mixer.set_overlay(beep_source)
-                await asyncio.sleep(duration)
-            elif not voice.is_playing():
-                voice.play(discord.FFmpegPCMAudio(beep_path, executable=exe))
-                await asyncio.sleep(duration)
-        except Exception as exc:
-            print(f"[JuiceVault Beep] Error ({sound_type}): {exc}")
-
-    if action_coro is not None:
-        if asyncio.iscoroutine(action_coro):
-            await action_coro
-
-
-async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = False, sound_type: str = "understood"):
-    """Play assistant feedback chime in voice channel and execute the command action."""
-    await play_beep_sound(guild, sound_type=sound_type, action_coro=action_coro)
-
-
-async def speak_in_voice(guild, text: str, lang: str = "ro"):
-    """Fetch Google Translate TTS and speak out loud directly in the voice channel.
-    If music is actively playing, ducks music to 18% volume and speaks over it."""
-    voice = getattr(guild, "voice_client", None)
-    if not voice or not voice.is_connected():
-        return
-    import urllib.parse
-    import discord
-
-    clean_tts = re.sub(r'[*_~`#<>|]', '', text).strip()
-    if not clean_tts:
-        return
-
-    clean_tts = clean_tts[:150]
-    encoded_q = urllib.parse.quote(clean_tts)
-    tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded_q}&tl={lang}&client=tw-ob"
-    path = os.path.join(tempfile.gettempdir(), f"jv_voice_tts_{guild.id}.mp3")
-
-    downloaded = False
-    try:
-        import aiohttp
-        timeout = aiohttp.ClientTimeout(total=4)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(tts_url, headers={"User-Agent": "Mozilla/5.0"}) as resp:
-                if resp.status == 200:
-                    data = await resp.read()
-                    with open(path, "wb") as f:
-                        f.write(data)
-                    downloaded = True
-    except Exception:
-        pass
-
-    if not downloaded:
-        try:
-            import urllib.request
-            req = urllib.request.Request(tts_url, headers={"User-Agent": "Mozilla/5.0"})
-            def _dl():
-                with urllib.request.urlopen(req, timeout=4) as resp:
-                    if resp.status == 200:
-                        with open(path, "wb") as f:
-                            f.write(resp.read())
-                        return True
-                    return False
-            downloaded = await asyncio.to_thread(_dl)
-        except Exception as exc:
-            print(f"[JuiceVault Voice TTS] Download error: {exc}")
-            return
-
-    if not downloaded or not os.path.isfile(path) or os.path.getsize(path) < 100:
-        return
+    pcm_data = _get_beep_pcm(sound_type)
+    duration = 0.22 if sound_type == "understood" else (0.24 if sound_type == "listening" else 0.26)
 
     try:
-        exe = _get_ffmpeg_exe()
         mixer = getattr(voice, "_jv_mixer", None)
         if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
             mixer = voice.source
@@ -775,24 +886,148 @@ async def speak_in_voice(guild, text: str, lang: str = "ro"):
                 mixer = None
 
         if voice.is_playing() and mixer is not None:
-            # Music is actively playing -> DUCK music to 18% and speak over it without stopping the song!
+            # Play beep over ducked music (18% volume) with zero process overhead!
+            mixer.set_overlay(MemoryPCMAudioSource(pcm_data))
+        elif not voice.is_playing():
+            voice.play(MemoryPCMAudioSource(pcm_data))
+    except Exception as exc:
+        print(f"[JuiceVault Beep] Error ({sound_type}): {exc}")
+        try:
+            exe = _get_ffmpeg_exe()
+            path = _get_understood_beep_wav_path() if sound_type == "understood" else (_get_listening_beep_wav_path() if sound_type == "listening" else _get_error_beep_wav_path())
+            if path and os.path.isfile(path):
+                if mixer is not None:
+                    mixer.set_overlay(discord.FFmpegPCMAudio(path, executable=exe))
+                elif not voice.is_playing():
+                    voice.play(discord.FFmpegPCMAudio(path, executable=exe))
+        except Exception:
+            pass
+
+    if action_coro is not None:
+        # Give 40ms so the first frame of chime is sent to Discord, then execute action concurrently!
+        await asyncio.sleep(0.04)
+        if asyncio.iscoroutine(action_coro):
+            await action_coro
+    else:
+        # If no follow-up action, wait the brief tone duration
+        await asyncio.sleep(duration)
+
+
+async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = False, sound_type: str = "understood"):
+    """Play assistant feedback chime in voice channel and execute the command action."""
+    await play_beep_sound(guild, sound_type=sound_type, action_coro=action_coro)
+
+
+async def speak_in_voice(guild, text: str, lang: str = "ro"):
+    """Fetch Google Translate TTS and speak out loud directly in the voice channel.
+    Utilizes in-memory RAM caches (_TTS_PCM_CACHE and _TTS_RAM_CACHE) for near-instant 0ms response.
+    If music is actively playing, ducks music to 18% volume and speaks over it."""
+    voice = getattr(guild, "voice_client", None)
+    if not voice or not voice.is_connected():
+        return
+
+    clean_tts = re.sub(r'[*_~`#<>|]', '', text).strip()
+    if not clean_tts:
+        return
+    clean_tts = clean_tts[:150]
+    cache_key = (clean_tts, lang)
+
+    mixer = getattr(voice, "_jv_mixer", None)
+    if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
+        mixer = voice.source
+        voice._jv_mixer = mixer
+    elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
+        try:
+            mixer = DuckingAudioSource(voice.source)
+            voice.source = mixer
+            if hasattr(voice, "_player") and voice._player:
+                voice._player.source = mixer
+            voice._jv_mixer = mixer
+        except Exception:
+            mixer = None
+
+    # 1. Fast path: pre-decoded PCM in RAM for 0ms instant playback!
+    pcm_data = _TTS_PCM_CACHE.get(cache_key)
+    if pcm_data:
+        try:
+            if voice.is_playing() and mixer is not None:
+                print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({lang})")
+                overlay = MemoryPCMAudioSource(pcm_data)
+                mixer.set_overlay(overlay)
+                duration = len(pcm_data) / (48000 * 4) + 0.1
+                for _ in range(int(duration / 0.04)):
+                    if not mixer.is_overlay_playing():
+                        break
+                    await asyncio.sleep(0.04)
+                return
+            elif not voice.is_playing():
+                print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking in '{guild.name}': \"{clean_tts}\" ({lang})")
+                voice.play(MemoryPCMAudioSource(pcm_data))
+                duration = len(pcm_data) / (48000 * 4) + 0.1
+                for _ in range(int(duration / 0.04)):
+                    if not voice.is_playing():
+                        break
+                    await asyncio.sleep(0.04)
+                return
+        except Exception as exc:
+            print(f"[JuiceVault Voice TTS] Memory PCM playback exception: {exc}")
+
+    # 2. Fetch or retrieve MP3 data
+    data = await _fetch_tts_bytes(clean_tts, lang)
+    if not data:
+        return
+
+    # Check if PCM decode completed during fetch
+    pcm_data = _TTS_PCM_CACHE.get(cache_key)
+    if pcm_data:
+        try:
+            if voice.is_playing() and mixer is not None:
+                overlay = MemoryPCMAudioSource(pcm_data)
+                mixer.set_overlay(overlay)
+                duration = len(pcm_data) / (48000 * 4) + 0.1
+                for _ in range(int(duration / 0.04)):
+                    if not mixer.is_overlay_playing():
+                        break
+                    await asyncio.sleep(0.04)
+                return
+            elif not voice.is_playing():
+                voice.play(MemoryPCMAudioSource(pcm_data))
+                duration = len(pcm_data) / (48000 * 4) + 0.1
+                for _ in range(int(duration / 0.04)):
+                    if not voice.is_playing():
+                        break
+                    await asyncio.sleep(0.04)
+                return
+        except Exception:
+            pass
+
+    # 3. Fallback: stream MP3 via temp file + FFmpeg
+    path = os.path.join(tempfile.gettempdir(), f"jv_voice_tts_{guild.id}.mp3")
+    try:
+        with open(path, "wb") as f:
+            f.write(data)
+    except Exception:
+        return
+
+    try:
+        exe = _get_ffmpeg_exe()
+        if voice.is_playing() and mixer is not None:
             print(f"[JuiceVault Voice TTS] 🔊 Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({lang})")
             overlay = discord.FFmpegPCMAudio(path, executable=exe)
             mixer.set_overlay(overlay)
-            duration = max(1.5, min(8.0, len(clean_tts) * 0.085 + 0.4))
-            for _ in range(int(duration / 0.1)):
+            duration = max(1.2, min(8.0, len(clean_tts) * 0.085 + 0.4))
+            for _ in range(int(duration / 0.04)):
                 if not mixer.is_overlay_playing():
                     break
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.04)
         elif not voice.is_playing():
-            # No music playing -> play directly on voice client
             print(f"[JuiceVault Voice TTS] 🔊 Speaking in '{guild.name}': \"{clean_tts}\" ({lang})")
             voice.play(discord.FFmpegPCMAudio(path, executable=exe))
-            duration = max(1.5, min(7.0, len(clean_tts) * 0.085))
-            for _ in range(int(duration / 0.1)):
+            duration = max(1.2, min(7.0, len(clean_tts) * 0.085))
+            for _ in range(int(duration / 0.04)):
                 if not voice.is_playing():
                     break
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.04)
     except Exception as exc:
         print(f"[JuiceVault Voice TTS] Playback error: {exc}")
 
@@ -1055,10 +1290,11 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             self._last_speech[uid] = now
 
         async def _process_silence_loop(self):
-            """Monitors when a user finishes speaking and dispatches audio to STT."""
+            """Monitors when a user finishes speaking and dispatches audio to STT with minimal latency."""
             try:
                 while self._active:
-                    await asyncio.sleep(0.18)
+                    # Snappy 35ms polling loop for near-instant responsiveness
+                    await asyncio.sleep(0.035)
                     now = time.monotonic()
                     uids = list(self._last_speech.keys())
                     pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
@@ -1070,13 +1306,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                         last = self._last_speech.get(uid, 0.0)
                         is_pending = bool(pending and pending.get("user_id") == uid and time.time() < pending.get("expires", 0.0))
-                        # End-of-utterance: 0.38s silence for pending answers ("da"/"nu"), 0.55s for standard commands
-                        silence_needed = 0.38 if is_pending else 0.55
+                        # End-of-utterance: 0.18s silence for pending answers ("da"/"nu"), 0.28s for standard commands
+                        silence_needed = 0.18 if is_pending else 0.28
                         if now - last >= silence_needed:
                             buf = self._buffers.pop(uid, bytearray())
                             self._last_speech.pop(uid, None)
                             # Capture short single-syllable responses like "da", "nu", "yes", "no"
-                            min_bytes = 12_000 if is_pending else 16_000
+                            min_bytes = 10_000 if is_pending else 14_000
                             if len(buf) >= min_bytes:
                                 if not is_pending:
                                     self._cooldowns[uid] = now
@@ -1123,12 +1359,16 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
             wait_speech = f"Caut pe YouTube {clean_q}" if lang == "ro" else f"Searching YouTube for {clean_q}"
             await play_beep_sound(guild, "understood")
+
+            # Launch YouTube extraction concurrently in background while speaking confirmation!
+            from .external_search_patch import _extract_search
+            search_task = asyncio.create_task(asyncio.to_thread(_extract_search, clean_q))
+
             await speak_in_voice(guild, wait_speech, lang=lang)
             await self._notify(guild, f"🔍 **[Garmin]** {user_name}: Caut *\"{clean_q}\"* pe YouTube... ⏳" if lang == "ro" else f"🔍 **[Garmin]** {user_name}: Searching YouTube for *\"{clean_q}\"*... ⏳")
 
             try:
-                from .external_search_patch import _extract_search
-                info = await asyncio.to_thread(_extract_search, clean_q)
+                info = await search_task
                 yt_track = None
                 if info:
                     if info.get("_is_playlist") or "entries" in info:
@@ -1164,11 +1404,15 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 print(f"[JuiceVault Voice] Ignored utterance from user {user_id} - Garmin is currently focused on {self._active_session_uid}")
                 return
 
-            loop = asyncio.get_running_loop()
+            pref_lang = _user_preferred_languages.get(user_id)
+            pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
+            if pending and pending.get("user_id") == user_id:
+                pref_lang = pending.get("lang", pref_lang)
+
             try:
-                text, detected_lang = await loop.run_in_executor(None, self._recognize_speech_blocking, pcm_bytes)
+                text, detected_lang = await self._recognize_speech_parallel(pcm_bytes, preferred_lang=pref_lang)
             except Exception as exc:
-                print(f"[JuiceVault Voice] Transcribe executor error: {exc}")
+                print(f"[JuiceVault Voice] Transcribe parallel error: {exc}")
                 return
 
             if not text:
@@ -1663,16 +1907,23 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             self._unlock_session()
             await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Comandă nerecunoscută.")
 
-        def _recognize_speech_blocking(self, pcm_bytes):
-            """Convert Discord 48kHz stereo PCM to 16kHz mono PCM, then recognize with Google.
-            Queries both ro-RO and en-US and intelligently selects the best candidate based on
-            wake-word match, music intent keywords, and utterance confidence."""
+        def _downsample_to_16k_mono(self, pcm_bytes: bytes) -> bytes:
+            """Downsample Discord 48kHz 16-bit stereo PCM to 16kHz mono PCM using SIMD/NumPy when available."""
+            if HAVE_NUMPY:
+                try:
+                    return np.frombuffer(pcm_bytes, dtype=np.int16)[0::6].tobytes()
+                except Exception:
+                    pass
+            a = array.array('h')
+            a.frombytes(pcm_bytes)
+            return a[0::6].tobytes()
+
+        async def _recognize_speech_parallel(self, pcm_bytes: bytes, preferred_lang: str = None) -> tuple:
+            """Convert Discord 48kHz stereo PCM to 16kHz mono PCM in memory, then concurrently
+            query both ro-RO and en-US Google STT using _VOICE_EXECUTOR.
+            Eliminates sequential network round-trips and utilizes multi-core CPU threading."""
             try:
-                a = array.array('h')
-                a.frombytes(pcm_bytes)
-                # Discord sends 48kHz 16-bit stereo (2 channels interleaved).
-                # Downsample 3x to 16kHz mono taking every 3rd sample: index [0::6]!
-                mono_16k = a[0::6].tobytes()
+                mono_16k = self._downsample_to_16k_mono(pcm_bytes)
             except Exception as e:
                 print(f"[JuiceVault Voice] Audio conversion error: {e}")
                 return None, "ro-RO"
@@ -1681,7 +1932,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return None, "ro-RO"
 
             audio_data = sr.AudioData(mono_16k, 16000, 2)
-            candidates = []
             custom_words = _learned_wake_words_cache.get(self.guild_id, set())
 
             control_words = {
@@ -1698,11 +1948,33 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 "muzica", "melodia", "melodie", "piesa", "track", "song", "music"
             }
 
-            for lang in ("ro-RO", "en-US"):
+            def _query_single_lang(lang: str):
                 try:
                     res = self._recognizer.recognize_google(audio_data, language=lang)
+                    return lang, res
+                except sr.UnknownValueError:
+                    return lang, None
+                except sr.RequestError as exc:
+                    print(f"[JuiceVault Voice] Google STT network error ({lang}): {exc}")
+                    return lang, None
+                except Exception as exc:
+                    print(f"[JuiceVault Voice] Google STT exception ({lang}): {type(exc).__name__}: {exc}")
+                    return lang, None
+
+            loop = asyncio.get_running_loop()
+
+            # Concurrently dispatch both ro-RO and en-US queries to the thread pool
+            fut_ro = loop.run_in_executor(_VOICE_EXECUTOR, _query_single_lang, "ro-RO")
+            fut_en = loop.run_in_executor(_VOICE_EXECUTOR, _query_single_lang, "en-US")
+
+            results = await asyncio.gather(fut_ro, fut_en, return_exceptions=True)
+
+            candidates = []
+            for item in results:
+                if isinstance(item, tuple) and len(item) == 2:
+                    lang, res = item
                     if res:
-                        print(f"[JuiceVault Voice] Google STT recognized ({lang}): '{res}'")
+                        print(f"[JuiceVault Voice] Google STT parallel recognized ({lang}): '{res}'")
                         clean = _normalize_speech(res)
                         score = 0
                         matched_wake, _, _ = _match_wake_word(clean, custom_words)
@@ -1711,13 +1983,9 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         tokens = set(re.findall(r'[a-z0-9]+', clean))
                         score += len(tokens & control_words) * 30
                         score += min(len(clean), 25)
+                        if preferred_lang and lang.startswith(preferred_lang):
+                            score += 15
                         candidates.append((score, res, lang))
-                except sr.UnknownValueError:
-                    pass
-                except sr.RequestError as exc:
-                    print(f"[JuiceVault Voice] Google STT network/API error: {exc}")
-                except Exception as exc:
-                    print(f"[JuiceVault Voice] Google STT exception: {type(exc).__name__}: {exc}")
 
             if not candidates:
                 return None, "ro-RO"
@@ -1726,6 +1994,17 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             candidates.sort(key=lambda x: x[0], reverse=True)
             best = candidates[0]
             return best[1], best[2]
+
+        def _recognize_speech_blocking(self, pcm_bytes):
+            """Legacy fallback wrapper."""
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    future = asyncio.run_coroutine_threadsafe(self._recognize_speech_parallel(pcm_bytes), loop)
+                    return future.result(timeout=6.0)
+                return loop.run_until_complete(self._recognize_speech_parallel(pcm_bytes))
+            except Exception:
+                return None, "ro-RO"
 
         async def _notify(self, guild, message):
             """Send feedback message in the configured text channel and active voice channel."""
@@ -1785,6 +2064,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
 def attach_voice_command_sink(cog, guild):
     """Attach VoiceCommandAudioSink to the active voice client if supported and enabled."""
+    prewarm_voice_cache()
     if not VOICE_RECV_AVAILABLE or not SPEECH_RECOGNITION_AVAILABLE:
         print(f"[JuiceVault Voice] Cannot attach voice sink in {getattr(guild, 'name', 'unknown')}: missing discord-ext-voice-recv or SpeechRecognition")
         return
@@ -1808,3 +2088,10 @@ def attach_voice_command_sink(cog, guild):
         print(f"[JuiceVault Voice Recognition] 🟢 ACTIVE: Listening for voice commands in '{guild.name}' (Wake Word: 'Garmin')...")
     except Exception as exc:
         print(f"[JuiceVault Voice Recognition] Failed attaching sink in '{guild.name}': {exc}")
+
+
+# Kick off background pre-warming of chimes and voice cache upon module load
+try:
+    prewarm_voice_cache()
+except Exception:
+    pass
