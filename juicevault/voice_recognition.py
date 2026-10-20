@@ -522,6 +522,48 @@ _LOCAL_WHISPER_MODEL = None
 _LOCAL_WHISPER_TRIED = False
 
 
+_last_groq_passive_time = 0.0
+
+
+def _can_query_groq_passive() -> bool:
+    """Rate-limit passive Groq STT fallback queries to max 1 query per 1.5 seconds to protect API quotas."""
+    global _last_groq_passive_time
+    now = time.monotonic()
+    if now - _last_groq_passive_time >= 1.5:
+        _last_groq_passive_time = now
+        return True
+    return False
+
+
+def _calculate_rms(pcm_bytes: bytes) -> int:
+    """Calculate Root Mean Square (RMS) audio energy level of 16-bit PCM bytes.
+    Human speech is typically 600 - 15000+ RMS, while background room noise is < 400 RMS."""
+    if not pcm_bytes:
+        return 0
+    try:
+        import audioop
+        return audioop.rms(pcm_bytes, 2)
+    except Exception:
+        pass
+    if HAVE_NUMPY:
+        try:
+            arr = np.frombuffer(pcm_bytes, dtype=np.int16)
+            if len(arr) == 0:
+                return 0
+            return int(np.sqrt(np.mean(arr.astype(np.float64) ** 2)))
+        except Exception:
+            pass
+    try:
+        count = len(pcm_bytes) // 2
+        if count == 0:
+            return 0
+        shorts = struct.unpack(f"<{count}h", pcm_bytes[:count * 2])
+        sum_sq = sum(s * s for s in shorts)
+        return int(math.sqrt(sum_sq / count))
+    except Exception:
+        return 600
+
+
 def _get_local_whisper_model():
     """Load local faster-whisper model on CPU using RAM if installed.
     Runs 100% offline with zero network latency and zero API rate limits."""
@@ -531,15 +573,16 @@ def _get_local_whisper_model():
     _LOCAL_WHISPER_TRIED = True
     try:
         from faster_whisper import WhisperModel
-        print("[JuiceVault Voice] Initializing local faster-whisper model ('base.en' on CPU / int8)...")
+        print("[JuiceVault Voice] Initializing local faster-whisper model ('tiny.en' on CPU / int8 / RAM)...")
         _LOCAL_WHISPER_MODEL = WhisperModel(
-            "base.en",
+            "tiny.en",
             device="cpu",
             compute_type="int8",
             cpu_threads=min(4, max(1, (os.cpu_count() or 2) // 2)),
         )
         print("[JuiceVault Voice] ✅ Local faster-whisper ready on CPU / RAM!")
-    except Exception:
+    except Exception as exc:
+        log.debug(f"[JuiceVault Voice] Local whisper note: {exc}")
         _LOCAL_WHISPER_MODEL = None
     return _LOCAL_WHISPER_MODEL
 
@@ -1852,22 +1895,55 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             is_pending = bool(pending and time.time() < pending.get("expires", 0.0) and pending.get("user_id") == user_id)
             in_wake_window = bool(now < self._wake_windows.get(user_id, 0.0))
 
-            groq_key = await _get_groq_api_key(self.cog)
+            rms = _calculate_rms(mono_16k)
+            # Minimum speech energy filter: discard quiet background hum or breathing below 350 RMS
+            if not is_pending and not in_wake_window and rms < 350:
+                return
 
-            # SMART TWO-STAGE PIPELINE:
-            # - If user is in an active wake window or answering a pending question: transcribe using AI (Groq Whisper / Local fast-whisper)
-            # - If passive background listening (friends chatting in voice): transcribe with Google STT for FREE!
-            #   If no wake word is heard -> discard immediately with 0 Groq calls!
-            try:
-                if is_pending or in_wake_window:
+            groq_key = await _get_groq_api_key(self.cog)
+            text = None
+            detected_lang = "en-US"
+
+            # SMART MULTI-TIER PIPELINE:
+            # 1. If in active wake window or answering pending prompt: use high-accuracy AI directly
+            if is_pending or in_wake_window:
+                try:
                     text, detected_lang = await asyncio.wait_for(
                         self._recognize_speech_ai(mono_16k, groq_key=groq_key),
                         timeout=5.0
                     )
-                else:
-                    text, detected_lang = await self._recognize_speech_google(mono_16k)
-            except Exception:
-                text = None
+                except Exception as exc:
+                    print(f"[JuiceVault Voice] Active AI STT error: {exc}")
+                    text = None
+            else:
+                # 2. Passive listening for wake word ("Ok Garmin", "Hey Garmin"):
+                # Step A: Local fast-whisper if available (0 tokens, 0 network, runs on CPU/RAM)
+                local_model = _get_local_whisper_model()
+                if local_model:
+                    try:
+                        text, detected_lang = await self._recognize_speech_ai(mono_16k, groq_key=None)
+                    except Exception:
+                        text = None
+
+                # Step B: Free Google STT
+                if not text:
+                    try:
+                        text, detected_lang = await self._recognize_speech_google(mono_16k)
+                    except Exception:
+                        text = None
+
+                # Step C: If Google STT failed or was rate-limited (HTTP 429/403) and Groq key is configured:
+                # Fall back to Groq Cloud so Garmin NEVER ignores wake words!
+                if not text and groq_key and _can_query_groq_passive():
+                    try:
+                        print(f"[JuiceVault Voice] Passive fallback to Groq Whisper Large v3 Turbo (RMS: {rms})...")
+                        text, detected_lang = await asyncio.wait_for(
+                            self._recognize_speech_groq(mono_16k, groq_key, prompt="Ok Garmin, Hey Garmin, Garmin, skip, pause, play, next"),
+                            timeout=4.5
+                        )
+                    except Exception as g_err:
+                        print(f"[JuiceVault Voice] Groq passive fallback error: {g_err}")
+                        text = None
 
             if not text:
                 return
@@ -2500,7 +2576,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             def _query():
                 try:
                     return self._recognizer.recognize_google(audio_data, language="en-US")
-                except Exception:
+                except sr.UnknownValueError:
+                    return None
+                except sr.RequestError as exc:
+                    print(f"[JuiceVault Voice] Google STT request/quota error: {exc}")
+                    return None
+                except Exception as exc:
+                    print(f"[JuiceVault Voice] Google STT error: {exc}")
                     return None
 
             loop = asyncio.get_running_loop()
@@ -2626,23 +2708,26 @@ def attach_voice_command_sink(cog, guild):
         try:
             if voice.is_listening():
                 voice.stop_listening()
+                time.sleep(0.04)
         except Exception:
             pass
-
-    if existing_sink and hasattr(existing_sink, "cleanup"):
-        try:
-            existing_sink.cleanup()
-        except Exception:
-            pass
-    _active_sinks.pop(guild.id, None)
 
     sink = VoiceCommandAudioSink(cog.bot, cog, guild.id)
-    _active_sinks[guild.id] = sink
     try:
         voice.listen(sink)
+        if existing_sink and existing_sink is not sink and hasattr(existing_sink, "cleanup"):
+            try:
+                existing_sink.cleanup()
+            except Exception:
+                pass
+        _active_sinks[guild.id] = sink
         print(f"[JuiceVault Voice Recognition] 🟢 ACTIVE: Listening for voice commands in '{guild.name}' (Wake Word: 'Garmin')...")
     except Exception as exc:
-        print(f"[JuiceVault Voice Recognition] Failed attaching sink in '{guild.name}': {exc}")
+        print(f"[JuiceVault Voice Recognition] Sink attach note in '{guild.name}': {exc}")
+        if voice.is_listening() and existing_sink:
+            # Still listening with existing sink - keep it active!
+            _active_sinks[guild.id] = existing_sink
+            existing_sink._active = True
 
 
 # Kick off background pre-warming of chimes and voice cache upon module load
