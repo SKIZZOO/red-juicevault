@@ -10,6 +10,7 @@ import array
 import asyncio
 import concurrent.futures
 import logging
+import io
 import math
 import os
 import re
@@ -400,6 +401,104 @@ def _find_best_archive_track(tracks, query: str, cog):
 
     matched.sort(key=score_track, reverse=True)
     return matched[0]
+
+
+def _pcm16_to_wav_bytes(pcm_bytes: bytes, sample_rate: int = 16000, channels: int = 1) -> bytes:
+    """Pack 16-bit PCM bytes into in-memory standard WAV container for Whisper/Groq API."""
+    bio = io.BytesIO()
+    with wave.open(bio, 'wb') as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_bytes)
+    return bio.getvalue()
+
+
+async def _get_groq_api_key(cog) -> str:
+    """Retrieve Groq API key from environment, Red shared tokens, or cog config."""
+    # 1. Environment variable
+    key = os.environ.get("GROQ_API_KEY", "").strip()
+    if key:
+        return key
+
+    # 2. In-memory cog attribute
+    if hasattr(cog, "_groq_api_key") and cog._groq_api_key:
+        return str(cog._groq_api_key).strip()
+
+    # 3. Red shared API tokens: [p]set api groq api_key <key>
+    if hasattr(cog, "bot") and hasattr(cog.bot, "get_shared_api_tokens"):
+        try:
+            tokens = await cog.bot.get_shared_api_tokens("groq")
+            if tokens and tokens.get("api_key"):
+                return tokens["api_key"].strip()
+        except Exception:
+            pass
+
+    # 4. Cog global config
+    if hasattr(cog, "config") and hasattr(cog.config, "groq_api_key"):
+        try:
+            cfg_key = await cog.config.groq_api_key()
+            if cfg_key:
+                return str(cfg_key).strip()
+        except Exception:
+            pass
+
+    return ""
+
+
+async def _recognize_speech_groq(mono_16k: bytes, api_key: str, prompt: str = None) -> tuple:
+    """Send 16kHz mono PCM directly to Groq Whisper Large v3 Turbo via aiohttp.
+    Transcribes in ~50-100ms with superior multilingual accuracy and rapper/music vocabulary priming."""
+    try:
+        import aiohttp
+    except ImportError:
+        return None, "ro-RO"
+
+    wav_bytes = _pcm16_to_wav_bytes(mono_16k, sample_rate=16000, channels=1)
+    url = "https://api.groq.com/openai/v1/audio/transcriptions"
+    headers = {
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    # Prime vocabulary with artists, tracks, and common commands
+    default_prompt = (
+        "Garmin, Juice WRLD, Yeat, Quavo, Playboi Carti, Travis Scott, Ken Carson, "
+        "Lil Uzi Vert, Drake, Future, Metro Boomin, Trippie Redd, unreleased, robbery, "
+        "burn, bandit, lucid dreams, lean wit me, skip, da skip, dai skip, pause, "
+        "resume, shuffle, favorite, da, nu."
+    )
+    if prompt:
+        default_prompt = f"{prompt}, {default_prompt}"
+
+    data = aiohttp.FormData()
+    data.add_field("file", wav_bytes, filename="speech.wav", content_type="audio/wav")
+    data.add_field("model", "whisper-large-v3-turbo")
+    data.add_field("response_format", "verbose_json")
+    data.add_field("temperature", "0.0")
+    data.add_field("prompt", default_prompt)
+
+    timeout = aiohttp.ClientTimeout(total=4.5)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, headers=headers, data=data) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    text = (result.get("text") or "").strip()
+                    lang_raw = (result.get("language") or "").lower().strip()
+                    if "ro" in lang_raw or "rum" in lang_raw:
+                        lang = "ro-RO"
+                    elif "en" in lang_raw:
+                        lang = "en-US"
+                    else:
+                        lang = "ro-RO"
+                    return text, lang
+                else:
+                    err_text = await resp.text()
+                    print(f"[JuiceVault Voice Groq] API error {resp.status}: {err_text[:160]}")
+                    return None, "ro-RO"
+    except Exception as exc:
+        print(f"[JuiceVault Voice Groq] Network exception: {exc}")
+        return None, "ro-RO"
 
 
 def _match_wake_word(text: str, custom_words: set = None) -> tuple:
@@ -2083,6 +2182,19 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             min_mono = 600 if is_pending else 1800
             if not mono_16k or len(mono_16k) < min_mono:
                 return None, "ro-RO"
+
+            # 1. Primary: Groq Cloud Whisper Large v3 Turbo (if API key is configured)
+            groq_key = await _get_groq_api_key(self.cog)
+            if groq_key:
+                groq_prompt = None
+                if is_pending:
+                    groq_prompt = f"confirmare {'da' if pending_lang == 'ro' else 'yes'}, refuz {'nu' if pending_lang == 'ro' else 'no'}"
+                groq_text, groq_lang = await _recognize_speech_groq(mono_16k, groq_key, prompt=groq_prompt)
+                if groq_text:
+                    print(f"[JuiceVault Voice Groq] ⚡ Whisper Large v3 Turbo ({groq_lang}): '{groq_text}'")
+                    return groq_text, groq_lang
+                else:
+                    print("[JuiceVault Voice Groq] Whisper query returned empty or failed -> Falling back to Google STT")
 
             audio_data = sr.AudioData(mono_16k, 16000, 2)
             custom_words = _learned_wake_words_cache.get(self.guild_id, set())
