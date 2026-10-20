@@ -2556,6 +2556,11 @@ class JuiceVault(commands.Cog):
     @commands.is_owner()
     async def set_groq_api_key(self, ctx, api_key: str = None):
         """Set or clear the Groq Cloud API key for ultra-fast Whisper Large v3 voice recognition."""
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
+
         if not api_key:
             current = await self.config.groq_api_key()
             if not current:
@@ -2579,5 +2584,5 @@ class JuiceVault(commands.Cog):
         masked = cleaned_key[:4] + "..." + cleaned_key[-4:]
         await ctx.send(
             f"⚡ **Groq Cloud Whisper Large v3 Turbo** activated! (`{masked}`)\n"
-            f"Garmin voice recognition is now running with **~60ms ultra-low latency** and superior bilingual Romanian/English understanding."
+            f"Garmin voice recognition is now running with **~60ms ultra-low latency**."
         )

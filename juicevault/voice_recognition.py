@@ -474,6 +474,32 @@ async def _get_groq_api_key(cog) -> str:
     return ""
 
 
+_LOCAL_WHISPER_MODEL = None
+_LOCAL_WHISPER_TRIED = False
+
+
+def _get_local_whisper_model():
+    """Load local faster-whisper model on CPU using RAM if installed.
+    Runs 100% offline with zero network latency and zero API rate limits."""
+    global _LOCAL_WHISPER_MODEL, _LOCAL_WHISPER_TRIED
+    if _LOCAL_WHISPER_MODEL is not None or _LOCAL_WHISPER_TRIED:
+        return _LOCAL_WHISPER_MODEL
+    _LOCAL_WHISPER_TRIED = True
+    try:
+        from faster_whisper import WhisperModel
+        print("[JuiceVault Voice] Initializing local faster-whisper model ('base.en' on CPU / int8)...")
+        _LOCAL_WHISPER_MODEL = WhisperModel(
+            "base.en",
+            device="cpu",
+            compute_type="int8",
+            cpu_threads=min(4, max(1, (os.cpu_count() or 2) // 2)),
+        )
+        print("[JuiceVault Voice] ✅ Local faster-whisper ready on CPU / RAM!")
+    except Exception:
+        _LOCAL_WHISPER_MODEL = None
+    return _LOCAL_WHISPER_MODEL
+
+
 async def _recognize_speech_groq(mono_16k: bytes, api_key: str, prompt: str = None) -> tuple:
     """Send 16kHz mono PCM directly to Groq Whisper Large v3 Turbo via aiohttp.
     Transcribes in ~50-100ms with superior multilingual accuracy and rapper/music vocabulary priming."""
@@ -896,19 +922,33 @@ def _mix_pcm(music_pcm: bytes, overlay_pcm: bytes, music_vol: float) -> bytes:
 
 
 class DuckingAudioSource(discord.AudioSource):
-    """AudioSource wrapper that ducks the main music volume to 18% (0.18) whenever
-    an overlay audio stream (Garmin TTS or Siri chime) is playing."""
+    """AudioSource wrapper that ducks the main music volume to 18% whenever
+    an overlay audio stream (Garmin TTS or Siri chime) is playing, and provides master volume control."""
 
     def __init__(self, main_source):
         super().__init__()
         self.main_source = main_source
         self.overlay_source = None
         self._lock = threading.Lock()
+        self.master_volume = 1.0
         self.current_volume = 1.0
         self.target_volume = 1.0
 
     def is_opus(self) -> bool:
         return False
+
+    def set_volume(self, vol: float):
+        """Set master volume between 0.0 (0%) and 1.5 (150%)."""
+        with self._lock:
+            self.master_volume = max(0.0, min(1.5, float(vol)))
+            if self.overlay_source:
+                self.target_volume = 0.18 * self.master_volume
+            else:
+                self.target_volume = self.master_volume
+
+    def get_volume(self) -> float:
+        with self._lock:
+            return self.master_volume
 
     def set_overlay(self, overlay_source):
         with self._lock:
@@ -918,7 +958,7 @@ class DuckingAudioSource(discord.AudioSource):
                 except Exception:
                     pass
             self.overlay_source = overlay_source
-            self.target_volume = 0.18  # Duck music down to 18% volume ("ducks the sounds a bit")
+            self.target_volume = 0.18 * self.master_volume  # Duck music down to 18% of master volume
 
     def is_overlay_playing(self) -> bool:
         with self._lock:
@@ -962,9 +1002,9 @@ class DuckingAudioSource(discord.AudioSource):
                         except Exception:
                             pass
                         self.overlay_source = None
-                        self.target_volume = 1.0  # Restore music volume to 100%!
+                        self.target_volume = self.master_volume  # Restore music volume to user's master volume!
 
-        if not overlay_data and vol >= 0.98:
+        if not overlay_data and abs(vol - 1.0) < 0.02 and abs(self.master_volume - 1.0) < 0.02:
             return music_data
 
         if not music_data and overlay_data:
@@ -992,14 +1032,19 @@ _TTS_RAM_CACHE = {}  # (clean_tts, lang) -> bytes of MP3
 _TTS_PCM_CACHE = {}  # (clean_tts, lang) -> bytes of raw 48kHz 16-bit stereo PCM
 
 
-def _decode_mp3_to_pcm(mp3_data: bytes) -> bytes:
-    """Use FFmpeg in a background thread to decode MP3 audio bytes into raw 48kHz 16-bit stereo PCM for zero-overhead RAM playback."""
+def _decode_mp3_to_pcm(mp3_data: bytes, anime_voice: bool = True) -> bytes:
+    """Use FFmpeg in a background thread to decode MP3 audio bytes into raw 48kHz 16-bit stereo PCM for zero-overhead RAM playback.
+    When anime_voice is enabled, applies pitch shifting (+26%) and formant equalization to produce an adorable anime assistant voice."""
     if not mp3_data:
         return b''
     try:
         import subprocess
         exe = _get_ffmpeg_exe()
-        cmd = [exe, "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "-ac", "2", "-loglevel", "quiet", "pipe:1"]
+        cmd = [exe, "-i", "pipe:0"]
+        if anime_voice:
+            # 26% pitch shift up with tempo preserved (atempo = 1/1.26 = 0.7936), clean 48kHz resample, and crisp treble
+            cmd += ["-af", "asetrate=48000*1.26,atempo=1/1.26,aresample=48000,equalizer=f=3200:t=q:w=1:g=2.5"]
+        cmd += ["-f", "s16le", "-ar", "48000", "-ac", "2", "-loglevel", "quiet", "pipe:1"]
         proc = subprocess.run(cmd, input=mp3_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4)
         if proc.returncode == 0 and proc.stdout:
             return proc.stdout
@@ -1008,7 +1053,7 @@ def _decode_mp3_to_pcm(mp3_data: bytes) -> bytes:
     return b''
 
 
-async def _fetch_tts_bytes(clean_tts: str, lang: str) -> bytes:
+async def _fetch_tts_bytes(clean_tts: str, lang: str = "en") -> bytes:
     """Fetch TTS audio from Google Translate with RAM caching and asynchronous PCM pre-decoding."""
     cache_key = (clean_tts, lang)
     if cache_key in _TTS_RAM_CACHE:
@@ -1057,26 +1102,27 @@ async def _fetch_tts_bytes(clean_tts: str, lang: str) -> bytes:
 
 
 _COMMON_SYSTEM_PHRASES = [
-    # Romanian
-    ("Da? Ascult...", "ro"),
-    ("Comandă anulată.", "ro"),
-    ("Ce piesă vrei să bag?", "ro"),
-    ("Ce piesă vrei să caut pe YouTube?", "ro"),
-    ("Nu există o piesă anterioară în istoric.", "ro"),
-    ("Nu cântă nicio piesă în acest moment.", "ro"),
-    ("Am adăugat piesa la favoritele tale!", "ro"),
-    ("Piesa se află deja în lista ta de favorite!", "ro"),
-    ("Lista ta de favorite este goală.", "ro"),
-    # English
-    ("Yes? I'm listening...", "en"),
-    ("Cancelled.", "en"),
+    ("Yes? I'm listening~", "en"),
+    ("Hi! What would you like me to play?", "en"),
     ("What track would you like me to play?", "en"),
     ("What track would you like me to search on YouTube?", "en"),
+    ("Search cancelled.", "en"),
     ("There is no previous track in history.", "en"),
     ("No music is currently playing.", "en"),
     ("Added to your favorites!", "en"),
     ("Track is already in your favorites!", "en"),
     ("Your favorites list is empty.", "en"),
+    ("Queue shuffled!", "en"),
+    ("Repeat mode enabled!", "en"),
+    ("Repeat mode disabled.", "en"),
+    ("Restarting song from the beginning!", "en"),
+    ("Paused playback!", "en"),
+    ("Resuming music!", "en"),
+    ("Skipped track!", "en"),
+    ("Skipped 10 tracks!", "en"),
+    ("Goodbye! Have a great day~", "en"),
+    ("Muted playback.", "en"),
+    ("Command not recognized.", "en"),
 ]
 
 
@@ -1650,165 +1696,129 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
         async def _transcribe_and_dispatch(self, user_id, pcm_bytes):
             if self._is_locked_to_other(user_id):
-                print(f"[JuiceVault Voice] Ignored utterance from user {user_id} - Garmin is currently focused on {self._active_session_uid}")
                 return
 
-            pref_lang = _user_preferred_languages.get(user_id)
-            pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
-            if pending and pending.get("user_id") == user_id:
-                pref_lang = pending.get("lang", pref_lang)
+            now = time.monotonic()
+            guild = self.bot.get_guild(self.guild_id)
+            user = guild.get_member(user_id) if guild else None
+            user_name = user.display_name if user else f"User {user_id}"
 
             try:
-                text, detected_lang = await self._recognize_speech_parallel(pcm_bytes, preferred_lang=pref_lang)
-            except Exception as exc:
-                print(f"[JuiceVault Voice] Transcribe parallel error: {exc}")
+                mono_16k = self._downsample_to_16k_mono(pcm_bytes)
+            except Exception as e:
+                print(f"[JuiceVault Voice] Audio conversion error: {e}")
                 return
+
+            pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
+            is_pending = bool(pending and time.time() < pending.get("expires", 0.0) and pending.get("user_id") == user_id)
+            in_wake_window = bool(now < self._wake_windows.get(user_id, 0.0))
+
+            groq_key = await _get_groq_api_key(self.cog)
+
+            # SMART TWO-STAGE PIPELINE:
+            # - If user is in an active wake window or answering a pending question: transcribe using AI (Groq Whisper / Local fast-whisper)
+            # - If passive background listening (friends chatting in voice): transcribe with Google STT for FREE!
+            #   If no wake word is heard -> discard immediately with 0 Groq calls!
+            if is_pending or in_wake_window:
+                text, detected_lang = await self._recognize_speech_ai(mono_16k, groq_key=groq_key)
+            else:
+                text, detected_lang = await self._recognize_speech_google(mono_16k)
 
             if not text:
                 return
 
             clean = _normalize_speech(text)
-            guild = self.bot.get_guild(self.guild_id)
-            user = guild.get_member(user_id) if guild else None
-            user_name = user.display_name if user else f"User {user_id}"
-            now = time.monotonic()
-            print(f"[JuiceVault Voice] Received speech from {user_name} ({detected_lang}): '{text}' (normalized: '{clean}')")
+            print(f"[JuiceVault Voice] Speech from {user_name}: '{text}' (normalized: '{clean}') [active={is_pending or in_wake_window}]")
 
-            user_lang = _detect_user_language(text, default_lang=detected_lang)
-            _user_preferred_languages[user_id] = user_lang
-            is_ro = (user_lang == "ro")
-
-            # Check if this utterance is answering a pending YouTube question
-            pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
-            if pending and time.time() < pending.get("expires", 0.0):
-                pending_uid = pending.get("user_id")
-                # REQUIREMENT: Must come from the SAME person who initiated the command!
-                # Do NOT respond to anyone else in voice ("sa nu raspunda la altcineva")
-                if pending_uid and user_id != pending_uid:
-                    return
-
-                # Utterance is from the SAME user who asked: strictly preserve language ("sa NU schimbe limba")
-                pending_lang = pending.get("lang", "ro")
-                user_lang = pending_lang
-                is_ro = (pending_lang == "ro")
-                _user_preferred_languages[user_id] = pending_lang
-
+            # 1. PENDING TITLE PROMPT (e.g. user said bare "Garmin play" or "Garmin search youtube")
+            if is_pending:
                 tokens = set(re.findall(r'[a-z0-9]+', clean))
                 padded = f" {clean} "
-                if pending.get("awaiting_title"):
-                    is_neg = bool(tokens & NEGATIVE_WORDS) or any(f" {p} " in padded for p in NEGATIVE_PHRASES)
-                    if is_neg:
-                        self.cog._pending_yt_voice.pop(self.guild_id, None)
-                        self._wake_windows.pop(user_id, None)
-                        self._unlock_session()
-                        await play_beep_sound(guild, "error")
-                        cancel_msg = "🚫 **[Garmin]** Căutare anulată." if is_ro else "🚫 **[Garmin]** Search cancelled."
-                        await speak_in_voice(guild, "Comandă anulată." if is_ro else "Cancelled.", lang=pending_lang)
-                        await self._notify(guild, cancel_msg)
-                        return
-                    clean_title = _clean_music_query(clean)
-                    if clean_title:
-                        self.cog._pending_yt_voice.pop(self.guild_id, None)
-                        self._wake_windows.pop(user_id, None)
-                        self._lock_session(user_id, duration=35.0)
-                        await play_beep_sound(guild, "understood")
-                        await self._search_and_play_youtube(guild, clean_title, user_name, lang=pending_lang)
-                        return
-                    # Empty or unclear title: do not fall through to other commands
-                    return
-
-                # Waiting strictly for DA or NU ("sa astepte doar da sau nu, si sa nu caute alt ceva")
-                is_negative = bool(tokens & NEGATIVE_WORDS) or any(f" {p} " in padded for p in NEGATIVE_PHRASES)
-                if is_negative:
+                is_neg = bool(tokens & NEGATIVE_WORDS) or any(f" {p} " in padded for p in NEGATIVE_PHRASES) or "cancel" in clean
+                if is_neg:
                     self.cog._pending_yt_voice.pop(self.guild_id, None)
                     self._wake_windows.pop(user_id, None)
                     self._unlock_session()
                     await play_beep_sound(guild, "error")
-                    cancel_msg = "🚫 **[Garmin]** Căutare anulată." if is_ro else "🚫 **[Garmin]** Search cancelled."
-                    await speak_in_voice(guild, "Comandă anulată." if is_ro else "Cancelled.", lang=pending_lang)
-                    await self._notify(guild, cancel_msg)
+                    await speak_in_voice(guild, "Search cancelled.", lang="en")
+                    await self._notify(guild, "🚫 **[Garmin]** Search cancelled.")
                     return
 
-                is_affirmative = bool(tokens & AFFIRMATIVE_WORDS) or any(f" {p} " in padded for p in AFFIRMATIVE_PHRASES) or "youtube" in clean or "yt" in clean
-                if is_affirmative:
-                    target_q = pending["query"]
+                clean_title = _clean_music_query(clean)
+                if clean_title:
                     self.cog._pending_yt_voice.pop(self.guild_id, None)
                     self._wake_windows.pop(user_id, None)
                     self._lock_session(user_id, duration=35.0)
                     await play_beep_sound(guild, "understood")
-                    await self._search_and_play_youtube(guild, target_q, user_name, lang=pending_lang)
+                    await self._search_and_play_youtube(guild, clean_title, user_name, lang="en")
                     return
-
-                # Spoken words were NEITHER "da" nor "nu":
-                # DO NOT fall through to normal song search or commands! NEVER search for other words!
-                rem = pending.get("expires", 0.0) - time.time()
-                if rem > 0:
-                    self._lock_session(user_id, duration=max(15.0, rem))
-                    self._wake_windows[user_id] = now + max(15.0, rem)
-                    custom_words = await get_learned_wake_words(self.cog, self.guild_id)
-                    matched_wake_self, _, _ = _match_wake_word(clean, custom_words)
-                    if matched_wake_self:
-                        await play_beep_sound(guild, "listening")
-                        remind_speech = f"Răspunde doar cu da sau nu pentru piesa {pending['query']}." if is_ro else f"Please answer with yes or no for track {pending['query']}."
-                        await speak_in_voice(guild, remind_speech, lang=pending_lang)
                 return
 
-
-            # Check for Garmin Wake Word using permissive matcher + custom learned words + fuzzy Levenshtein
+            # 2. WAKE WORD DETECTION (Permissive matcher + custom learned words + fuzzy matching)
             custom_words = await get_learned_wake_words(self.cog, self.guild_id)
             matched_wake, cmd_part, wake_word = _match_wake_word(clean, custom_words)
 
             if matched_wake:
                 self._lock_session(user_id, duration=20.0)
-                # If matched a fuzzy variation, automatically learn it for future zero-latency matching!
                 if wake_word and len(wake_word) >= 3 and wake_word not in custom_words:
                     asyncio.create_task(add_learned_wake_word(self.cog, self.guild_id, wake_word))
 
                 if not cmd_part:
-                    # User only said "Garmin" (or "Hey Garmin", "Bă Garmin", "Ok Garmin", etc.) -> wake window 12s + listening beep + voice response
+                    # User only said "Garmin" / "Hey Garmin" -> open 12s wake window and greet with anime girl voice!
                     self._wake_windows[user_id] = now + 12.0
-                    self._lock_session(user_id, duration=15.0)
                     print(f"[JuiceVault Voice] Wake word '{wake_word}' activated by {user_name}. Waiting for command...")
                     await play_beep_sound(guild, "listening")
-                    greeting = f"Da, {user_name}? Ascult..." if is_ro else f"Yes, {user_name}? I'm listening..."
-                    await speak_in_voice(guild, greeting, lang=user_lang)
+                    greeting = f"Yes, {user_name}? I'm listening~"
+                    await speak_in_voice(guild, greeting, lang="en")
                     await self._notify(guild, f"🎤 **[Garmin]** {greeting} 🟢")
                     return
+
+                # User said "Garmin" + command in one single breath!
+                # If it's a song request and Groq / local AI is available, refine transcription with AI for 100% accuracy:
+                is_song_request = bool(re.search(r'\b(?:play|search|cauta|baga|pune|canta|listen|put\s+on)\b', cmd_part, re.I) or _KNOWN_EXTERNAL_ARTISTS_REGEX.search(cmd_part))
+                if is_song_request and (groq_key or _get_local_whisper_model()):
+                    ai_text, _ = await self._recognize_speech_ai(mono_16k, groq_key=groq_key)
+                    if ai_text:
+                        clean_ai = _normalize_speech(ai_text)
+                        m_wake, r_cmd, _ = _match_wake_word(clean_ai, custom_words)
+                        if m_wake and r_cmd:
+                            cmd_part = r_cmd
+                        elif not m_wake and clean_ai:
+                            cmd_part = clean_ai
+
                 clean_cmd = cmd_part
                 self._wake_windows.pop(user_id, None)
             else:
-                # Check if within active wake window from a previous greeting
-                if now < self._wake_windows.get(user_id, 0.0):
+                # Did this utterance happen within an active wake window?
+                if in_wake_window:
                     self._lock_session(user_id, duration=20.0)
                     clean_cmd = clean
                     self._wake_windows.pop(user_id, None)
                 else:
-                    # Utterance did NOT contain Garmin wake word and not in wake window -> ignore
-                    print(f"[JuiceVault Voice] Ignored utterance from {user_name} (no 'Garmin' wake word): '{clean}'")
+                    # Passive chatter between people in call! Discard with ZERO Groq tokens!
+                    print(f"[JuiceVault Voice] Passive chatter ignored from {user_name} (no 'Garmin' wake word, 0 Groq calls): '{clean}'")
                     return
 
-            print(f"[JuiceVault Voice Command] {user_name} -> Garmin command: '{clean_cmd}' (full: '{clean}') [lang: {user_lang}]")
+            print(f"[JuiceVault Voice Command] {user_name} -> Garmin command: '{clean_cmd}' (full: '{clean}')")
 
-            # PRECEDENCE 1: PREVIOUS / BACK (must evaluate before generic search!)
-            # Handles: "previous", "previous song", "preview song", "inapoi", "dinainte", "piesa dinainte", "anterioara", etc.
-            if re.search(r'\b(?:previous|prev|back|inapoi|dinainte|anterioara|piesa dinainte|melodia dinainte|piesa anterioara|melodia anterioara|preview|preview song|the previous|the last song|piesa trecuta)\b', clean_cmd, re.I):
+            # PRECEDENCE 1: PREVIOUS / BACK
+            if re.search(r'\b(?:previous|prev|back|inapoi|dinainte|anterioara|piesa dinainte|melodia dinainte|piesa anterioara|last\s+song|previous\s+song|go\s+back|play\s+previous)\b', clean_cmd, re.I):
                 hist = self.cog.history.get(self.guild_id, [])
                 if hist:
                     prev_t = hist.pop()
                     await play_chime_and_proceed(guild)
                     await self._play_track_now(guild, prev_t)
                     self._unlock_session()
+                    await speak_in_voice(guild, "Playing previous track.", lang="en")
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Previous track! ⏮️")
                 else:
                     await play_beep_sound(guild, "error")
                     self._unlock_session()
-                    no_prev_msg = "Nu există o piesă anterioară în istoric." if is_ro else "There is no previous track in history."
-                    await speak_in_voice(guild, no_prev_msg, lang=user_lang)
-                    await self._notify(guild, f"🎤 **[Garmin]** {user_name}: {no_prev_msg}")
+                    await speak_in_voice(guild, "There is no previous track in history.", lang="en")
+                    await self._notify(guild, f"🎤 **[Garmin]** {user_name}: No previous track in history.")
                 return
 
             # PRECEDENCE 2: SKIP / NEXT
-            # Handles: "skip", "skip this song", "next", "urmatoarea", "sari", "schimba", "da-i skip", "da skip la piesa", "the escape", "they skip", etc.
             skip_pattern = (
                 r'\b(?:skip|next|urmatoarea|sari|treci\s+peste|treci\s+la\s+urmatoarea|schimba|schimb-o|'
                 r'alta\s+piesa|alta\s+melodie|da-i\s+skip|dai\s+skip|da\s+skip|dă-i\s+skip|dă\s+skip|dăi\s+skip|'
@@ -1820,16 +1830,26 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 if any(w in clean_cmd for w in ("10", "ten", "zece")):
                     await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 10))
                     self._unlock_session()
+                    await speak_in_voice(guild, "Skipping 10 tracks!", lang="en")
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped 10 tracks! ⏩")
                 else:
                     await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 1))
                     self._unlock_session()
+                    await speak_in_voice(guild, "Skipping to the next song!", lang="en")
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped track! ⏭️")
                 return
 
-            # PRECEDENCE 3: SHUFFLE / RANDOM
-            # Handles: "shuffle", "amesteca", "amesteca piesele", "random", "play random song", "la intamplare", etc.
-            if re.search(r'\b(?:shuffle|amesteca|amesteca\s+piesele|amesteca\s+coada|random|mix|la intamplare|random song|piesa la intamplare)\b', clean_cmd, re.I):
+            # PRECEDENCE 3: RESTART / REPLAY
+            if re.search(r'\b(?:restart|restart\s+song|replay|start\s+over|play\s+again|from\s+the\s+beginning|beginning)\b', clean_cmd, re.I):
+                if hasattr(self.cog, "_request_seek"):
+                    await play_chime_and_proceed(guild, self.cog._request_seek(self.guild_id, target_position=0.0))
+                    self._unlock_session()
+                    await speak_in_voice(guild, "Restarting song from the beginning!", lang="en")
+                    await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Restarting from beginning! ⏪")
+                    return
+
+            # PRECEDENCE 4: SHUFFLE / RANDOM
+            if re.search(r'\b(?:shuffle|amesteca|amesteca\s+piesele|amesteca\s+coada|random|mix|la intamplare|random song|piesa la intamplare|shuffle\s+queue|shuffle\s+playlist)\b', clean_cmd, re.I):
                 q = self.cog.queues.get(self.guild_id, [])
                 if not q:
                     try:
@@ -1853,7 +1873,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     voice = guild.voice_client if guild else None
                     if voice and (voice.is_playing() or voice.is_paused()):
                         await play_chime_and_proceed(guild)
-                        await speak_in_voice(guild, "Am amestecat coada de redare!" if is_ro else "Queue shuffled!", lang=user_lang)
+                        await speak_in_voice(guild, "Shuffling the queue for you!", lang="en")
                         await self.cog._request_skip(self.guild_id, 1)
                     else:
                         if voice and voice.channel:
@@ -1864,7 +1884,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             self.cog.effects[self.guild_id] = "none"
                             self.cog.tasks[self.guild_id] = asyncio.create_task(self.cog._player(guild, voice.channel))
                         await play_chime_and_proceed(guild)
-                        await speak_in_voice(guild, "Pornesc redarea amestecată!" if is_ro else "Playing shuffled queue!", lang=user_lang)
+                        await speak_in_voice(guild, "Playing shuffled queue!", lang="en")
 
                     ui = self.bot.get_cog("JuiceVaultUI")
                     if ui:
@@ -1877,9 +1897,88 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self._unlock_session()
                 return
 
-            # PRECEDENCE 4: PAUSE / STOP
-            # Handles: "pause", "pauza", "stop", "opreste", "taci", "liniste", etc.
-            if re.search(r'\b(?:pause|pauza|stop|opreste|opreste-te|taci|taci din gura|liniste|shut up|hold)\b', clean_cmd, re.I):
+            # PRECEDENCE 5: LOOP / REPEAT
+            if re.search(r'\b(?:loop\s+song|repeat\s+song|loop\s+track|repeat\s+track|loop|repeat)\b', clean_cmd, re.I) and not any(w in clean_cmd for w in ("play", "search", "cauta", "baga")):
+                ui = self.bot.get_cog("JuiceVaultUI")
+                panel = ui.panel if ui and hasattr(ui, "panel") else None
+                cur = self.cog.current.get(self.guild_id)
+                if cur and panel:
+                    enabled = not panel.repeat_enabled.get(self.guild_id, False)
+                    panel.repeat_enabled[self.guild_id] = enabled
+                    panel.repeat_queued[self.guild_id] = False
+                    manual = self.cog.manual_queues.setdefault(self.guild_id, [])
+                    if enabled:
+                        if not any(t.get("_jv_repeat_copy") for t in manual):
+                            rep = dict(cur)
+                            rep.pop("_jv_seek_copy", None)
+                            rep.pop("_resume_position", None)
+                            rep.pop("_resume_was_playing", None)
+                            rep["_jv_repeat_copy"] = True
+                            manual.insert(0, rep)
+                        panel.repeat_queued[self.guild_id] = True
+                        rep_msg = "Repeat enabled for this track!"
+                    else:
+                        self.cog.manual_queues[self.guild_id] = [t for t in manual if not t.get("_jv_repeat_copy")]
+                        rep_msg = "Repeat disabled."
+
+                    await play_chime_and_proceed(guild)
+                    await speak_in_voice(guild, rep_msg, lang="en")
+                    if hasattr(panel, "update_panel"):
+                        asyncio.create_task(panel.update_panel(self.guild_id))
+                    self._unlock_session()
+                    await self._notify(guild, f"🔁 **[Garmin]** {user_name}: *\"{text}\"* ➔ {rep_msg}")
+                    return
+
+            # PRECEDENCE 6: VOLUME CONTROLS
+            vol_match = re.search(r'\b(?:volume|set\s+volume\s+to|vol)\s+(\d{1,3})\b', clean_cmd, re.I)
+            if vol_match or any(w in clean_cmd for w in ("volume up", "louder", "turn it up", "volume down", "quieter", "lower volume", "turn it down", "mute", "unmute")):
+                voice = guild.voice_client if guild else None
+                mixer = getattr(voice, "_jv_mixer", None) if voice else None
+                if mixer and hasattr(mixer, "set_volume"):
+                    cur_vol = int(mixer.get_volume() * 100)
+                    if vol_match:
+                        target_pct = max(0, min(150, int(vol_match.group(1))))
+                    elif any(w in clean_cmd for w in ("volume up", "louder", "turn it up")):
+                        target_pct = min(150, cur_vol + 15)
+                    elif any(w in clean_cmd for w in ("volume down", "quieter", "lower volume", "turn it down")):
+                        target_pct = max(0, cur_vol - 15)
+                    elif "unmute" in clean_cmd:
+                        target_pct = 100
+                    else:  # mute
+                        target_pct = 0
+
+                    mixer.set_volume(target_pct / 100.0)
+                    await play_chime_and_proceed(guild)
+                    vol_msg = "Muted playback." if target_pct == 0 else f"Volume set to {target_pct}%!"
+                    await speak_in_voice(guild, vol_msg, lang="en")
+                    self._unlock_session()
+                    await self._notify(guild, f"🔊 **[Garmin]** {user_name}: *\"{text}\"* ➔ {vol_msg}")
+                    return
+                else:
+                    self._unlock_session()
+                    await self._notify(guild, "⚠️ **[Garmin]** Volume control is not active.")
+                    return
+
+            # PRECEDENCE 7: NOW PLAYING / SONG INFO
+            if re.search(r'\b(?:what\s+song\s+is\s+this|what\'?s\s+playing|what\s+is\s+playing|current\s+song|current\s+track|song\s+info|now\s+playing)\b', clean_cmd, re.I):
+                cur = self.cog.current.get(self.guild_id)
+                if cur:
+                    title = cur.get("title") or cur.get("name") or "Untitled Track"
+                    artist = cur.get("artist") or "Juice WRLD"
+                    np_speech = f"Currently playing {title} by {artist}."
+                    await play_chime_and_proceed(guild)
+                    await speak_in_voice(guild, np_speech, lang="en")
+                    self._unlock_session()
+                    await self._notify(guild, f"🎵 **[Garmin]** Currently playing: **{title}** — *{artist}* 🎶")
+                else:
+                    await play_beep_sound(guild, "error")
+                    await speak_in_voice(guild, "No track is playing right now.", lang="en")
+                    self._unlock_session()
+                    await self._notify(guild, "ℹ️ **[Garmin]** No track is currently playing.")
+                return
+
+            # PRECEDENCE 8: PAUSE / STOP
+            if re.search(r'\b(?:pause|pauza|stop|opreste|opreste-te|taci|taci din gura|liniste|shut up|hold|freeze|quiet)\b', clean_cmd, re.I):
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_playing():
                     await play_chime_and_proceed(guild)
@@ -1888,28 +1987,14 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     else:
                         voice.pause()
                     self._unlock_session()
+                    await speak_in_voice(guild, "Paused playback!", lang="en")
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Paused! ⏸️")
                 else:
                     self._unlock_session()
                 return
 
-            # PRECEDENCE 5: LEAVE / DISCONNECT
-            # Handles: "leave", "pleaca", "iesi", "deconecteaza", "disconnect", "exit", etc.
-            if re.search(r'\b(?:leave|pleaca|iesi|deconecteaza|deconecteaza-te|disconnect|exit|go away|bye)\b', clean_cmd, re.I):
-                await play_chime_and_proceed(guild)
-                await self.cog.config.guild(guild).enabled.set(False)
-                try:
-                    await self.cog.config.guild(guild).saved_session.set(None)
-                    getattr(self.bot, "_jv_data", {}).get("saved_sessions", {}).pop(self.guild_id, None)
-                except Exception:
-                    pass
-                await self.cog._stop(self.guild_id, disconnect=True)
-                self._unlock_session()
-                await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Deconectat din voice! 👋" if is_ro else f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Left voice channel! 👋")
-                return
-
-            # PRECEDENCE 6: RESUME / PLAY (bare play command, e.g. "Garmin bagă", "bă Garmin bagă")
-            if clean_cmd.strip() in {"play", "resume", "continua", "porneste", "da drumul", "baga"} or clean_cmd.strip() == "play":
+            # PRECEDENCE 9: RESUME / PLAY
+            if clean_cmd.strip() in {"play", "resume", "continua", "porneste", "da drumul", "baga", "unpause"} or clean_cmd.strip() == "play":
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_paused():
                     await play_chime_and_proceed(guild)
@@ -1918,6 +2003,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     else:
                         voice.resume()
                     self._unlock_session()
+                    await speak_in_voice(guild, "Resuming music!", lang="en")
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Resumed playback! ▶️")
                     return
                 elif voice and not voice.is_playing() and (self.guild_id not in self.cog.tasks or self.cog.tasks[self.guild_id].done()):
@@ -1936,12 +2022,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         await play_chime_and_proceed(guild)
                         self.cog.tasks[self.guild_id] = asyncio.create_task(self.cog._player(guild, voice.channel))
                         self._unlock_session()
-                        await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Pornesc redarea! ▶️" if is_ro else f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Started playback! ▶️")
+                        await speak_in_voice(guild, "Started playback!", lang="en")
+                        await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Started playback! ▶️")
                     else:
                         self._unlock_session()
                     return
                 else:
-                    # Voice is active and playing: user said "bă Garmin bagă" -> ask what to play!
+                    # Voice is active and playing: user said bare "Garmin play" -> ask what to play!
                     self._lock_session(user_id, duration=25.0)
                     self._wake_windows[user_id] = now + 15.0
                     if not hasattr(self.cog, "_pending_yt_voice"):
@@ -1949,35 +2036,34 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self.cog._pending_yt_voice[self.guild_id] = {
                         "user_id": user_id,
                         "query": "",
-                        "lang": user_lang,
+                        "lang": "en",
                         "expires": time.time() + 20.0,
                         "user_name": user_name,
                         "awaiting_title": True,
                     }
-                    prompt_speech = "Ce piesă vrei să bag?" if is_ro else "What track would you like me to play?"
-                    await speak_in_voice(guild, prompt_speech, lang=user_lang)
+                    prompt_speech = "What track would you like me to play?"
+                    await speak_in_voice(guild, prompt_speech, lang="en")
                     await play_beep_sound(guild, "listening")
                     self._buffers.pop(user_id, None)
                     self._last_speech.pop(user_id, None)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: {prompt_speech} ⏳")
                     return
 
-            # PRECEDENCE 7: SEEK / DERULARE 10s
-            if any(w in clean_cmd for w in ("inainte 10", "forward 10", "skip 10s", "10 secunde inainte")):
+            # PRECEDENCE 10: SEEK / FORWARD / REWIND 10s
+            if any(w in clean_cmd for w in ("inainte 10", "forward 10", "skip 10s", "10 secunde inainte", "fast forward")):
                 if hasattr(self.cog, "_request_seek"):
                     await play_chime_and_proceed(guild, self.cog._request_seek(self.guild_id, delta=10.0))
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Forward +10s ⏩")
                     return
-            elif any(w in clean_cmd for w in ("inapoi 10", "back 10", "rewind 10", "10 secunde inapoi")):
+            elif any(w in clean_cmd for w in ("inapoi 10", "back 10", "rewind 10", "10 secunde inapoi", "rewind")):
                 if hasattr(self.cog, "_request_seek"):
                     await play_chime_and_proceed(guild, self.cog._request_seek(self.guild_id, delta=-10.0))
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Rewind -10s ⏪")
                     return
 
-            # PRECEDENCE 8A: PLAY FROM FAVORITES
-            # Handles: "play my favorites", "baga o piesa favorita", "pune o piesa din favorite", "play a favorite song", etc.
+            # PRECEDENCE 11A: PLAY FROM FAVORITES
             is_play_fav = bool(re.search(
                 r'\b(?:play\s+my\s+favorites|play\s+my\s+favorite\s+song|play\s+my\s+favorite|play\s+a\s+favorite\s+song|play\s+a\s+favorite|play\s+favorite\s+song|play\s+favorite|play\s+favorites|baga\s+o\s+piesa\s+favorita|baga\s+o\s+piesa\s+din\s+favorite|baga\s+din\s+favorite|baga\s+favoritele\s+mele|pune\s+o\s+piesa\s+favorita|pune\s+o\s+piesa\s+din\s+favorite|pune\s+favoritele\s+mele|baga\s+o\s+melodie\s+preferata|pune\s+o\s+melodie\s+preferata|baga\s+melodiile\s+mele\s+preferate|pune\s+preferatele\s+mele|da\s+drumul\s+la\s+favorite|baga\s+piesele\s+mele\s+favorite|baga\s+o\s+piesa\s+de\s+la\s+favorite|pune\s+o\s+piesa\s+din\s+preferatele\s+mele)\b',
                 clean_cmd,
@@ -1987,17 +2073,16 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 and any(f in clean_cmd for f in ("favorite", "favorita", "preferata", "preferate", "favorit", "favorites"))
                 and not any(s in clean_cmd for s in ("salveaza", "adauga", "save", "add", "baga la", "pune la"))
             )
-
             if is_play_fav:
                 uid_str = str(user_id)
                 bot_favs = getattr(self.bot, "_jv_data", {}).get("favorites", {})
                 user_list = bot_favs.get(uid_str) or bot_favs.get(user_name.lower()) or bot_favs.get("default", [])
 
                 if not user_list:
-                    no_favs_speech = "Nu ai nicio piesă salvată la favorite încă. Poți spune Garmin, salvează piesa asta când asculți o piesă!" if is_ro else "You don't have any favorite songs saved yet. Say Garmin, favorite this song while listening to a track!"
+                    no_favs_speech = "You don't have any favorite songs saved yet. Say Garmin, save this song while listening to a track!"
                     await play_beep_sound(guild, "error")
-                    await speak_in_voice(guild, no_favs_speech, lang=user_lang)
-                    await self._notify(guild, f"💔 **[Garmin]** {user_name}: Nu ai nicio piesă în favorite. Folosește *„Garmin, salvează piesa asta”* când asculți o piesă!")
+                    await speak_in_voice(guild, no_favs_speech, lang="en")
+                    await self._notify(guild, f"💔 **[Garmin]** {user_name}: You don't have any favorites. Say *„Garmin, save this song”* while listening to a track!")
                     self._unlock_session()
                     return
 
@@ -2006,16 +2091,15 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 track_name = fav_track.get("title") or "Favorite Track"
                 artist_name = fav_track.get("artist") or "Juice WRLD"
 
-                play_speech = f"Redau din favoritele tale: {track_name}." if is_ro else f"Playing from your favorites: {track_name}."
+                play_speech = f"Playing from your favorites: {track_name}."
                 await play_beep_sound(guild, "understood")
-                await speak_in_voice(guild, play_speech, lang=user_lang)
+                await speak_in_voice(guild, play_speech, lang="en")
                 await self._play_track_now(guild, dict(fav_track))
                 self._unlock_session()
-                await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Redau din favorite: **{track_name}** — *{artist_name}* 🎶")
+                await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Playing favorite: **{track_name}** — *{artist_name}* 🎶")
                 return
 
-            # PRECEDENCE 8B: SAVE / FAVORITE CURRENT SONG
-            # Handles: "save this song", "favorite this song", "salveaza piesa asta", "adauga la favorite", "pune la favorite", etc.
+            # PRECEDENCE 11B: SAVE / FAVORITE CURRENT SONG
             is_save_fav = bool(re.search(
                 r'\b(?:save\s+this\s+song|save\s+song|save\s+this|save\s+track|favorite\s+this\s+song|favorite\s+this|favorite\s+song|favorite\s+track|add\s+to\s+favorites|add\s+to\s+favorite|love\s+this\s+song|like\s+this\s+song|salveaza\s+piesa\s+asta|salveaza\s+piesa|salveaza\s+melodia|salveaz-o|adauga\s+la\s+favorite|pune\s+la\s+favorite|baga\s+la\s+favorite|adauga\s+la\s+preferate|pune\s+la\s+preferate|baga\s+la\s+preferate|favoriteaza|imi\s+place\s+piesa|imi\s+place\s+melodia)\b',
                 clean_cmd,
@@ -2024,13 +2108,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 any(f in clean_cmd for f in ("favorite", "fav", "favorit", "like", "salveaza", "save"))
                 and any(s in clean_cmd for s in ("song", "track", "this", "piesa", "melodia", "asta", "o"))
             )
-
             if is_save_fav:
                 cur = self.cog.current.get(self.guild_id)
                 if not cur:
-                    no_music_msg = "Nu cântă nicio piesă în acest moment." if is_ro else "No track is playing right now."
+                    no_music_msg = "No track is playing right now."
                     await play_beep_sound(guild, "error")
-                    await speak_in_voice(guild, no_music_msg, lang=user_lang)
+                    await speak_in_voice(guild, no_music_msg, lang="en")
                     await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
                     self._unlock_session()
                     return
@@ -2051,12 +2134,11 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                      or (track_title and str(t.get("title", "")).lower() == track_title.lower())),
                     None
                 )
-
                 if existing_idx is not None:
-                    already_msg = f"Piesa {track_title} este deja în favoritele tale." if is_ro else f"{track_title} is already in your favorites."
+                    already_msg = f"{track_title} is already in your favorites!"
                     await play_beep_sound(guild, "understood")
-                    await speak_in_voice(guild, already_msg, lang=user_lang)
-                    await self._notify(guild, f"❤️ **[Garmin]** {user_name}: Piesa **{track_title}** este deja în favoritele tale! ({len(user_list)} salvate)")
+                    await speak_in_voice(guild, already_msg, lang="en")
+                    await self._notify(guild, f"❤️ **[Garmin]** {user_name}: **{track_title}** is already in your favorites! ({len(user_list)} saved)")
                     self._unlock_session()
                     return
 
@@ -2072,11 +2154,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     "added_at": int(time.time()),
                 }
                 user_list.insert(0, clean_fav)
-
-                # Mirror under display_name for Web Remote convenience
                 bot_favs[user_name.lower()] = user_list
-
-                # Persist to Config
                 if hasattr(self.cog, "web_remote") and self.cog.web_remote:
                     self.cog.web_remote._user_favorites = bot_favs
                     try:
@@ -2085,20 +2163,41 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         pass
 
                 count = len(user_list)
-                success_speech = f"Am adăugat piesa {track_title} la favoritele tale!" if is_ro else f"Added {track_title} to your favorites!"
+                success_speech = f"Added {track_title} to your favorites!"
                 await play_beep_sound(guild, "understood")
-                await speak_in_voice(guild, success_speech, lang=user_lang)
-                await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Am salvat **{track_title}** de {track_artist} la favorite! ({count} salvate) ⭐")
+                await speak_in_voice(guild, success_speech, lang="en")
+                await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Saved **{track_title}** by {track_artist} to favorites! ({count} saved) ⭐")
                 self._unlock_session()
                 return
 
-            # PRECEDENCE 9: DIRECT YOUTUBE SEARCH & PLAY
-            # Handles: "cauta pe youtube yeat", "baga dupa youtube drake", "play drake on youtube", "baga muzica de pe youtube yeat", etc.
+            # PRECEDENCE 12: LEAVE / DISCONNECT
+            if re.search(r'\b(?:leave|pleaca|iesi|deconecteaza|deconecteaza-te|disconnect|exit|go away|bye|goodbye)\b', clean_cmd, re.I):
+                await play_chime_and_proceed(guild)
+                await speak_in_voice(guild, "Goodbye! Have a great day~", lang="en")
+                await self.cog.config.guild(guild).enabled.set(False)
+                try:
+                    await self.cog.config.guild(guild).saved_session.set(None)
+                    getattr(self.bot, "_jv_data", {}).get("saved_sessions", {}).pop(self.guild_id, None)
+                except Exception:
+                    pass
+                await self.cog._stop(self.guild_id, disconnect=True)
+                self._unlock_session()
+                await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Left voice channel! 👋")
+                return
+
+            # PRECEDENCE 13: HELP / COMMANDS
+            if clean_cmd.strip() in {"help", "commands", "what can you do", "what can i say", "help me"}:
+                help_speech = "You can ask me to play any song or artist, skip, repeat, shuffle, adjust volume, or save favorites!"
+                await play_chime_and_proceed(guild)
+                await speak_in_voice(guild, help_speech, lang="en")
+                self._unlock_session()
+                await self._notify(guild, "💡 **[Garmin]** **Voice Commands:**\n• *„Garmin play <song or artist>”* (Juice WRLD vault or YouTube)\n• *„Garmin skip”* / *„Garmin skip 10”* / *„Garmin previous”*\n• *„Garmin pause”* / *„Garmin resume”*\n• *„Garmin shuffle”* / *„Garmin loop”* / *„Garmin restart”*\n• *„Garmin volume <1-100>”* / *„Garmin louder”* / *„Garmin mute”*\n• *„Garmin what's playing?”* / *„Garmin save this song”*")
+                return
+
+            # PRECEDENCE 14: DIRECT YOUTUBE SEARCH & PLAY
             if "youtube" in clean_cmd or " yt" in clean_cmd or clean_cmd.startswith("yt "):
                 yt_q = _clean_music_query(clean_cmd)
-
                 if not yt_q:
-                    # User only said "Garmin bagă după YouTube" without a song title
                     self._lock_session(user_id, duration=25.0)
                     self._wake_windows[user_id] = now + 15.0
                     if not hasattr(self.cog, "_pending_yt_voice"):
@@ -2106,13 +2205,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self.cog._pending_yt_voice[self.guild_id] = {
                         "user_id": user_id,
                         "query": "",
-                        "lang": user_lang,
+                        "lang": "en",
                         "expires": time.time() + 20.0,
                         "user_name": user_name,
                         "awaiting_title": True,
                     }
-                    prompt_speech = "Ce piesă vrei să caut pe YouTube?" if is_ro else "What track would you like me to search on YouTube?"
-                    await speak_in_voice(guild, prompt_speech, lang=user_lang)
+                    prompt_speech = "What track would you like me to search on YouTube?"
+                    await speak_in_voice(guild, prompt_speech, lang="en")
                     await play_beep_sound(guild, "listening")
                     self._buffers.pop(user_id, None)
                     self._last_speech.pop(user_id, None)
@@ -2121,13 +2220,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                 print(f"[JuiceVault Voice] Direct YouTube request from {user_name}: '{yt_q}'")
                 self._lock_session(user_id, duration=35.0)
-                await self._search_and_play_youtube(guild, yt_q, user_name, lang=user_lang)
+                await self._search_and_play_youtube(guild, yt_q, user_name, lang="en")
                 return
 
-            # PRECEDENCE 10: GENERIC SONG SEARCH & PLAY
-            # Handles: "cauta drake", "cauta yeat", "baga 6ix9ine", "play robbery", or direct artist name "Garmin Yeat"
+            # PRECEDENCE 15: GENERIC SONG SEARCH & PLAY
             play_match = re.match(
-                r'^(?:canta|pune|baga|play|asculta|cauta|gaseste|search|reda|da-i play la|dai play la|da play la|da-i drumul la|dai drumul la)\s+(?:piesa|melodia|melodie|track|song)?\s*(?:cu|de\s+la|by)?\s*(.+)$',
+                r'^(?:canta|pune|baga|play|asculta|cauta|gaseste|search|reda|da-i play la|dai play la|da play la|da-i drumul la|dai drumul la|put\s+on|listen\s+to)\s+(?:piesa|melodia|melodie|track|song)?\s*(?:cu|de\s+la|by)?\s*(.+)$',
                 clean_cmd,
                 re.IGNORECASE
             )
@@ -2151,7 +2249,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             await self._play_track_now(guild, learned_track)
                             self._unlock_session()
                             track_name = learned_track.get("title") or clean_q
-                            await self._notify(guild, f"🧠 **[Garmin]** Am reținut preferința ta: **{track_name}** 🎶" if is_ro else f"🧠 **[Garmin]** Playing learned song: **{track_name}** 🎶")
+                            await self._notify(guild, f"🧠 **[Garmin]** Playing learned song: **{track_name}** 🎶")
                             return
 
                         # Check if query matches known external artist directly
@@ -2168,14 +2266,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             await self._play_track_now(guild, track)
                             self._unlock_session()
                             track_name = self.cog._track_text(track)
-                            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Redau: **{track_name}** 🎶" if is_ro else f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Playing: **{track_name}** 🎶")
+                            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Playing: **{track_name}** 🎶")
                             return
                         else:
                             # 3. Not found in JuiceVault archive -> Direct YouTube playback!
-                            # Directly announce and search YouTube without stopping playback or requiring awkward voice confirmation!
                             print(f"[JuiceVault Voice] Track '{clean_q}' not in archive (external={is_external_artist}) -> Direct YouTube playback")
                             self._lock_session(user_id, duration=35.0)
-                            await self._search_and_play_youtube(guild, clean_q, user_name, lang=user_lang)
+                            await self._search_and_play_youtube(guild, clean_q, user_name, lang="en")
                             return
                 except Exception as e:
                     log.warning(f"[Garmin Voice Search] Error searching: {e}")
@@ -2183,7 +2280,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             # Feedback when recognized speech was addressed to Garmin but didn't match known command
             await play_beep_sound(guild, "error")
             self._unlock_session()
-            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Comandă nerecunoscută.")
+            await speak_in_voice(guild, "Command not recognized.", lang="en")
+            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Command not recognized.")
 
         def _downsample_to_16k_mono(self, pcm_bytes: bytes) -> bytes:
             """Downsample Discord 48kHz 16-bit stereo PCM to 16kHz mono PCM using SIMD/NumPy when available."""
@@ -2196,113 +2294,73 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             a.frombytes(pcm_bytes)
             return a[0::6].tobytes()
 
-        async def _recognize_speech_parallel(self, pcm_bytes: bytes, preferred_lang: str = None) -> tuple:
-            """Convert Discord 48kHz stereo PCM to 16kHz mono PCM in memory, then concurrently
-            query both ro-RO and en-US Google STT using _VOICE_EXECUTOR.
-            Eliminates sequential network round-trips and utilizes multi-core CPU threading."""
-            try:
-                mono_16k = self._downsample_to_16k_mono(pcm_bytes)
-            except Exception as e:
-                print(f"[JuiceVault Voice] Audio conversion error: {e}")
-                return None, "ro-RO"
-
-            pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
-            is_pending = bool(pending and time.time() < pending.get("expires", 0.0))
-            awaiting_title = bool(pending and pending.get("awaiting_title"))
-            pending_lang = pending.get("lang") if is_pending else None
-
-            # Lower audio length check for short single-syllable answers ("da", "nu", "yes", "no")
-            min_mono = 600 if is_pending else 1800
-            if not mono_16k or len(mono_16k) < min_mono:
-                return None, "ro-RO"
-
-            # 1. Primary: Groq Cloud Whisper Large v3 Turbo (if API key is configured)
-            groq_key = await _get_groq_api_key(self.cog)
-            if groq_key:
-                groq_prompt = None
-                if is_pending:
-                    groq_prompt = f"confirmare {'da' if pending_lang == 'ro' else 'yes'}, refuz {'nu' if pending_lang == 'ro' else 'no'}"
-                groq_text, groq_lang = await _recognize_speech_groq(mono_16k, groq_key, prompt=groq_prompt)
-                if groq_text:
-                    print(f"[JuiceVault Voice Groq] ⚡ Whisper Large v3 Turbo ({groq_lang}): '{groq_text}'")
-                    return groq_text, groq_lang
-                else:
-                    print("[JuiceVault Voice Groq] Whisper query returned empty or failed -> Falling back to Google STT")
-
+        async def _recognize_speech_google(self, mono_16k: bytes) -> tuple:
+            """Stage 1: Completely FREE, unlimited parallel Google STT.
+            Used for passive background listening and wake-word verification.
+            Consumes ZERO Groq API quota or tokens!"""
             audio_data = sr.AudioData(mono_16k, 16000, 2)
             custom_words = _learned_wake_words_cache.get(self.guild_id, set())
 
-            control_words = {
-                "skip", "next", "previous", "prev", "back", "pause", "stop", "resume",
-                "play", "shuffle", "random", "repeat", "favorite", "like", "youtube", "yt",
-                "urmatoarea", "sari", "schimba", "inapoi", "dinainte", "anterioara",
-                "pauza", "opreste", "taci", "continua", "porneste", "amesteca", "cauta",
-                "baga", "pune", "canta", "da", "nu", "lasa", "anuleaza", "salveaza",
-                "preferata", "preferate", "favoriteaza", "favorit", "save",
-                "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "nah", "nope", "dap", "mda",
-                "yeat", "yet", "ieat", "yeet", "drake", "carti", "karti", "travis", "breathe",
-                "quavo", "cuavo", "kwavo", "uzi", "gunna", "future", "metro", "trippie",
-                "chief", "savage", "ken", "carson", "don", "toliver",
-                "escape", "scape", "dai", "amesteca",
-                "muzica", "melodia", "melodie", "piesa", "track", "song", "music"
-            }
-
-            def _query_single_lang(lang: str):
+            def _query(lang: str):
                 try:
-                    res = self._recognizer.recognize_google(audio_data, language=lang)
-                    return lang, res
-                except sr.UnknownValueError:
-                    return lang, None
-                except sr.RequestError as exc:
-                    print(f"[JuiceVault Voice] Google STT network error ({lang}): {exc}")
-                    return lang, None
-                except Exception as exc:
-                    print(f"[JuiceVault Voice] Google STT exception ({lang}): {type(exc).__name__}: {exc}")
+                    return lang, self._recognizer.recognize_google(audio_data, language=lang)
+                except Exception:
                     return lang, None
 
             loop = asyncio.get_running_loop()
-
-            # Concurrently dispatch both ro-RO and en-US queries to the thread pool
-            fut_ro = loop.run_in_executor(_VOICE_EXECUTOR, _query_single_lang, "ro-RO")
-            fut_en = loop.run_in_executor(_VOICE_EXECUTOR, _query_single_lang, "en-US")
-
-            results = await asyncio.gather(fut_ro, fut_en, return_exceptions=True)
+            # Query primarily en-US, with ro-RO in parallel to support foreign accents
+            fut_en = loop.run_in_executor(_VOICE_EXECUTOR, _query, "en-US")
+            fut_ro = loop.run_in_executor(_VOICE_EXECUTOR, _query, "ro-RO")
+            res_en, res_ro = await asyncio.gather(fut_en, fut_ro, return_exceptions=True)
 
             candidates = []
-            for item in results:
-                if isinstance(item, tuple) and len(item) == 2:
-                    lang, res = item
-                    if res:
-                        print(f"[JuiceVault Voice] Google STT parallel recognized ({lang}): '{res}'")
-                        clean = _normalize_speech(res)
-                        score = 0
-                        matched_wake, _, _ = _match_wake_word(clean, custom_words)
-                        if matched_wake:
-                            score += 200
-                        tokens = set(re.findall(r'[a-z0-9]+', clean))
-                        score += len(tokens & control_words) * 30
-                        score += min(len(clean), 25)
-
-                        if is_pending and not awaiting_title:
-                            padded = f" {clean} "
-                            is_aff = bool(tokens & AFFIRMATIVE_WORDS) or any(f" {p} " in padded for p in AFFIRMATIVE_PHRASES)
-                            is_neg = bool(tokens & NEGATIVE_WORDS) or any(f" {p} " in padded for p in NEGATIVE_PHRASES)
-                            if is_aff or is_neg:
-                                score += 500
-                            if pending_lang and lang.startswith(pending_lang):
-                                score += 150
-
-                        if preferred_lang and lang.startswith(preferred_lang):
-                            score += 15
-                        candidates.append((score, res, lang))
+            for item in (res_en, res_ro):
+                if isinstance(item, tuple) and item[1]:
+                    l, txt = item
+                    score = 10 if l == "en-US" else 5
+                    clean = _normalize_speech(txt)
+                    matched_wake, _, _ = _match_wake_word(clean, custom_words)
+                    if matched_wake:
+                        score += 100
+                    candidates.append((score, txt, "en-US"))
 
             if not candidates:
-                return None, "ro-RO"
-
-            # Pick highest scoring candidate
+                return None, "en-US"
             candidates.sort(key=lambda x: x[0], reverse=True)
-            best = candidates[0]
-            return best[1], best[2]
+            return candidates[0][1], "en-US"
+
+        async def _recognize_speech_ai(self, mono_16k: bytes, groq_key: str = None, prompt: str = None) -> tuple:
+            """Stage 2: High-accuracy active STT using local fast-whisper (CPU/RAM) or Groq Whisper Large v3 Turbo.
+            Called ONLY when a user actively addresses Garmin or issues a command!"""
+            # 1. Local fast-whisper if available (0 API calls, 0 network, runs on CPU/RAM)
+            local_model = _get_local_whisper_model()
+            if local_model:
+                try:
+                    import io
+                    wav_io = io.BytesIO(_pcm16_to_wav_bytes(mono_16k, sample_rate=16000, channels=1))
+                    segments, info = await asyncio.to_thread(local_model.transcribe, wav_io, beam_size=1, language="en")
+                    text = " ".join(s.text for s in segments).strip()
+                    if text:
+                        print(f"[JuiceVault Voice Local Whisper] ⚡ CPU: '{text}'")
+                        return text, "en-US"
+                except Exception as exc:
+                    print(f"[JuiceVault Voice Local Whisper] Error: {exc}")
+
+            # 2. Groq Cloud Whisper Large v3 Turbo (~60ms ultra-low latency)
+            if groq_key:
+                groq_text, groq_lang = await _recognize_speech_groq(mono_16k, groq_key, prompt=prompt)
+                if groq_text:
+                    print(f"[JuiceVault Voice Groq] ⚡ Whisper Large v3 Turbo: '{groq_text}'")
+                    return groq_text, "en-US"
+
+            # 3. Fallback to Google STT
+            return await self._recognize_speech_google(mono_16k)
+
+        async def _recognize_speech_parallel(self, pcm_bytes: bytes, preferred_lang: str = None) -> tuple:
+            """Backward compatibility wrapper."""
+            mono_16k = self._downsample_to_16k_mono(pcm_bytes)
+            groq_key = await _get_groq_api_key(self.cog)
+            return await self._recognize_speech_ai(mono_16k, groq_key=groq_key)
 
         def _recognize_speech_blocking(self, pcm_bytes):
             """Legacy fallback wrapper."""
