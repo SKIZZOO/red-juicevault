@@ -1364,7 +1364,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if re.search(r'\b(?:leave|pleaca|iesi|deconecteaza|deconecteaza-te|disconnect|exit|go away|bye)\b', clean_cmd, re.I):
                 await play_chime_and_proceed(guild)
                 await self.cog.config.guild(guild).enabled.set(False)
-                await self.cog._stop(self.guild_id)
+                try:
+                    await self.cog.config.guild(guild).saved_session.set(None)
+                    getattr(self.bot, "_jv_data", {}).get("saved_sessions", {}).pop(self.guild_id, None)
+                except Exception:
+                    pass
+                await self.cog._stop(self.guild_id, disconnect=True)
                 self._unlock_session()
                 await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Deconectat din voice! 👋" if is_ro else f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Left voice channel! 👋")
                 return

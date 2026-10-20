@@ -1387,7 +1387,12 @@ class JuiceVaultWebRemote:
                     main.manual_queues[gid] = [t for t in main.manual_queues.get(gid, []) if not t.get("_jv_repeat_copy")]
         elif action_name == "stop":
             await main.config.guild(guild).enabled.set(False)
-            await main._stop(gid)
+            try:
+                await main.config.guild(guild).saved_session.set(None)
+                getattr(self.bot, "_jv_data", {}).get("saved_sessions", {}).pop(gid, None)
+            except Exception:
+                pass
+            await main._stop(gid, disconnect=True)
             if ui:
                 ui.history[gid] = []
                 ui.repeat_enabled[gid] = False

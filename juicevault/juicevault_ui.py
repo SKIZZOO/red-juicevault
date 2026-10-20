@@ -180,10 +180,18 @@ class JuiceVaultPanelView(discord.ui.View):
         await interaction.followup.send("🔁 Repeat enabled — the current track will play again." if enabled else "🔁 Repeat disabled.", ephemeral=True); await self.panel.update_panel(self.guild_id)
 
     async def _stop(self, interaction):
-        await interaction.response.defer(); cog = self._cog()
+        await interaction.response.defer()
+        cog = self._cog()
         if cog is None:
-            await interaction.followup.send("JuiceVault is not loaded.", ephemeral=True); return
-        await cog.config.guild(interaction.guild).enabled.set(False); await cog._stop(self.guild_id)
+            await interaction.followup.send("JuiceVault is not loaded.", ephemeral=True)
+            return
+        await cog.config.guild(interaction.guild).enabled.set(False)
+        try:
+            await cog.config.guild(interaction.guild).saved_session.set(None)
+            getattr(self.panel.bot, "_jv_data", {}).get("saved_sessions", {}).pop(self.guild_id, None)
+        except Exception:
+            pass
+        await cog._stop(self.guild_id, disconnect=True)
         self.panel.history[self.guild_id] = []; self.panel.repeat_enabled[self.guild_id] = False; self.panel.repeat_queued[self.guild_id] = False
         self.panel.last_seen_current[self.guild_id] = None; self.panel.last_track_snapshot[self.guild_id] = None; self.panel.last_track_object[self.guild_id] = None
         await self.panel.update_panel(self.guild_id); await interaction.followup.send("⏹️ Playback stopped.", ephemeral=True)

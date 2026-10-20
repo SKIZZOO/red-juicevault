@@ -66,6 +66,7 @@ class JuiceVault(commands.Cog):
             voice_commands_enabled=True,
             learned_wake_words=[],
             learned_song_queries={},
+            saved_session=None,
         )
         self.session = None
         self.tasks = {}
@@ -123,25 +124,43 @@ class JuiceVault(commands.Cog):
             self.restore_task = None
         self._cleanup_prefetch()
 
-        # Preserve active playback sessions on self.bot._jv_data across cog updates & reloads
+        # Preserve active playback sessions across cog updates, reloads, and bot restarts
         if not hasattr(self.bot, "_jv_data"):
             self.bot._jv_data = {}
         saved_sessions = self.bot._jv_data.setdefault("saved_sessions", {})
+        preserved_files = self.bot._jv_data.setdefault("preserved_files", set())
 
         for gid in list(self.tasks):
             try:
                 guild = self.bot.get_guild(gid)
                 voice = guild.voice_client if guild else None
                 cur_track = self.current.get(gid)
-                cur_pos = self.play_positions.get(gid, 0.0)
+                # Accurately compute dynamic elapsed playback position
+                cur_pos = self.get_position(gid)
                 res_track = None
                 if cur_track:
                     res_track = dict(cur_track)
                     res_track["_resume_position"] = cur_pos
                     res_track["_resume_was_playing"] = bool(voice and (voice.is_playing() or not voice.is_paused()))
+                    # Preserve local cached audio file so resume doesn't need to re-download
+                    cur_file = self.current_files.get(gid)
+                    if cur_file and os.path.isfile(cur_file):
+                        res_track["_cached_file"] = cur_file
+                        self._preserved_files.add(cur_file)
+                        preserved_files.add(cur_file)
 
-                saved_sessions[gid] = {
-                    "channel_id": voice.channel.id if (voice and voice.channel) else None,
+                # Determine target voice channel
+                target_chid = None
+                if voice and voice.channel:
+                    target_chid = voice.channel.id
+                if not target_chid and guild:
+                    try:
+                        target_chid = await self.config.guild(guild).channel_id()
+                    except Exception:
+                        pass
+
+                session_dict = {
+                    "channel_id": target_chid,
                     "current_track": res_track,
                     "queue": list(self.queues.get(gid, [])),
                     "manual_queue": list(self.manual_queues.get(gid, [])),
@@ -151,12 +170,50 @@ class JuiceVault(commands.Cog):
                     "history": list(self.history.get(gid, [])),
                     "saved_at": time.time(),
                 }
+                saved_sessions[gid] = session_dict
+
+                # Also persist to config so cold bot restarts also resume!
+                if guild:
+                    try:
+                        await self.config.guild(guild).enabled.set(True)
+                        if target_chid:
+                            await self.config.guild(guild).channel_id.set(target_chid)
+                        if res_track:
+                            clean_t = self._clean_track_for_config(res_track)
+                            await self.config.guild(guild).last_track.set(clean_t)
+                            await self.config.guild(guild).last_position.set(float(cur_pos))
+                        clean_session = {
+                            "channel_id": target_chid,
+                            "current_track": self._clean_track_for_config(res_track) if res_track else None,
+                            "queue": [self._clean_track_for_config(t) for t in self.queues.get(gid, []) if isinstance(t, dict)],
+                            "manual_queue": [self._clean_track_for_config(t) for t in self.manual_queues.get(gid, []) if isinstance(t, dict)],
+                            "loop": session_dict["loop"],
+                            "effects": session_dict["effects"],
+                            "position": float(cur_pos),
+                            "history": [self._clean_track_for_config(t) for t in self.history.get(gid, []) if isinstance(t, dict)],
+                            "saved_at": session_dict["saved_at"],
+                        }
+                        await self.config.guild(guild).saved_session.set(clean_session)
+                    except Exception as cfg_err:
+                        print(f"[JuiceVault] Error saving session to config for guild {gid}: {cfg_err}")
+
+                # Clean up voice recognition sink on this voice client so the new cog can attach cleanly
+                try:
+                    from .voice_recognition import _active_sinks
+                    sink = _active_sinks.pop(gid, None)
+                    if sink and hasattr(sink, "cleanup"):
+                        sink.cleanup()
+                    if voice and hasattr(voice, "is_listening") and voice.is_listening():
+                        voice.stop_listening()
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"[JuiceVault] Error saving session for guild {gid}: {e}")
 
         for guild_id in list(self.tasks):
             try:
-                await self._stop(guild_id)
+                # Disconnect=False keeps the Discord voice connection open across reloads for instant, gapless resume!
+                await self._stop(guild_id, disconnect=False)
             except Exception as e:
                 print(f"[JuiceVault] Error stopping guild {guild_id}: {e}")
         if self.session and not self.session.closed:
@@ -174,21 +231,45 @@ class JuiceVault(commands.Cog):
     async def _restore_players(self):
         try:
             await self.bot.wait_until_ready()
-            await asyncio.sleep(2)
+            await asyncio.sleep(1.5)
             saved_sessions = getattr(self.bot, "_jv_data", {}).get("saved_sessions", {})
-            for guild_id, settings in (await self.config.all_guilds()).items():
-                if not settings.get("enabled") or not settings.get("channel_id"):
+            all_guild_configs = await self.config.all_guilds()
+
+            # Discover all guilds that need playback restoration:
+            candidate_guild_ids = set(saved_sessions.keys())
+            for gid, settings in all_guild_configs.items():
+                if settings.get("enabled") or settings.get("saved_session"):
+                    candidate_guild_ids.add(gid)
+
+            for guild in self.bot.guilds:
+                if guild.voice_client and guild.voice_client.channel:
+                    candidate_guild_ids.add(guild.id)
+
+            for guild_id in candidate_guild_ids:
+                if guild_id in self.tasks:
                     continue
                 guild = self.bot.get_guild(guild_id)
                 if guild is None:
                     continue
-                channel = guild.get_channel(settings["channel_id"])
-                if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
-                    continue
-                if guild_id in self.tasks:
-                    continue
 
+                settings = all_guild_configs.get(guild_id, {})
                 saved = saved_sessions.pop(guild_id, None)
+                if not saved and settings.get("saved_session"):
+                    saved = settings.get("saved_session")
+                if settings.get("saved_session"):
+                    asyncio.create_task(self.config.guild(guild).saved_session.set(None))
+
+                channel = None
+                voice = guild.voice_client
+                if voice and voice.channel:
+                    channel = voice.channel
+                elif saved and saved.get("channel_id"):
+                    channel = guild.get_channel(saved["channel_id"])
+                elif settings.get("channel_id"):
+                    channel = guild.get_channel(settings["channel_id"])
+
+                if not channel or not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+                    continue
 
                 self.stop_events[guild_id] = asyncio.Event()
                 self.skip_events[guild_id] = asyncio.Event()
@@ -199,18 +280,30 @@ class JuiceVault(commands.Cog):
                     self.queues[guild_id] = list(saved.get("queue") or [])
                     mq = list(saved.get("manual_queue") or [])
                     cur_t = saved.get("current_track")
+                    pos = float(saved.get("position", 0.0))
+
                     if cur_t:
+                        cur_t = dict(cur_t)
+                        if cur_t.get("_resume_position") is None:
+                            cur_t["_resume_position"] = pos
                         mq.insert(0, cur_t)
+                        self.play_positions[guild_id] = pos
+                    elif pos > 0:
+                        self.play_positions[guild_id] = pos
+
                     self.manual_queues[guild_id] = mq
                     self.effects[guild_id] = saved.get("effects", "none")
                     self.loops[guild_id] = saved.get("loop", "off")
                     self.history[guild_id] = list(saved.get("history") or [])
-                    self.play_positions[guild_id] = saved.get("position", 0.0)
                 else:
                     self.manual_queues[guild_id] = []
                     self.effects[guild_id] = "none"
 
+                await self.config.guild(guild).enabled.set(True)
+                await self.config.guild(guild).channel_id.set(channel.id)
+
                 self.tasks[guild_id] = asyncio.create_task(self._player(guild, channel))
+                print(f"[JuiceVault Restore] ✅ Restored playback for {guild.name} in '{channel.name}' from position {self.play_positions.get(guild_id, 0.0):.1f}s")
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -792,7 +885,7 @@ class JuiceVault(commands.Cog):
             except Exception:
                 pass
 
-    async def _stop(self, guild_id):
+    async def _stop(self, guild_id, disconnect=True):
         cur = self.current.get(guild_id)
         pos = self.get_position(guild_id)
         if cur and not cur.get("_is_vip") and not cur.get("_is_soundboard"):
@@ -825,7 +918,12 @@ class JuiceVault(commands.Cog):
         self.effects.pop(guild_id, None)
         guild = self.bot.get_guild(guild_id)
         if guild:
-            await self._disconnect(guild)
+            if disconnect:
+                await self._disconnect(guild)
+            elif guild.voice_client:
+                voice = guild.voice_client
+                if voice.is_playing() or voice.is_paused():
+                    voice.stop()
 
     async def _player(self, guild, channel):
         gid = guild.id
@@ -838,6 +936,15 @@ class JuiceVault(commands.Cog):
         self.manual_queues.setdefault(gid, [])
         self.effects.setdefault(gid, "none")
         is_first_track = True
+
+        # Always mark guild as enabled and save active voice channel
+        try:
+            await self.config.guild(guild).enabled.set(True)
+            if channel:
+                await self.config.guild(guild).channel_id.set(channel.id)
+        except Exception:
+            pass
+
         try:
             while not stop.is_set():
                 if self.tasks.get(gid) is not task:
@@ -1540,10 +1647,15 @@ class JuiceVault(commands.Cog):
     @jv.command(name="stop")
     async def stop(self, ctx):
         await self.config.guild(ctx.guild).enabled.set(False)
+        try:
+            await self.config.guild(ctx.guild).saved_session.set(None)
+            getattr(self.bot, "_jv_data", {}).get("saved_sessions", {}).pop(ctx.guild.id, None)
+        except Exception:
+            pass
         if ctx.guild.id not in self.tasks:
             await ctx.send("JuiceVault is not running.")
             return
-        await self._stop(ctx.guild.id)
+        await self._stop(ctx.guild.id, disconnect=True)
         await ctx.send("⏹️ Stopped.")
 
     @jv.command(name="skip", aliases=["next"])
