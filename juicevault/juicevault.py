@@ -6,7 +6,12 @@ import re
 import shutil
 import tempfile
 import time
+import warnings
 from urllib.parse import quote
+
+# Suppress Python 3.11/3.12/3.13 deprecation warnings from legacy audio libraries like speech_recognition/aifc
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r".*speech_recognition.*")
+warnings.filterwarnings("ignore", message=r".*aifc.*", category=DeprecationWarning)
 
 import aiohttp
 import discord
@@ -41,10 +46,10 @@ class JuiceVault(commands.Cog):
     VIP_VIDEO_URL = "https://www.youtube.com/watch?v=7uNd46F3Ubs"
     VIP_START_OFFSET = 4.0
     VIP_PLAY_DURATION = 6.0
-    VIP_DELAY_SECONDS = 3.0
-    VIP_AUDIO_SLICED = os.path.join(tempfile.gettempdir(), "juicevault_vip_sliced_6s.mp3")
+    VIP_DELAY_SECONDS = 0.5
+    VIP_AUDIO_SLICED = os.path.join(tempfile.gettempdir(), "juicevault_vip_sliced_6s.wav")
     VIP_AUDIO_RAW = os.path.join(tempfile.gettempdir(), "juicevault_vip_raw.mp3")
-    VIP_COOLDOWN_SECONDS = 25.0
+    VIP_COOLDOWN_SECONDS = 20.0
 
     SKIZZOO_VIDEO_URL = "https://www.youtube.com/watch?v=QeX0wYlnUt0"
     SKIZZOO_START_OFFSET = 1.0
@@ -422,10 +427,11 @@ class JuiceVault(commands.Cog):
                 text = await response.text(errors="ignore")
                 status = response.status
         except Exception as exc:
-            print(f"[JuiceVault] Network error fetching {url}: {type(exc).__name__}: {exc}")
             cached = self._jv_read_cache(url)
             if cached is not None:
                 return cached
+            err_msg = f"{type(exc).__name__}" + (f": {exc}" if str(exc).strip() else "")
+            print(f"[JuiceVault] Network error fetching {url}: {err_msg}")
             raise RuntimeError(
                 "JuiceVault API is unreachable and no offline cache is available. "
                 "Please wait for the server to come back online."
@@ -434,10 +440,10 @@ class JuiceVault(commands.Cog):
         if status != 200:
             if status >= 500 or status in (408, 429):
                 # Server outage / Cloudflare tunnel down — try disk cache
-                print(f"[JuiceVault] API returned HTTP {status} for {url}, trying offline cache.")
                 cached = self._jv_read_cache(url)
                 if cached is not None:
                     return cached
+                print(f"[JuiceVault] API returned HTTP {status} for {url}, and no offline cache was found.")
                 raise RuntimeError(
                     f"JuiceVault API is temporarily down (HTTP {status}). "
                     "No offline cache is available yet — please wait for the server to recover."
@@ -696,7 +702,7 @@ class JuiceVault(commands.Cog):
     @staticmethod
     def _remove_file(path):
         if path:
-            if "juicevault_soundboard" in path or "juicevault_vip" in path:
+            if "juicevault_soundboard" in path or "juicevault_vip" in path or "juicevault_skizzoo" in path:
                 return
             try:
                 os.remove(path)
@@ -704,7 +710,7 @@ class JuiceVault(commands.Cog):
                 pass
 
     def _schedule_file_removal(self, path, delay=25):
-        if not path or "juicevault_soundboard" in path or "juicevault_vip" in path:
+        if not path or "juicevault_soundboard" in path or "juicevault_vip" in path or "juicevault_skizzoo" in path:
             return
         async def _remover():
             try:
@@ -1488,10 +1494,41 @@ class JuiceVault(commands.Cog):
             voice.play(entrance_source)
             print(f"[JuiceVault Entrance] 👑 Playing Skizzoo entrance theme (1s-6s) directly in '{guild.name}'")
 
+    def _is_vip(self, member) -> bool:
+        if not member:
+            return False
+        if member.id in self.VIP_USER_IDS:
+            return True
+        for r in getattr(member, "roles", []):
+            name = getattr(r, "name", "").strip().lower()
+            if name in ("vip", "[vip]", "★ vip", "⭐ vip", "v.i.p", "v.i.p.") or name.startswith("vip"):
+                return True
+        return False
+
     async def _ensure_vip_audio(self):
         if os.path.isfile(self.VIP_AUDIO_SLICED) and os.path.getsize(self.VIP_AUDIO_SLICED) > 1024:
             return self.VIP_AUDIO_SLICED, True
         if os.path.isfile(self.VIP_AUDIO_RAW) and os.path.getsize(self.VIP_AUDIO_RAW) > 1024:
+            raw_path = self.VIP_AUDIO_RAW
+            try:
+                ffmpeg_bin = self._ffmpeg_executable()
+                slice_cmd = [
+                    ffmpeg_bin,
+                    "-y",
+                    "-ss", str(self.VIP_START_OFFSET),
+                    "-t", str(self.VIP_PLAY_DURATION),
+                    "-i", raw_path,
+                    "-vn",
+                    "-ar", "48000",
+                    "-ac", "2",
+                    self.VIP_AUDIO_SLICED,
+                ]
+                import subprocess
+                sub_res = subprocess.run(slice_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
+                if sub_res.returncode == 0 and os.path.isfile(self.VIP_AUDIO_SLICED) and os.path.getsize(self.VIP_AUDIO_SLICED) > 512:
+                    return self.VIP_AUDIO_SLICED, True
+            except Exception:
+                pass
             return self.VIP_AUDIO_RAW, False
 
         def _do_download():
@@ -1501,8 +1538,9 @@ class JuiceVault(commands.Cog):
                 try:
                     downloaded = _download_with_ytdlp(self.VIP_VIDEO_URL, tempdir)
                     if downloaded and os.path.isfile(downloaded) and os.path.getsize(downloaded) > 1024:
+                        shutil.copyfile(downloaded, self.VIP_AUDIO_RAW)
                         ffmpeg_bin = self._ffmpeg_executable()
-                        sliced_target = os.path.join(tempdir, "vip_sliced.mp3")
+                        sliced_target = os.path.join(tempdir, "vip_sliced.wav")
                         slice_cmd = [
                             ffmpeg_bin,
                             "-y",
@@ -1510,8 +1548,8 @@ class JuiceVault(commands.Cog):
                             "-t", str(self.VIP_PLAY_DURATION),
                             "-i", downloaded,
                             "-vn",
-                            "-acodec", "libmp3lame",
-                            "-b:a", "192k",
+                            "-ar", "48000",
+                            "-ac", "2",
                             sliced_target,
                         ]
                         try:
@@ -1526,14 +1564,13 @@ class JuiceVault(commands.Cog):
                                 shutil.copyfile(sliced_target, self.VIP_AUDIO_SLICED)
                                 return self.VIP_AUDIO_SLICED, True
                         except Exception as slice_err:
-                            print(f"[JuiceVault] VIP ffmpeg slice notice: {slice_err}")
+                            print(f"[JuiceVault Entrance] VIP slice notice: {slice_err}")
 
-                        shutil.copyfile(downloaded, self.VIP_AUDIO_RAW)
                         return self.VIP_AUDIO_RAW, False
                 finally:
                     shutil.rmtree(tempdir, ignore_errors=True)
             except Exception as exc:
-                print(f"[JuiceVault] VIP audio cache error: {exc}")
+                print(f"[JuiceVault Entrance] VIP audio cache error: {exc}")
                 return None, False
 
         return await asyncio.to_thread(_do_download)
@@ -1583,11 +1620,11 @@ class JuiceVault(commands.Cog):
         if voice.is_playing() and mixer is not None:
             vip_source = discord.FFmpegPCMAudio(vip_audio, executable=exe, before_options=before_opts, options=extra_opts)
             mixer.set_overlay(vip_source)
-            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting over ducked music (18%) in '{guild.name}'")
+            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting (4s-10s) over ducked music (18%) in '{guild.name}'")
         elif not voice.is_playing():
             vip_source = discord.FFmpegPCMAudio(vip_audio, executable=exe, before_options=before_opts, options=extra_opts)
             voice.play(vip_source)
-            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting directly in '{guild.name}'")
+            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting (4s-10s) directly in '{guild.name}'")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -1621,8 +1658,8 @@ class JuiceVault(commands.Cog):
             asyncio.create_task(self._trigger_skizzoo_join(guild, member, after.channel.id))
             return
 
-        # Generic VIP entrance fallback (for any other VIP user)
-        if member.id in self.VIP_USER_IDS:
+        # Generic VIP entrance fallback (for any other VIP user / VIP role)
+        if self._is_vip(member):
             now = time.monotonic()
             if now - self._vip_cooldowns.get(member.id, 0.0) < self.VIP_COOLDOWN_SECONDS:
                 return

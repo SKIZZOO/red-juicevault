@@ -18,7 +18,12 @@ import tempfile
 import threading
 import time
 import unicodedata
+import warnings
 import wave
+
+# Suppress Python 3.11/3.12/3.13 deprecation warnings from legacy audio libraries like speech_recognition/aifc
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r".*speech_recognition.*")
+warnings.filterwarnings("ignore", message=r".*aifc.*", category=DeprecationWarning)
 
 import discord
 
@@ -1147,7 +1152,9 @@ except ImportError:
 
 SPEECH_RECOGNITION_AVAILABLE = False
 try:
-    import speech_recognition as sr
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        import speech_recognition as sr
     SPEECH_RECOGNITION_AVAILABLE = True
 except ImportError:
     sr = None

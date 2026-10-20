@@ -132,10 +132,11 @@ async def fetch_collection(session, category):
             status = response.status
     except Exception as exc:
         # Network-level failure (timeout, DNS, connection reset, etc.)
-        print(f"[JuiceVault] Network error fetching '{category}': {type(exc).__name__}: {exc}")
         cached = _read_disk_cache(category)
         if cached is not None:
             return cached
+        err_msg = f"{type(exc).__name__}" + (f": {exc}" if str(exc).strip() else "")
+        print(f"[JuiceVault] Network error fetching '{category}': {err_msg}")
         raise RuntimeError(
             f"JuiceVault API is unreachable and no offline cache exists for '{category}'. "
             "Please wait for the API server to come back online."
@@ -144,10 +145,10 @@ async def fetch_collection(session, category):
     if status != 200:
         if _is_api_error_status(status):
             # Server-side / Cloudflare outage — try cache before raising
-            print(f"[JuiceVault] API returned HTTP {status} for '{category}', trying offline cache.")
             cached = _read_disk_cache(category)
             if cached is not None:
                 return cached
+            print(f"[JuiceVault] API returned HTTP {status} for '{category}', and no offline cache was found.")
             raise RuntimeError(
                 f"JuiceVault API is temporarily down (HTTP {status}). "
                 "No offline cache is available yet — please wait for the server to recover."

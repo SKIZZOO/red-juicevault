@@ -1,5 +1,10 @@
 import importlib
 import sys
+import warnings
+
+# Suppress Python 3.11/3.12/3.13 deprecation warnings from legacy audio libraries like speech_recognition/aifc
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r".*speech_recognition.*")
+warnings.filterwarnings("ignore", message=r".*aifc.*", category=DeprecationWarning)
 
 _submodules = [
     "soundboard",
