@@ -105,8 +105,19 @@ def _levenshtein(s1: str, s2: str) -> int:
     return previous_row[-1]
 
 
+_KNOWN_EXTERNAL_ARTISTS_REGEX = re.compile(
+    r'\b(?:yeat|carti|playboi\s+carti|travis\s+scott|drake|quavo|ken\s+carson|destroy\s+lonely|'
+    r'gunna|young\s+thug|metro\s+boomin|future|trippie\s+redd|don\s+toliver|chief\s+keef|'
+    r'21\s+savage|xxxtentacion|ski\s+mask|kodak\s+black|lil\s+yachty|nle\s+choppa|central\s+cee|'
+    r'offset|takeoff|roddy\s+ricch|polo\s+g|dababy|nettspend|osamason|tory\s+lanez|lil\s+durk|'
+    r'asap\s+rocky|post\s+malone|kendrick\s+lamar|kanye\s+west|lil\s+uzi\s+vert|lil\s+uzi|the\s+weeknd|'
+    r'eminem|lil\s+baby|lil\s+wayne|lil\s+peep|mac\s+miller|pop\s+smoke|jack\s+harlow)\b',
+    re.I
+)
+
+
 def _resolve_artist_phonetics(text: str) -> str:
-    """Normalize common phonetic misrecognitions of artist names from Romanian and English STT."""
+    """Normalize common phonetic misrecognitions of artist names and song titles from Romanian and English STT."""
     if not text:
         return ""
     resolved = text
@@ -114,9 +125,26 @@ def _resolve_artist_phonetics(text: str) -> str:
     # 1. Quavo: 'cuavo', 'cu avo', 'cu aveau', 'cu abu', 'cu alb', 'coavo', 'cuevo', 'quave', 'clavo', 'kwavo', 'kwa vo', 'quao', 'cuoavo', 'cu abo'
     resolved = re.sub(r'\b(?:cu\s+avo|cuavo|cu\s+aveau|cu\s+abu|cu\s+alb|coavo|cuevo|quave|clavo|kwavo|kwa\s+vo|quao|cuoavo|cu\s+abo)\b', 'quavo', resolved, flags=re.I)
 
-    # 2. Yeat variations: 'yet', 'ieat', 'iet', 'yeet', 'yit', 'iat'
+    # 2. Song & Title phonetic normalization (e.g. 'Money So Big' variations from Romanian STT)
+    # 'mani so big', 'mani sau big', 'money so bic', 'money sau big', 'moneys so big', 'money is so big', 'mani so bic'
+    resolved = re.sub(r'\b(?:mani|money|manii)\s+(?:so|sau)\s+(?:big|bic|be|b)\b', 'money so big', resolved, flags=re.I)
+    resolved = re.sub(r'\b(?:moneys|money\s+is)\s+so\s+big\b', 'money so big', resolved, flags=re.I)
+
+    # 2B. Yeat variations: 'eat', 'it', 'hit', 'yet', 'ieat', 'iet', 'yeet', 'yit', 'iat'
+    yeat_song_keywords = (
+        r'(?:money\s+so\s+big|flawless|poppin|out\s+the\s+way|idgaf|breathe|get\s+busy|talk|turban|'
+        r'sorry\s+bout\s+that|mad\s+bout\s+that|ya\s+ya|heavyweight|nun\s+id\s+change|bettr\s+off|'
+        r'rav3\s+p4rty|if\s+we\s+being\s+real|monëy\s+so\s+big|g\s+wagon|2093|up\s+off\s+x|swerved\s+it)'
+    )
+    # If eat/it/hit/iet/yet/ieat/yeet/yit/iat is followed by a known Yeat song:
+    resolved = re.sub(rf'\b(?:eat|it|hit|iet|yet|ieat|yeet|yit|iat)\s+({yeat_song_keywords})\b', r'yeat \1', resolved, flags=re.I)
+    # If preceded by request verbs or artist prepositions: 'baga eat', 'pune it', 'de la eat', 'canta hit', 'play eat', 'by it'
+    resolved = re.sub(r'\b(baga|pune|canta|cauta|play|de\s+la|by|asculta|reda|de|artistul|piesa\s+lui|ceva\s+de\s+la)\s+(?:eat|it|hit)\b', r'\1 yeat', resolved, flags=re.I)
+    # Standalone non-English tokens that unambiguously mean Yeat:
     resolved = re.sub(r'\b(?:yet|ieat|iet|yeet|yit|iat)\b', 'yeat', resolved, flags=re.I)
-    if resolved.strip().lower() in {"eat", "it"}:
+    # At start of query followed by any title:
+    resolved = re.sub(r'^(?:eat|it|hit)\s+(?=[a-z0-9])', 'yeat ', resolved, flags=re.I)
+    if resolved.strip().lower() in {"eat", "it", "hit"}:
         resolved = "yeat"
 
     # 3. Playboi Carti / Carti: 'playboy carti', 'plei boi carti', 'pleiboi carti', 'karti', 'cardi'
@@ -462,10 +490,11 @@ async def _recognize_speech_groq(mono_16k: bytes, api_key: str, prompt: str = No
 
     # Prime vocabulary with artists, tracks, and common commands
     default_prompt = (
-        "Garmin, Juice WRLD, Yeat, Quavo, Playboi Carti, Travis Scott, Ken Carson, "
+        "Garmin, Juice WRLD, Yeat, Money So Big, Quavo, Playboi Carti, Travis Scott, Ken Carson, "
         "Lil Uzi Vert, Drake, Future, Metro Boomin, Trippie Redd, unreleased, robbery, "
         "burn, bandit, lucid dreams, lean wit me, skip, da skip, dai skip, pause, "
-        "resume, shuffle, favorite, da, nu."
+        "resume, shuffle, favorite, da, nu, Flawless, Out The Way, Fein, Magnolia, "
+        "baga yeat money so big, pune yeat, canta yeat."
     )
     if prompt:
         default_prompt = f"{prompt}, {default_prompt}"
@@ -1780,7 +1809,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
             # PRECEDENCE 2: SKIP / NEXT
             # Handles: "skip", "skip this song", "next", "urmatoarea", "sari", "schimba", "da-i skip", "da skip la piesa", "the escape", "they skip", etc.
-            skip_pattern = r'\b(?:skip|next|urmatoarea|sari|treci\s+peste|treci\s+la\s+urmatoarea|schimba|schimb-o|alta\s+piesa|alta\s+melodie|da-i\s+skip|dai\s+skip|da\s+skip|skip\s+la\s+piesa|skip\s+piesa|skip\s+this|skip\s+song|next\s+song|next\s+track|the\s+escape|the\s+scape|they\s+skip|the\s+skip|day\s+skip|they\s+scape|they\s+skep|the\s+skep|escape|scape)\b'
+            skip_pattern = (
+                r'\b(?:skip|next|urmatoarea|sari|treci\s+peste|treci\s+la\s+urmatoarea|schimba|schimb-o|'
+                r'alta\s+piesa|alta\s+melodie|da-i\s+skip|dai\s+skip|da\s+skip|dă-i\s+skip|dă\s+skip|dăi\s+skip|'
+                r'skip\s+la\s+piesa|skip\s+piesa|skip\s+this|skip\s+song|next\s+song|next\s+track|'
+                r'the\s+escape|the\s+scape|they\s+skip|the\s+skip|day\s+skip|they\s+scape|they\s+skep|'
+                r'the\s+skep|escape|scape|the\s+scope|they\s+scope|they\s+keep|the\s+keep)\b'
+            )
             if re.search(skip_pattern, clean_cmd, re.I) or any(w in clean_cmd for w in ("da-i skip", "dai skip", "da skip", "skip la piesa", "skip piesa", "urmatoarea piesa", "schimba piesa", "the escape", "escape", "they skip", "the scape")):
                 if any(w in clean_cmd for w in ("10", "ten", "zece")):
                     await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 10))
@@ -1814,8 +1849,23 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         random.shuffle(mq)
                     self.cog._cleanup_prefetch(self.guild_id)
                     self.cog._trigger_next_prefetch(self.guild_id)
-                    await play_chime_and_proceed(guild)
-                    await self.cog._request_skip(self.guild_id, 1)
+
+                    voice = guild.voice_client if guild else None
+                    if voice and (voice.is_playing() or voice.is_paused()):
+                        await play_chime_and_proceed(guild)
+                        await speak_in_voice(guild, "Am amestecat coada de redare!" if is_ro else "Queue shuffled!", lang=user_lang)
+                        await self.cog._request_skip(self.guild_id, 1)
+                    else:
+                        if voice and voice.channel:
+                            self.cog.stop_events[self.guild_id] = asyncio.Event()
+                            self.cog.skip_events[self.guild_id] = asyncio.Event()
+                            self.cog.seek_events[self.guild_id] = asyncio.Event()
+                            self.cog.skip_counts[self.guild_id] = 0
+                            self.cog.effects[self.guild_id] = "none"
+                            self.cog.tasks[self.guild_id] = asyncio.create_task(self.cog._player(guild, voice.channel))
+                        await play_chime_and_proceed(guild)
+                        await speak_in_voice(guild, "Pornesc redarea amestecată!" if is_ro else "Playing shuffled queue!", lang=user_lang)
+
                     ui = self.bot.get_cog("JuiceVaultUI")
                     if ui:
                         asyncio.create_task(ui.update_panel(self.guild_id))
@@ -2104,9 +2154,15 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             await self._notify(guild, f"🧠 **[Garmin]** Am reținut preferința ta: **{track_name}** 🎶" if is_ro else f"🧠 **[Garmin]** Playing learned song: **{track_name}** 🎶")
                             return
 
-                        # 2. Search JuiceVault internal archive
-                        tracks = await self.cog.fetch_tracks()
-                        track = _find_best_archive_track(tracks, clean_q, self.cog)
+                        # Check if query matches known external artist directly
+                        is_external_artist = bool(_KNOWN_EXTERNAL_ARTISTS_REGEX.search(clean_q))
+
+                        # 2. Search JuiceVault internal archive (skip if known external artist)
+                        track = None
+                        if not is_external_artist:
+                            tracks = await self.cog.fetch_tracks()
+                            track = _find_best_archive_track(tracks, clean_q, self.cog)
+
                         if track:
                             await play_chime_and_proceed(guild)
                             await self._play_track_now(guild, track)
@@ -2115,34 +2171,11 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Redau: **{track_name}** 🎶" if is_ro else f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Playing: **{track_name}** 🎶")
                             return
                         else:
-                            # 3. Not found in JuiceVault archive -> propose YouTube fallback!
-                            # Music is ducked to 18% while Garmin asks; music NEVER stops!
-                            print(f"[JuiceVault Voice] Track '{clean_q}' not found in archive -> Proposing YouTube fallback")
-                            self._lock_session(user_id, duration=45.0)
-                            if not hasattr(self.cog, "_pending_yt_voice"):
-                                self.cog._pending_yt_voice = {}
-                            self.cog._pending_yt_voice[self.guild_id] = {
-                                "user_id": user_id,
-                                "query": clean_q,
-                                "lang": user_lang,
-                                "expires": time.time() + 45.0,
-                                "user_name": user_name,
-                            }
-                            # Extend wake window so the user can just answer "Da" without repeating "Garmin"
-                            self._wake_windows[user_id] = now + 45.0
-
-                            if is_ro:
-                                ask_speech = f"Piesa {clean_q} nu se află în JuiceVault. Vrei să o caut pe YouTube?"
-                                ask_msg = f"🎤 **[Garmin]** {user_name}: Piesa *\"{clean_q}\"* nu se află în JuiceVault. Vrei să o caut și să o redau de pe **YouTube**? *(Zi **„Garmin, da”** sau scrie **da**)*"
-                            else:
-                                ask_speech = f"Track {clean_q} was not found in JuiceVault. Would you like me to search on YouTube?"
-                                ask_msg = f"🎤 **[Garmin]** {user_name}: Track *\"{clean_q}\"* was not found in the JuiceVault archive. Would you like me to play it from **YouTube**? *(Say **\"Garmin, yes\"** or type **yes**)*"
-
-                            await speak_in_voice(guild, ask_speech, lang=user_lang)
-                            await play_beep_sound(guild, "listening")
-                            self._buffers.pop(user_id, None)
-                            self._last_speech.pop(user_id, None)
-                            await self._notify(guild, ask_msg)
+                            # 3. Not found in JuiceVault archive -> Direct YouTube playback!
+                            # Directly announce and search YouTube without stopping playback or requiring awkward voice confirmation!
+                            print(f"[JuiceVault Voice] Track '{clean_q}' not in archive (external={is_external_artist}) -> Direct YouTube playback")
+                            self._lock_session(user_id, duration=35.0)
+                            await self._search_and_play_youtube(guild, clean_q, user_name, lang=user_lang)
                             return
                 except Exception as e:
                     log.warning(f"[Garmin Voice Search] Error searching: {e}")
