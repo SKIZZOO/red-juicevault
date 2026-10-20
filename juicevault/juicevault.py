@@ -69,6 +69,7 @@ class JuiceVault(commands.Cog):
             last_track=None,
             last_position=0.0,
             voice_commands_enabled=True,
+            voice_persona="anime",
             learned_wake_words=[],
             learned_song_queries={},
             saved_session=None,
@@ -2586,3 +2587,36 @@ class JuiceVault(commands.Cog):
             f"⚡ **Groq Cloud Whisper Large v3 Turbo** activated! (`{masked}`)\n"
             f"Garmin voice recognition is now running with **~60ms ultra-low latency**."
         )
+
+    @jv.command(name="persona", aliases=["voice"])
+    async def set_voice_persona(self, ctx, persona: str = None):
+        """Set or view the voice persona for Garmin (anime, mommy, natural)."""
+        valid = {
+            "anime": "🎀 Anime Girl (cute & cheerful - Microsoft Ana)",
+            "mommy": "👠 Dommy Mommy (sultry & dominant - Microsoft Sonia)",
+            "natural": "🎧 Natural Assistant (standard & clear - Microsoft Ava)"
+        }
+        current = await self.config.guild(ctx.guild).voice_persona()
+        if not persona:
+            await ctx.send(
+                f"🎙️ **Current Voice Persona:** {valid.get(current, current)}\n\n"
+                f"**Available personas:**\n"
+                f"• `{ctx.clean_prefix}4jv persona anime` — Adorable anime girl voice (`en-US-AnaNeural`)\n"
+                f"• `{ctx.clean_prefix}4jv persona mommy` — Sultry dommy mommy voice (`en-GB-SoniaNeural`)\n"
+                f"• `{ctx.clean_prefix}4jv persona natural` — Clean natural assistant (`en-US-AvaNeural`)\n\n"
+                f"💡 *You can also say in voice chat:* **„Garmin, switch to mommy voice”** or **„Garmin, anime girl voice”**!"
+            )
+            return
+
+        choice = persona.lower().strip()
+        if choice not in valid:
+            await ctx.send(f"❌ Invalid persona `{persona}`. Choose from: `anime`, `mommy`, `natural`.")
+            return
+
+        await self.config.guild(ctx.guild).voice_persona.set(choice)
+        from .voice_recognition import set_guild_persona, speak_in_voice
+        await set_guild_persona(self, ctx.guild.id, choice)
+        await ctx.send(f"✅ Voice persona set to: **{valid[choice]}**!")
+        if ctx.guild.voice_client and ctx.guild.voice_client.is_connected():
+            test_phrase = "Anime girl voice activated! Yes master~" if choice == "anime" else ("Dommy mommy voice activated. Be good, darling~" if choice == "mommy" else "Natural assistant voice activated.")
+            await speak_in_voice(ctx.guild, test_phrase, persona=choice)
