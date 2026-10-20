@@ -1280,7 +1280,7 @@ async def play_beep_sound(guild, sound_type: str = "understood", action_coro=Non
         if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
             mixer = voice.source
             voice._jv_mixer = mixer
-        elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
+        elif mixer is None and (voice.is_playing() or voice.is_paused()) and hasattr(voice, "source") and voice.source:
             try:
                 mixer = DuckingAudioSource(voice.source)
                 voice.source = mixer
@@ -1290,22 +1290,29 @@ async def play_beep_sound(guild, sound_type: str = "understood", action_coro=Non
             except Exception:
                 mixer = None
 
-        if voice.is_playing() and mixer is not None:
+        if voice.is_paused() and mixer is not None:
+            # Temporarily unpause with music muted so beep plays cleanly without ClientException
+            try:
+                prev_target = mixer.target_volume
+                mixer.target_volume = 0.0
+                mixer.current_volume = 0.0
+                mixer.set_overlay(MemoryPCMAudioSource(pcm_data))
+                voice.resume()
+                await asyncio.sleep(duration)
+                if voice.is_connected() and not voice.is_paused():
+                    voice.pause()
+                mixer.target_volume = prev_target
+            except Exception:
+                pass
+        elif voice.is_playing() and mixer is not None:
             mixer.set_overlay(MemoryPCMAudioSource(pcm_data))
-        elif not voice.is_playing():
-            voice.play(MemoryPCMAudioSource(pcm_data))
+        elif not voice.is_playing() and not voice.is_paused():
+            try:
+                voice.play(MemoryPCMAudioSource(pcm_data))
+            except Exception:
+                pass
     except Exception as exc:
         print(f"[JuiceVault Beep] Error ({sound_type}): {exc}")
-        try:
-            exe = _get_ffmpeg_exe()
-            path = _get_understood_beep_wav_path() if sound_type == "understood" else (_get_listening_beep_wav_path() if sound_type == "listening" else _get_error_beep_wav_path())
-            if path and os.path.isfile(path):
-                if mixer is not None:
-                    mixer.set_overlay(discord.FFmpegPCMAudio(path, executable=exe))
-                elif not voice.is_playing():
-                    voice.play(discord.FFmpegPCMAudio(path, executable=exe))
-        except Exception:
-            pass
 
     if action_coro is not None:
         await asyncio.sleep(0.04)
@@ -1342,7 +1349,7 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
     if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
         mixer = voice.source
         voice._jv_mixer = mixer
-    elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
+    elif mixer is None and (voice.is_playing() or voice.is_paused()) and hasattr(voice, "source") and voice.source:
         try:
             mixer = DuckingAudioSource(voice.source)
             voice.source = mixer
@@ -1352,31 +1359,50 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
         except Exception:
             mixer = None
 
-    # 1. Fast path: pre-decoded PCM in RAM for 0ms instant playback!
-    pcm_data = _TTS_PCM_CACHE.get(cache_key)
-    if pcm_data:
+    # Helper function to play PCM bytes across playing, paused, and idle voice states
+    async def _play_pcm(pcm_bytes: bytes) -> bool:
+        duration = len(pcm_bytes) / (48000 * 4) + 0.1
         try:
-            if voice.is_playing() and mixer is not None:
-                print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({persona})")
-                overlay = MemoryPCMAudioSource(pcm_data)
-                mixer.set_overlay(overlay)
-                duration = len(pcm_data) / (48000 * 4) + 0.1
+            if voice.is_paused() and mixer is not None:
+                print(f"[JuiceVault Voice TTS] 🔊 Speaking over paused player in '{guild.name}': \"{clean_tts}\" ({persona})")
+                prev_target = mixer.target_volume
+                mixer.target_volume = 0.0
+                mixer.current_volume = 0.0
+                mixer.set_overlay(MemoryPCMAudioSource(pcm_bytes))
+                voice.resume()
                 for _ in range(int(duration / 0.04)):
                     if not mixer.is_overlay_playing():
                         break
                     await asyncio.sleep(0.04)
-                return
-            elif not voice.is_playing():
+                if voice.is_connected() and not voice.is_paused():
+                    voice.pause()
+                mixer.target_volume = prev_target
+                return True
+            elif voice.is_playing() and mixer is not None:
+                print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({persona})")
+                overlay = MemoryPCMAudioSource(pcm_bytes)
+                mixer.set_overlay(overlay)
+                for _ in range(int(duration / 0.04)):
+                    if not mixer.is_overlay_playing():
+                        break
+                    await asyncio.sleep(0.04)
+                return True
+            elif not voice.is_playing() and not voice.is_paused():
                 print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking in '{guild.name}': \"{clean_tts}\" ({persona})")
-                voice.play(MemoryPCMAudioSource(pcm_data))
-                duration = len(pcm_data) / (48000 * 4) + 0.1
+                voice.play(MemoryPCMAudioSource(pcm_bytes))
                 for _ in range(int(duration / 0.04)):
                     if not voice.is_playing():
                         break
                     await asyncio.sleep(0.04)
-                return
+                return True
         except Exception as exc:
             print(f"[JuiceVault Voice TTS] Memory PCM playback exception: {exc}")
+        return False
+
+    # 1. Fast path: pre-decoded PCM in RAM for 0ms instant playback!
+    pcm_data = _TTS_PCM_CACHE.get(cache_key)
+    if pcm_data and await _play_pcm(pcm_data):
+        return
 
     # 2. Fetch or retrieve MP3 data
     data = await _fetch_tts_bytes(clean_tts, persona=persona)
@@ -1385,27 +1411,8 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
 
     # Check if PCM decode completed during fetch
     pcm_data = _TTS_PCM_CACHE.get(cache_key)
-    if pcm_data:
-        try:
-            if voice.is_playing() and mixer is not None:
-                overlay = MemoryPCMAudioSource(pcm_data)
-                mixer.set_overlay(overlay)
-                duration = len(pcm_data) / (48000 * 4) + 0.1
-                for _ in range(int(duration / 0.04)):
-                    if not mixer.is_overlay_playing():
-                        break
-                    await asyncio.sleep(0.04)
-                return
-            elif not voice.is_playing():
-                voice.play(MemoryPCMAudioSource(pcm_data))
-                duration = len(pcm_data) / (48000 * 4) + 0.1
-                for _ in range(int(duration / 0.04)):
-                    if not voice.is_playing():
-                        break
-                    await asyncio.sleep(0.04)
-                return
-        except Exception:
-            pass
+    if pcm_data and await _play_pcm(pcm_data):
+        return
 
     # 3. Fallback: stream MP3 via temp file + FFmpeg
     path = os.path.join(tempfile.gettempdir(), f"jv_voice_tts_{guild.id}.mp3")
@@ -1417,19 +1424,31 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
 
     try:
         exe = _get_ffmpeg_exe()
-        if voice.is_playing() and mixer is not None:
-            print(f"[JuiceVault Voice TTS] 🔊 Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({lang})")
-            overlay = discord.FFmpegPCMAudio(path, executable=exe)
-            mixer.set_overlay(overlay)
-            duration = max(1.2, min(8.0, len(clean_tts) * 0.085 + 0.4))
+        duration = max(1.2, min(8.0, len(clean_tts) * 0.085 + 0.4))
+        if voice.is_paused() and mixer is not None:
+            prev_target = mixer.target_volume
+            mixer.target_volume = 0.0
+            mixer.current_volume = 0.0
+            mixer.set_overlay(discord.FFmpegPCMAudio(path, executable=exe))
+            voice.resume()
             for _ in range(int(duration / 0.04)):
                 if not mixer.is_overlay_playing():
                     break
                 await asyncio.sleep(0.04)
-        elif not voice.is_playing():
+            if voice.is_connected() and not voice.is_paused():
+                voice.pause()
+            mixer.target_volume = prev_target
+        elif voice.is_playing() and mixer is not None:
+            print(f"[JuiceVault Voice TTS] 🔊 Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({lang})")
+            overlay = discord.FFmpegPCMAudio(path, executable=exe)
+            mixer.set_overlay(overlay)
+            for _ in range(int(duration / 0.04)):
+                if not mixer.is_overlay_playing():
+                    break
+                await asyncio.sleep(0.04)
+        elif not voice.is_playing() and not voice.is_paused():
             print(f"[JuiceVault Voice TTS] 🔊 Speaking in '{guild.name}': \"{clean_tts}\" ({lang})")
             voice.play(discord.FFmpegPCMAudio(path, executable=exe))
-            duration = max(1.2, min(7.0, len(clean_tts) * 0.085))
             for _ in range(int(duration / 0.04)):
                 if not voice.is_playing():
                     break
@@ -1629,6 +1648,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             self.bot = bot
             self.cog = cog
             self.guild_id = guild_id
+            self._lock = threading.Lock()
             self._buffers = {}       # user_id -> bytearray
             self._last_speech = {}   # user_id -> timestamp
             self._cooldowns = {}     # user_id -> timestamp
@@ -1640,15 +1660,10 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             self._worker_task = asyncio.create_task(self._process_silence_loop())
 
         def _lock_session(self, user_id: int, duration: float = 25.0):
-            """Lock Garmin's interaction strictly to user_id. Discards audio from all other speakers."""
+            """Track active session user."""
             now = time.monotonic()
             self._active_session_uid = user_id
             self._active_session_expires = now + duration
-            # Purge any audio buffers from other users captured during the initiation phrase
-            for other_uid in list(self._buffers.keys()):
-                if other_uid != user_id:
-                    self._buffers.pop(other_uid, None)
-                    self._last_speech.pop(other_uid, None)
 
         def _unlock_session(self):
             """Release session lock so any user in the voice channel can issue commands to Garmin."""
@@ -1656,14 +1671,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             self._active_session_expires = 0.0
 
         def _is_locked_to_other(self, user_id: int) -> bool:
-            """Return True if Garmin is actively engaged in a session with another user."""
-            if self._active_session_uid is None:
-                return False
-            if time.monotonic() >= self._active_session_expires:
-                self._active_session_uid = None
-                self._active_session_expires = 0.0
-                return False
-            return self._active_session_uid != user_id
+            """Audio packets are never dropped at the sink level, ensuring all users can speak without getting ignored."""
+            return False
 
         def wants_opus(self) -> bool:
             return False  # Decode Opus packets to 48kHz 16-bit stereo PCM
@@ -1671,100 +1680,105 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
         def write(self, user, data):
             if not self._active or not user or getattr(user, "bot", False):
                 return
-            now = time.monotonic()
-            uid = user.id
-
-            # If Garmin is currently locked to another speaker, drop incoming audio completely!
-            if self._is_locked_to_other(uid):
-                return
-
-            pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
-            is_pending_user = bool(pending and pending.get("user_id") == uid and time.time() < pending.get("expires", 0.0))
-
-            # Cooldown per user after executing a command (1.0 second); NEVER drop audio if bot is waiting for an answer!
-            if not is_pending_user and (now - self._cooldowns.get(uid, 0.0) < 1.0):
-                return
-
             pcm = getattr(data, "pcm", None)
             if not pcm:
                 return
 
-            buf = self._buffers.setdefault(uid, bytearray())
-            if len(buf) == 0:
-                print(f"[JuiceVault Voice] 🎙️ Audio received from {getattr(user, 'display_name', user)} - listening...")
-            # Buffer up to 10 seconds of audio (~960,000 bytes)
-            if len(buf) < 960_000:
-                buf.extend(pcm)
-            self._last_speech[uid] = now
+            now = time.monotonic()
+            uid = user.id
+
+            try:
+                # Watchdog: revive silence worker task if it ever terminated unexpectedly
+                if self._active and (self._worker_task is None or self._worker_task.done()):
+                    try:
+                        loop = self.bot.loop
+                        if loop and loop.is_running():
+                            self._worker_task = asyncio.run_coroutine_threadsafe(self._process_silence_loop(), loop)
+                    except Exception:
+                        pass
+
+                with self._lock:
+                    buf = self._buffers.setdefault(uid, bytearray())
+                    if len(buf) == 0:
+                        print(f"[JuiceVault Voice] 🎙️ Audio received from {getattr(user, 'display_name', user)} - listening...")
+                    # Buffer up to 10 seconds of audio (~960,000 bytes)
+                    if len(buf) < 960_000:
+                        buf.extend(pcm)
+                    self._last_speech[uid] = now
+            except Exception as exc:
+                log.debug(f"[JuiceVault Voice] write() exception: {exc}")
 
         async def _process_silence_loop(self):
             """Monitors when a user finishes speaking and dispatches audio to STT with minimal latency."""
-            try:
-                while self._active:
+            while self._active:
+                try:
                     # Snappy 30ms polling loop for near-instant responsiveness
                     await asyncio.sleep(0.030)
                     now = time.monotonic()
-                    uids = list(self._last_speech.keys())
-                    pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
-                    for uid in uids:
-                        if self._is_locked_to_other(uid):
-                            self._buffers.pop(uid, None)
-                            self._last_speech.pop(uid, None)
-                            continue
+                    ready_dispatches = []
 
-                        last = self._last_speech.get(uid, 0.0)
-                        is_pending = bool(pending and pending.get("user_id") == uid and time.time() < pending.get("expires", 0.0))
-                        buf_len = len(self._buffers.get(uid, b""))
-                        # Adaptive silence detection:
-                        # 0.16s for short "da"/"nu" pending answers
-                        # 0.22s for short utterances (<= 1.6s of audio: "Hey Garmin", "Ok Garmin", "skip", "pause", "shuffle")
-                        # 0.38s for longer speech (song requests)
-                        if is_pending:
-                            silence_needed = 0.16
-                        elif buf_len <= 320_000:
-                            silence_needed = 0.22
-                        else:
-                            silence_needed = 0.38
+                    with self._lock:
+                        uids = list(self._last_speech.keys())
+                        pending = getattr(self.cog, "_pending_yt_voice", {}).get(self.guild_id)
+                        for uid in uids:
+                            last = self._last_speech.get(uid, 0.0)
+                            is_pending = bool(pending and pending.get("user_id") == uid and time.time() < pending.get("expires", 0.0))
+                            buf_len = len(self._buffers.get(uid, b""))
 
-                        if now - last >= silence_needed:
-                            buf = self._buffers.pop(uid, bytearray())
-                            self._last_speech.pop(uid, None)
-                            # Capture short single-syllable responses like "da", "nu", "yes", "no"
-                            min_bytes = 4_000 if is_pending else 12_000
-                            if len(buf) >= min_bytes:
-                                if not is_pending:
-                                    self._cooldowns[uid] = now
-                                asyncio.create_task(self._transcribe_and_dispatch(uid, bytes(buf)))
-            except asyncio.CancelledError:
-                pass
-            except Exception as exc:
-                log.debug(f"[JuiceVault Voice] Silence detection loop error: {exc}")
+                            # Adaptive silence detection:
+                            # 0.16s for short "da"/"nu" pending answers
+                            # 0.22s for short utterances (<= 1.6s of audio: "Hey Garmin", "Ok Garmin", "skip", "pause", "shuffle")
+                            # 0.38s for longer speech (song requests)
+                            if is_pending:
+                                silence_needed = 0.16
+                            elif buf_len <= 320_000:
+                                silence_needed = 0.22
+                            else:
+                                silence_needed = 0.38
+
+                            if now - last >= silence_needed:
+                                buf = self._buffers.pop(uid, bytearray())
+                                self._last_speech.pop(uid, None)
+                                min_bytes = 4_000 if is_pending else 12_000
+                                if len(buf) >= min_bytes:
+                                    ready_dispatches.append((uid, bytes(buf)))
+
+                    for uid, pcm_bytes in ready_dispatches:
+                        asyncio.create_task(self._transcribe_and_dispatch(uid, pcm_bytes))
+
+                except asyncio.CancelledError:
+                    break
+                except Exception as exc:
+                    log.debug(f"[JuiceVault Voice] Silence detection loop error: {exc}")
+                    await asyncio.sleep(0.08)
 
         async def _play_track_now(self, guild, track):
             """Queue a track at index 0 and immediately start playback."""
-            gid = self.guild_id
-            self.cog.manual_queues.setdefault(gid, []).insert(0, track)
-            voice = guild.voice_client
-            if gid in self.cog.tasks:
-                if gid in self.cog.skip_events:
-                    self.cog.skip_events[gid].set()
-                if voice and (voice.is_playing() or voice.is_paused()):
-                    voice.stop()
-            else:
-                if voice and voice.channel:
-                    self.cog.stop_events[gid] = asyncio.Event()
-                    self.cog.skip_events[gid] = asyncio.Event()
-                    self.cog.seek_events[gid] = asyncio.Event()
-                    self.cog.skip_counts[gid] = 0
-                    self.cog.effects[gid] = "none"
-                    self.cog.tasks[gid] = asyncio.create_task(self.cog._player(guild, voice.channel))
+            try:
+                gid = self.guild_id
+                self.cog.manual_queues.setdefault(gid, []).insert(0, track)
+                voice = guild.voice_client
+                if gid in self.cog.tasks and not self.cog.tasks[gid].done():
+                    if gid in self.cog.skip_events:
+                        self.cog.skip_events[gid].set()
+                    if voice and (voice.is_playing() or voice.is_paused()):
+                        voice.stop()
+                else:
+                    if voice and voice.channel:
+                        self.cog.stop_events[gid] = asyncio.Event()
+                        self.cog.skip_events[gid] = asyncio.Event()
+                        self.cog.seek_events[gid] = asyncio.Event()
+                        self.cog.skip_counts[gid] = 0
+                        self.cog.effects[gid] = "none"
+                        self.cog.tasks[gid] = asyncio.create_task(self.cog._player(guild, voice.channel))
 
-            ui = self.bot.get_cog("JuiceVaultUI")
-            if ui:
-                asyncio.create_task(ui.update_panel(gid))
-            if hasattr(self.cog, "web_remote") and self.cog.web_remote:
-                asyncio.create_task(self.cog.web_remote.broadcast_state(gid))
-            self._unlock_session()
+                ui = self.bot.get_cog("JuiceVaultUI")
+                if ui:
+                    asyncio.create_task(ui.update_panel(gid))
+                if hasattr(self.cog, "web_remote") and self.cog.web_remote:
+                    asyncio.create_task(self.cog.web_remote.broadcast_state(gid))
+            finally:
+                self._unlock_session()
 
         async def _search_and_play_youtube(self, guild, query: str, user_name: str, persona: str = None):
             """Search YouTube for query, speak confirmation, and begin immediate playback."""
@@ -1844,10 +1858,16 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             # - If user is in an active wake window or answering a pending question: transcribe using AI (Groq Whisper / Local fast-whisper)
             # - If passive background listening (friends chatting in voice): transcribe with Google STT for FREE!
             #   If no wake word is heard -> discard immediately with 0 Groq calls!
-            if is_pending or in_wake_window:
-                text, detected_lang = await self._recognize_speech_ai(mono_16k, groq_key=groq_key)
-            else:
-                text, detected_lang = await self._recognize_speech_google(mono_16k)
+            try:
+                if is_pending or in_wake_window:
+                    text, detected_lang = await asyncio.wait_for(
+                        self._recognize_speech_ai(mono_16k, groq_key=groq_key),
+                        timeout=5.0
+                    )
+                else:
+                    text, detected_lang = await self._recognize_speech_google(mono_16k)
+            except Exception:
+                text = None
 
             if not text:
                 return
@@ -1862,7 +1882,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 is_neg = bool(tokens & NEGATIVE_WORDS) or any(f" {p} " in padded for p in NEGATIVE_PHRASES) or "cancel" in clean
                 if is_neg:
                     self.cog._pending_yt_voice.pop(self.guild_id, None)
-                    self._wake_windows.pop(user_id, None)
+                    with self._lock:
+                        self._wake_windows.pop(user_id, None)
                     self._unlock_session()
                     persona = await get_guild_persona(self.cog, self.guild_id)
                     cancel_speech = "Search cancelled." if persona != "mommy" else "Search cancelled, darling."
@@ -1874,7 +1895,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 clean_title = _clean_music_query(clean)
                 if clean_title:
                     self.cog._pending_yt_voice.pop(self.guild_id, None)
-                    self._wake_windows.pop(user_id, None)
+                    with self._lock:
+                        self._wake_windows.pop(user_id, None)
                     self._lock_session(user_id, duration=35.0)
                     persona = await get_guild_persona(self.cog, self.guild_id)
                     await play_beep_sound(guild, "understood")
@@ -1895,7 +1917,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                 if not cmd_part:
                     # User only said "Garmin" / "Hey Garmin" / "Ok Garmin" -> open 12s wake window and greet INSTANTLY!
-                    self._wake_windows[user_id] = now + 12.0
+                    with self._lock:
+                        self._wake_windows[user_id] = now + 12.0
                     print(f"[JuiceVault Voice] Wake word '{wake_word}' activated by {user_name} ({persona}). Waiting for command...")
                     if persona == "mommy":
                         greeting = "Yes darling? I'm listening."
@@ -1923,13 +1946,14 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             cmd_part = clean_ai
 
                 clean_cmd = cmd_part
-                self._wake_windows.pop(user_id, None)
+                with self._lock:
+                    self._wake_windows.pop(user_id, None)
             else:
                 # Did this utterance happen within an active wake window?
                 if in_wake_window:
-                    self._lock_session(user_id, duration=20.0)
                     clean_cmd = clean
-                    self._wake_windows.pop(user_id, None)
+                    with self._lock:
+                        self._wake_windows.pop(user_id, None)
                 else:
                     # Passive chatter between people in call! Discard with ZERO Groq tokens!
                     print(f"[JuiceVault Voice] Passive chatter ignored from {user_name} (no 'Garmin' wake word, 0 Groq calls): '{clean}'")
@@ -2201,7 +2225,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 else:
                     # Voice is active and playing: user said bare "Garmin play" -> ask what to play!
                     self._lock_session(user_id, duration=25.0)
-                    self._wake_windows[user_id] = now + 15.0
+                    with self._lock:
+                        self._wake_windows[user_id] = now + 15.0
                     if not hasattr(self.cog, "_pending_yt_voice"):
                         self.cog._pending_yt_voice = {}
                     self.cog._pending_yt_voice[self.guild_id] = {
@@ -2371,7 +2396,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 yt_q = _clean_music_query(clean_cmd)
                 if not yt_q:
                     self._lock_session(user_id, duration=25.0)
-                    self._wake_windows[user_id] = now + 15.0
+                    with self._lock:
+                        self._wake_windows[user_id] = now + 15.0
                     if not hasattr(self.cog, "_pending_yt_voice"):
                         self.cog._pending_yt_voice = {}
                     self.cog._pending_yt_voice[self.guild_id] = {
@@ -2478,9 +2504,15 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return None
 
             loop = asyncio.get_running_loop()
-            res = await loop.run_in_executor(_VOICE_EXECUTOR, _query)
-            if res:
-                return res, "en-US"
+            try:
+                res = await asyncio.wait_for(
+                    loop.run_in_executor(_VOICE_EXECUTOR, _query),
+                    timeout=3.5
+                )
+                if res:
+                    return res, "en-US"
+            except Exception:
+                pass
             return None, "en-US"
 
         async def _recognize_speech_ai(self, mono_16k: bytes, groq_key: str = None, prompt: str = None) -> tuple:
@@ -2582,9 +2614,27 @@ def attach_voice_command_sink(cog, guild):
         print(f"[JuiceVault Voice] VoiceClient in {guild.name} does not support listen() (current type: {type(voice).__name__})")
         return
 
-    # Check if already listening
-    if voice.is_listening() and guild.id in _active_sinks:
-        return
+    existing_sink = _active_sinks.get(guild.id)
+    # Check if voice is already actively listening and existing sink is alive and healthy:
+    if voice.is_listening() and existing_sink is not None and existing_sink._active:
+        worker = getattr(existing_sink, "_worker_task", None)
+        if worker is not None and not worker.done():
+            return
+
+    # If voice was previously listening or had a stale sink, stop and clean it up cleanly:
+    if hasattr(voice, "stop_listening"):
+        try:
+            if voice.is_listening():
+                voice.stop_listening()
+        except Exception:
+            pass
+
+    if existing_sink and hasattr(existing_sink, "cleanup"):
+        try:
+            existing_sink.cleanup()
+        except Exception:
+            pass
+    _active_sinks.pop(guild.id, None)
 
     sink = VoiceCommandAudioSink(cog.bot, cog, guild.id)
     _active_sinks[guild.id] = sink
