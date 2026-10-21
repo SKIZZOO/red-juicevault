@@ -73,6 +73,7 @@ class JuiceVault(commands.Cog):
             learned_wake_words=[],
             learned_song_queries={},
             saved_session=None,
+            volume=100,
         )
         self.config.register_global(
             groq_api_key=None,
@@ -99,6 +100,7 @@ class JuiceVault(commands.Cog):
         self.play_positions = {}
         self.effects = {}
         self.loops = {}
+        self.volumes = {}
         self.history = {}
         self.history_pos = {}
         self.web_remote = None
@@ -113,6 +115,41 @@ class JuiceVault(commands.Cog):
         self._skizzoo_cooldowns = {}
         self._skizzoo_cache_task = None
         self._groq_api_key = None
+
+    def get_guild_volume(self, guild_id: int) -> float:
+        """Get the current guild volume as a float between 0.0 and 1.5 (1.0 = 100%)."""
+        if hasattr(self, "volumes") and guild_id in self.volumes:
+            return self.volumes[guild_id]
+        if hasattr(self.bot, "_jv_data") and "volumes" in self.bot._jv_data and guild_id in self.bot._jv_data["volumes"]:
+            vol = float(self.bot._jv_data["volumes"][guild_id])
+            if not hasattr(self, "volumes"):
+                self.volumes = {}
+            self.volumes[guild_id] = vol
+            return vol
+        return 1.0
+
+    def set_guild_volume(self, guild_id: int, volume: float):
+        """Set guild volume as a float (0.0 to 1.5) and persist across tracks, reloads, and bot restarts."""
+        vol = max(0.0, min(1.5, float(volume)))
+        if not hasattr(self, "volumes"):
+            self.volumes = {}
+        self.volumes[guild_id] = vol
+        if not hasattr(self.bot, "_jv_data"):
+            self.bot._jv_data = {}
+        self.bot._jv_data.setdefault("volumes", {})[guild_id] = vol
+
+        guild = self.bot.get_guild(guild_id)
+        if guild:
+            voice = guild.voice_client
+            mixer = getattr(voice, "_jv_mixer", None) if voice else None
+            if mixer and hasattr(mixer, "set_volume"):
+                mixer.set_volume(vol)
+            elif voice and hasattr(voice, "source") and hasattr(voice.source, "volume"):
+                voice.source.volume = vol
+            try:
+                asyncio.create_task(self.config.guild(guild).volume.set(int(vol * 100)))
+            except Exception:
+                pass
 
     async def cog_load(self):
         await self._ensure_session()
@@ -178,6 +215,7 @@ class JuiceVault(commands.Cog):
                     "effects": self.effects.get(gid, "none"),
                     "position": cur_pos,
                     "history": list(self.history.get(gid, [])),
+                    "volume": self.get_guild_volume(gid),
                     "saved_at": time.time(),
                 }
                 saved_sessions[gid] = session_dict
@@ -201,6 +239,7 @@ class JuiceVault(commands.Cog):
                             "effects": session_dict["effects"],
                             "position": float(cur_pos),
                             "history": [self._clean_track_for_config(t) for t in self.history.get(gid, []) if isinstance(t, dict)],
+                            "volume": session_dict["volume"],
                             "saved_at": session_dict["saved_at"],
                         }
                         await self.config.guild(guild).saved_session.set(clean_session)
@@ -305,9 +344,20 @@ class JuiceVault(commands.Cog):
                     self.effects[guild_id] = saved.get("effects", "none")
                     self.loops[guild_id] = saved.get("loop", "off")
                     self.history[guild_id] = list(saved.get("history") or [])
+                    if "volume" in saved:
+                        try:
+                            self.volumes[guild_id] = max(0.0, min(1.5, float(saved["volume"])))
+                        except Exception:
+                            pass
                 else:
                     self.manual_queues[guild_id] = []
                     self.effects[guild_id] = "none"
+
+                if guild_id not in self.volumes and settings.get("volume") is not None:
+                    try:
+                        self.volumes[guild_id] = max(0.0, min(1.5, float(settings["volume"]) / 100.0))
+                    except Exception:
+                        pass
 
                 await self.config.guild(guild).enabled.set(True)
                 await self.config.guild(guild).channel_id.set(channel.id)
@@ -1080,11 +1130,14 @@ class JuiceVault(commands.Cog):
                     source = discord.FFmpegPCMAudio(local_path, executable=self._ffmpeg_executable(), before_options=before, options=options, stderr=log_file)
                     try:
                         from .voice_recognition import DuckingAudioSource
-                        mixer = DuckingAudioSource(source)
+                        guild_vol = self.get_guild_volume(gid)
+                        mixer = DuckingAudioSource(source, initial_volume=guild_vol)
                         voice._jv_mixer = mixer
                         play_source = mixer
                     except Exception:
                         play_source = source
+                        if hasattr(source, "volume"):
+                            source.volume = self.get_guild_volume(gid)
                     await self._wait_for_voice_idle(voice)
                     voice.play(play_source, after=after)
                     voice._jv_started_at = time.monotonic()
@@ -1482,7 +1535,7 @@ class JuiceVault(commands.Cog):
             voice._jv_mixer = mixer
         elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
             try:
-                mixer = DuckingAudioSource(voice.source)
+                mixer = DuckingAudioSource(voice.source, initial_volume=self.get_guild_volume(guild.id))
                 voice.source = mixer
                 if hasattr(voice, "_player") and voice._player:
                     voice._player.source = mixer
@@ -1614,7 +1667,7 @@ class JuiceVault(commands.Cog):
             voice._jv_mixer = mixer
         elif mixer is None and voice.is_playing() and hasattr(voice, "source") and voice.source:
             try:
-                mixer = DuckingAudioSource(voice.source)
+                mixer = DuckingAudioSource(voice.source, initial_volume=self.get_guild_volume(guild.id))
                 voice.source = mixer
                 if hasattr(voice, "_player") and voice._player:
                     voice._player.source = mixer
@@ -1757,6 +1810,17 @@ class JuiceVault(commands.Cog):
         self._cleanup_prefetch(ctx.guild.id)
         self._trigger_next_prefetch(ctx.guild.id)
         await ctx.send(f"🔀 Queue shuffled — `{len(queue)}` tracks.")
+
+    @jv.command(name="volume", aliases=["vol"])
+    async def volume_cmd(self, ctx, level: int = None):
+        """Set or view playback volume (0-150%). Persists across songs and restarts."""
+        cur = int(self.get_guild_volume(ctx.guild.id) * 100)
+        if level is None:
+            await ctx.send(f"🔊 Current volume is **{cur}%**.")
+            return
+        target = max(0, min(150, int(level)))
+        self.set_guild_volume(ctx.guild.id, target / 100.0)
+        await ctx.send(f"🔊 Volume set to **{target}%**.")
 
     @jv.command(name="favorite", aliases=["fav", "like"])
     async def favorite_cmd(self, ctx, *, search_query: str = None):

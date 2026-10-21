@@ -968,7 +968,7 @@ def _mix_pcm(music_pcm: bytes, overlay_pcm: bytes, music_vol: float) -> bytes:
 
     try:
         import audioop
-        m = audioop.mul(music_pcm, 2, max(0.0, min(1.0, music_vol)))
+        m = audioop.mul(music_pcm, 2, max(0.0, min(1.5, music_vol)))
         if overlay_pcm:
             if len(m) > len(overlay_pcm):
                 overlay_pcm = overlay_pcm + b'\x00' * (len(m) - len(overlay_pcm))
@@ -1004,7 +1004,13 @@ def _mix_pcm(music_pcm: bytes, overlay_pcm: bytes, music_vol: float) -> bytes:
                 a_music[i] = v
     else:
         for i in range(len(a_music)):
-            a_music[i] = int(a_music[i] * music_vol)
+            v = int(a_music[i] * music_vol)
+            if v > 32767:
+                a_music[i] = 32767
+            elif v < -32768:
+                a_music[i] = -32768
+            else:
+                a_music[i] = v
     return a_music.tobytes()
 
 
@@ -1012,14 +1018,15 @@ class DuckingAudioSource(discord.AudioSource):
     """AudioSource wrapper that ducks the main music volume to 18% whenever
     an overlay audio stream (Garmin TTS or Siri chime) is playing, and provides master volume control."""
 
-    def __init__(self, main_source):
+    def __init__(self, main_source, initial_volume: float = 1.0):
         super().__init__()
         self.main_source = main_source
         self.overlay_source = None
         self._lock = threading.Lock()
-        self.master_volume = 1.0
-        self.current_volume = 1.0
-        self.target_volume = 1.0
+        init_vol = max(0.0, min(1.5, float(initial_volume)))
+        self.master_volume = init_vol
+        self.current_volume = init_vol
+        self.target_volume = init_vol
 
     def is_opus(self) -> bool:
         return False
@@ -2240,37 +2247,36 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 "mute", "unmute"
             ))
             if (vol_match or is_relative_vol) and not clean_cmd.startswith(("play ", "baga ", "pune ", "canta ")):
-                voice = guild.voice_client if guild else None
-                mixer = getattr(voice, "_jv_mixer", None) if voice else None
-                source = getattr(voice, "source", None) if voice else None
-                if (mixer and hasattr(mixer, "set_volume")) or (source and hasattr(source, "volume")):
-                    cur_vol = int(mixer.get_volume() * 100) if (mixer and hasattr(mixer, "get_volume")) else (int(source.volume * 100) if (source and hasattr(source, "volume")) else 100)
-                    if vol_match:
-                        target_pct = max(0, min(150, int(vol_match.group(1))))
-                    elif any(w in clean_cmd for w in ("volume up", "louder", "turn it up", "mai tare", "da mai tare")):
-                        target_pct = min(150, cur_vol + 15)
-                    elif any(w in clean_cmd for w in ("volume down", "quieter", "lower volume", "turn it down", "mai incet", "da mai incet")):
-                        target_pct = max(0, cur_vol - 15)
-                    elif "unmute" in clean_cmd:
-                        target_pct = 100
-                    else:  # mute
-                        target_pct = 0
+                cur_vol_float = self.cog.get_guild_volume(self.guild_id) if hasattr(self.cog, "get_guild_volume") else 1.0
+                cur_vol = int(cur_vol_float * 100)
 
-                    if mixer and hasattr(mixer, "set_volume"):
-                        mixer.set_volume(target_pct / 100.0)
-                    elif source and hasattr(source, "volume"):
-                        source.volume = target_pct / 100.0
+                if vol_match:
+                    target_pct = max(0, min(150, int(vol_match.group(1))))
+                elif any(w in clean_cmd for w in ("volume up", "louder", "turn it up", "mai tare", "da mai tare")):
+                    target_pct = min(150, cur_vol + 15)
+                elif any(w in clean_cmd for w in ("volume down", "quieter", "lower volume", "turn it down", "mai incet", "da mai incet")):
+                    target_pct = max(0, cur_vol - 15)
+                elif "unmute" in clean_cmd:
+                    target_pct = 100
+                else:  # mute
+                    target_pct = 0
 
-                    await play_chime_and_proceed(guild)
-                    vol_msg = "Muted playback." if target_pct == 0 else (f"Volume set to {target_pct} percent!" if persona == "anime" else (f"Volume adjusted to {target_pct} percent. Better?" if persona == "mommy" else f"Volume set to {target_pct}%!"))
-                    await speak_in_voice(guild, vol_msg, persona=persona)
-                    self._unlock_session()
-                    await self._notify(guild, f"🔊 **[Garmin]** {user_name}: *\"{text}\"* ➔ {vol_msg}")
-                    return
+                # Set master volume on cog & current active audio stream (persists across tracks and reloads!)
+                target_float = target_pct / 100.0
+                if hasattr(self.cog, "set_guild_volume"):
+                    self.cog.set_guild_volume(self.guild_id, target_float)
                 else:
-                    self._unlock_session()
-                    await self._notify(guild, "⚠️ **[Garmin]** Volume control is not active.")
-                    return
+                    voice = guild.voice_client if guild else None
+                    mixer = getattr(voice, "_jv_mixer", None) if voice else None
+                    if mixer and hasattr(mixer, "set_volume"):
+                        mixer.set_volume(target_float)
+
+                await play_chime_and_proceed(guild)
+                vol_msg = "Muted playback." if target_pct == 0 else (f"Volume set to {target_pct} percent!" if persona == "anime" else (f"Volume adjusted to {target_pct} percent. Better?" if persona == "mommy" else f"Volume set to {target_pct}%!"))
+                await speak_in_voice(guild, vol_msg, persona=persona)
+                self._unlock_session()
+                await self._notify(guild, f"🔊 **[Garmin]** {user_name}: *\"{text}\"* ➔ {vol_msg}")
+                return
 
             # PRECEDENCE 7: NOW PLAYING / SONG INFO
             if re.search(r'\b(?:what\s+song\s+is\s+this|what\'?s\s+playing|what\s+is\s+playing|current\s+song|current\s+track|song\s+info|now\s+playing)\b', clean_cmd, re.I):

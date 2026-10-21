@@ -1132,6 +1132,7 @@ class JuiceVaultWebRemote:
             ],
             "repeat": bool(ui and ui.repeat_enabled.get(gid, False)),
             "has_history": bool(ui and ui.history.get(gid)),
+            "volume": int(main.get_guild_volume(gid) * 100) if hasattr(main, "get_guild_volume") else 100,
             "stats": self.get_telemetry_stats(guild_id=guild.id),
         }
 
@@ -1433,6 +1434,10 @@ class JuiceVaultWebRemote:
         elif action_name == "stop_soundboard":
             from .soundboard import stop_soundboard_in_guild
             await stop_soundboard_in_guild(main, gid)
+        elif action_name == "volume":
+            vol = max(0, min(150, int(payload.get("volume", 100))))
+            if hasattr(main, "set_guild_volume"):
+                main.set_guild_volume(gid, vol / 100.0)
 
         await self.broadcast_state(gid)
         if ui:
