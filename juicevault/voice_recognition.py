@@ -656,18 +656,18 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
     m = _MULTI_WORD_WAKE_REGEX.search(clean)
     if m:
         wake = m.group(0).strip()
-        before = clean[:m.start()].strip().rstrip(",.:;!?- ")
-        after = clean[m.end():].strip().lstrip(",.:;!?- ")
-        cmd = f"{before} {after}".strip()
+        before = clean[:m.start()].strip().strip(",.:;!?- ")
+        after = clean[m.end():].strip().strip(",.:;!?- ")
+        cmd = f"{before} {after}".strip().strip(",.:;!?- ")
         return True, cmd, wake
 
     # 2. Single-word names with optional multi-prefix salutations ('bă Garmin', 'ok Garmin', etc.)
     m = _SINGLE_WORD_WAKE_REGEX.search(clean)
     if m:
         wake = m.group(0).strip()
-        before = clean[:m.start()].strip().rstrip(",.:;!?- ")
-        after = clean[m.end():].strip().lstrip(",.:;!?- ")
-        cmd = f"{before} {after}".strip()
+        before = clean[:m.start()].strip().strip(",.:;!?- ")
+        after = clean[m.end():].strip().strip(",.:;!?- ")
+        cmd = f"{before} {after}".strip().strip(",.:;!?- ")
         return True, cmd, wake
 
     # 3. Custom learned wake words for this guild
@@ -678,9 +678,9 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
                 continue
             idx = clean.find(clean_lw)
             if idx != -1:
-                before = clean[:idx].strip().rstrip(",.:;!?- ")
-                after = clean[idx + len(clean_lw):].strip().lstrip(",.:;!?- ")
-                cmd = f"{before} {after}".strip()
+                before = clean[:idx].strip().strip(",.:;!?- ")
+                after = clean[idx + len(clean_lw):].strip().strip(",.:;!?- ")
+                cmd = f"{before} {after}".strip().strip(",.:;!?- ")
                 return True, cmd, clean_lw
 
     # 4. Levenshtein fuzzy distance matching on leading words (distance <= 2 to 'garmin')
@@ -696,7 +696,7 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
             if 4 <= len(cand_clean) <= 8:
                 if _levenshtein(cand_clean, "garmin") <= 2 or _levenshtein(cand_clean, "carmen") <= 1:
                     cmd_tokens = tokens[cand_idx + 1:]
-                    return True, " ".join(cmd_tokens).strip(), cand_clean
+                    return True, " ".join(cmd_tokens).strip().strip(",.:;!?- "), cand_clean
 
     return False, "", ""
 
@@ -1975,9 +1975,34 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         self._wake_windows.pop(user_id, None)
                     self._lock_session(user_id, duration=35.0)
                     persona = await get_guild_persona(self.cog, self.guild_id)
-                    await play_beep_sound(guild, "understood")
-                    await self._search_and_play_youtube(guild, clean_title, user_name, persona=persona)
-                    return
+
+                    # 1. Check learned song query aliases for this guild
+                    learned_queries = await get_learned_song_queries(self.cog, self.guild_id)
+                    if clean_title in learned_queries:
+                        learned_track = learned_queries[clean_title]
+                        await play_chime_and_proceed(guild)
+                        await self._play_track_now(guild, learned_track)
+                        self._unlock_session()
+                        track_name = learned_track.get("title") or clean_title
+                        await self._notify(guild, f"🧠 **[Garmin]** Playing learned song: **{track_name}** 🎶")
+                        return
+
+                    is_external_artist = bool(_KNOWN_EXTERNAL_ARTISTS_REGEX.search(clean_title))
+                    track = None
+                    if not is_external_artist:
+                        tracks = await self.cog.fetch_tracks()
+                        track = _find_best_archive_track(tracks, clean_title, self.cog)
+
+                    if track:
+                        await play_chime_and_proceed(guild)
+                        await self._play_track_now(guild, track)
+                        self._unlock_session()
+                        track_name = self.cog._track_text(track)
+                        await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Playing: **{track_name}** 🎶")
+                        return
+                    else:
+                        await self._search_and_play_youtube(guild, clean_title, user_name, persona=persona)
+                        return
                 return
 
             # 2. WAKE WORD DETECTION (Permissive matcher + custom learned words + fuzzy matching)
@@ -2021,19 +2046,24 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         elif not m_wake and clean_ai:
                             cmd_part = clean_ai
 
-                clean_cmd = cmd_part
+                clean_cmd = cmd_part.strip().strip(",.:;!?- ")
                 with self._lock:
                     self._wake_windows.pop(user_id, None)
             else:
                 # Did this utterance happen within an active wake window?
                 if in_wake_window:
-                    clean_cmd = clean
+                    clean_cmd = clean.strip().strip(",.:;!?- ")
                     with self._lock:
                         self._wake_windows.pop(user_id, None)
                 else:
                     # Passive chatter between people in call! Discard with ZERO Groq tokens!
                     print(f"[JuiceVault Voice] Passive chatter ignored from {user_name} (no 'Garmin' wake word, 0 Groq calls): '{clean}'")
                     return
+
+            clean_cmd = clean_cmd.strip().strip(",.:;!?- ")
+            if not clean_cmd:
+                self._unlock_session()
+                return
 
             persona = await get_guild_persona(self.cog, self.guild_id)
             print(f"[JuiceVault Voice Command] {user_name} -> Garmin command: '{clean_cmd}' (full: '{clean}') [persona={persona}]")
@@ -2198,24 +2228,39 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return
 
             # PRECEDENCE 6: VOLUME CONTROLS
-            vol_match = re.search(r'\b(?:volume|set\s+volume\s+to|vol)\s+(\d{1,3})\b', clean_cmd, re.I)
-            if vol_match or any(w in clean_cmd for w in ("volume up", "louder", "turn it up", "volume down", "quieter", "lower volume", "turn it down", "mute", "unmute")):
+            vol_match = (
+                re.search(r'\b(?:volume|vol|volum|set\s+(?:the\s+|it\s+)?volume|set\s+vol)\s*(?:to\s*|la\s*)?(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
+                or re.search(r'\b(?:set\s+(?:the\s+|it\s+)?(?:sound|audio)?\s*to\s+)?(\d{1,3})\s*(?:%|percent)?\s*(?:volume|vol|volum)\b', clean_cmd, re.I)
+                or re.search(r'\bset\s+(?:the\s+|it\s+)?(?:volume|sound|audio)?\s*to\s+(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
+                or re.search(r'\b(?:volume|vol|volum)\s+(\d{1,3})\b', clean_cmd, re.I)
+            )
+            is_relative_vol = any(w in clean_cmd for w in (
+                "volume up", "louder", "turn it up", "mai tare", "da mai tare",
+                "volume down", "quieter", "lower volume", "turn it down", "mai incet", "da mai incet",
+                "mute", "unmute"
+            ))
+            if (vol_match or is_relative_vol) and not clean_cmd.startswith(("play ", "baga ", "pune ", "canta ")):
                 voice = guild.voice_client if guild else None
                 mixer = getattr(voice, "_jv_mixer", None) if voice else None
-                if mixer and hasattr(mixer, "set_volume"):
-                    cur_vol = int(mixer.get_volume() * 100)
+                source = getattr(voice, "source", None) if voice else None
+                if (mixer and hasattr(mixer, "set_volume")) or (source and hasattr(source, "volume")):
+                    cur_vol = int(mixer.get_volume() * 100) if (mixer and hasattr(mixer, "get_volume")) else (int(source.volume * 100) if (source and hasattr(source, "volume")) else 100)
                     if vol_match:
                         target_pct = max(0, min(150, int(vol_match.group(1))))
-                    elif any(w in clean_cmd for w in ("volume up", "louder", "turn it up")):
+                    elif any(w in clean_cmd for w in ("volume up", "louder", "turn it up", "mai tare", "da mai tare")):
                         target_pct = min(150, cur_vol + 15)
-                    elif any(w in clean_cmd for w in ("volume down", "quieter", "lower volume", "turn it down")):
+                    elif any(w in clean_cmd for w in ("volume down", "quieter", "lower volume", "turn it down", "mai incet", "da mai incet")):
                         target_pct = max(0, cur_vol - 15)
                     elif "unmute" in clean_cmd:
                         target_pct = 100
                     else:  # mute
                         target_pct = 0
 
-                    mixer.set_volume(target_pct / 100.0)
+                    if mixer and hasattr(mixer, "set_volume"):
+                        mixer.set_volume(target_pct / 100.0)
+                    elif source and hasattr(source, "volume"):
+                        source.volume = target_pct / 100.0
+
                     await play_chime_and_proceed(guild)
                     vol_msg = "Muted playback." if target_pct == 0 else (f"Volume set to {target_pct} percent!" if persona == "anime" else (f"Volume adjusted to {target_pct} percent. Better?" if persona == "mommy" else f"Volume set to {target_pct}%!"))
                     await speak_in_voice(guild, vol_msg, persona=persona)
@@ -2459,12 +2504,26 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 13: HELP / COMMANDS
-            if clean_cmd.strip() in {"help", "commands", "what can you do", "what can i say", "help me"}:
+            is_help = (
+                re.search(r'\b(?:help|commands|command|what\s+can\s+you\s+do|what\s+can\s+i\s+say|help\s+me|can\s+you\s+help|show\s+commands|list\s+commands|ajutor|comenzi|ce\s+poti\s+sa\s+faci|ce\s+stii\s+sa\s+faci)\b', clean_cmd, re.I)
+                and not any(w in clean_cmd for w in ("play", "baga", "pune", "canta", "listen", "search", "cauta", "save", "volume", "skip"))
+            )
+            if is_help:
                 help_speech = "You can ask me to play any song or artist, skip, repeat, shuffle, adjust volume, or save favorites!"
                 await play_chime_and_proceed(guild)
                 await speak_in_voice(guild, help_speech, persona=persona)
                 self._unlock_session()
-                await self._notify(guild, "💡 **[Garmin]** **Voice Commands:**\n• *„Garmin play <song or artist>”* (Juice WRLD vault or YouTube)\n• *„Garmin skip”* / *„Garmin skip 10”* / *„Garmin previous”*\n• *„Garmin pause”* / *„Garmin resume”*\n• *„Garmin shuffle”* / *„Garmin loop”* / *„Garmin restart”*\n• *„Garmin volume <1-100>”* / *„Garmin louder”* / *„Garmin mute”*\n• *„Garmin what's playing?”* / *„Garmin save this song”*\n• *„Garmin switch to mommy voice”* / *„Garmin anime voice”*")
+                await self._notify(
+                    guild,
+                    "💡 **[Garmin]** **Voice Commands:**\n"
+                    "• *„Garmin play <song or artist>”* (Juice WRLD vault or YouTube)\n"
+                    "• *„Garmin skip”* / *„Garmin skip 10”* / *„Garmin previous”*\n"
+                    "• *„Garmin pause”* / *„Garmin resume”*\n"
+                    "• *„Garmin shuffle”* / *„Garmin loop”* / *„Garmin restart”*\n"
+                    "• *„Garmin set volume to 100”* / *„Garmin louder”* / *„Garmin mute”*\n"
+                    "• *„Garmin what's playing?”* / *„Garmin save this song”*\n"
+                    "• *„Garmin switch to mommy voice”* / *„Garmin anime voice”*"
+                )
                 return
 
             # PRECEDENCE 14: DIRECT YOUTUBE SEARCH & PLAY
@@ -2498,16 +2557,23 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 15: GENERIC SONG SEARCH & PLAY
-            play_match = re.match(
-                r'^(?:canta|pune|baga|play|asculta|cauta|gaseste|search|reda|da-i play la|dai play la|da play la|da-i drumul la|dai drumul la|put\s+on|listen\s+to)\s+(?:piesa|melodia|melodie|track|song)?\s*(?:cu|de\s+la|by)?\s*(.+)$',
+            # Requires explicit play intent verbs (play, baga, pune, canta, listen, search, etc.)
+            # OR an explicit known artist name (Yeat, Carti, Travis Scott, Drake, etc.)
+            play_match = re.search(
+                r'\b(?:can\s+you\s+play|could\s+you\s+play|please\s+play|i\s+want\s+to\s+hear|let\'?s\s+hear|let\'?s\s+listen\s+to|'
+                r'play|pune|baga|baga-mi|pune-mi|baga\s+si\s+mie|pune\s+si\s+mie|'
+                r'canta|asculta|cauta|gaseste|search|search\s+for|reda|find|'
+                r'da-i\s+play\s+la|dai\s+play\s+la|da\s+play\s+la|da-i\s+drumul\s+la|dai\s+drumul\s+la|da\s+drumul\s+la|'
+                r'put\s+on|listen\s+to|listen|stream)\b\s*'
+                r'(?:piesa|melodia|melodie|track|song)?\s*(?:cu|de\s+la|by)?\s*(.+)$',
                 clean_cmd,
                 re.IGNORECASE
             )
             q = ""
             if play_match:
                 q = play_match.group(1).strip()
-            elif len(clean_cmd.split()) <= 6:
-                # Direct name utterance, e.g. user says "Garmin Yeat" or "Garmin Drake - Gods Plan"
+            elif _KNOWN_EXTERNAL_ARTISTS_REGEX.search(clean_cmd) and not any(w in clean_cmd for w in ("who is", "who's", "what is", "what's", "tell me", "help", "command")):
+                # Explicit known artist request without verb, e.g. "Garmin Yeat" or "Garmin Playboi Carti"
                 q = clean_cmd.strip()
 
             if q:
@@ -2554,8 +2620,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             # Feedback when recognized speech was addressed to Garmin but didn't match known command
             await play_beep_sound(guild, "error")
             self._unlock_session()
-            await speak_in_voice(guild, "Command not recognized.", persona=persona)
-            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Command not recognized.")
+            await speak_in_voice(guild, "Command not recognized. Say Garmin help for commands.", persona=persona)
+            await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Command not recognized. Say *„Garmin help”* for available commands.")
 
         def _downsample_to_16k_mono(self, pcm_bytes: bytes) -> bytes:
             """Downsample Discord 48kHz 16-bit stereo PCM to 16kHz mono PCM using SIMD/NumPy when available."""
