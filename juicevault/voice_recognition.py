@@ -304,8 +304,8 @@ def _resolve_artist_phonetics(text: str) -> str:
 
 def _clean_music_query(query: str) -> str:
     """Cleanly extract song or artist search query by stripping YouTube indicators,
-    command verbs ('bagă', 'pune', 'play'), filler words ('muzică', 'piesa', 'melodia', 'ceva de la'),
-    artist prepositions ('de la Juice WRLD', 'by Juice WRLD'),
+    command verbs ('play', 'search', 'put on', 'listen'), filler words ('music', 'song', 'track'),
+    artist prepositions ('by Juice WRLD', 'from Juice WRLD'),
     and resolving phonetic artist aliases (e.g. 'cu avo' -> 'quavo', 'yet' -> 'yeat')."""
     if not query:
         return ""
@@ -1115,22 +1115,35 @@ except (ImportError, ValueError):
 
 
 def get_persona_response(action: str, persona: str = "anime", **kwargs) -> str:
-    """Return a personality-rich, varied spoken response for the specified action and persona."""
+    """Return a personality-rich, varied spoken response for the specified action and persona.
+    If pre-warmed PCM responses are already cached in RAM for this action/kwargs, prefer them for 0ms instant speech!"""
     pool = _PERSONA_RESPONSES.get(persona, {}).get(action)
     if not pool:
         pool = _PERSONA_RESPONSES.get("anime", {}).get(action) or _PERSONA_RESPONSES.get("natural", {}).get(action, ["Okay."])
-    phrase = random.choice(pool)
+
     if kwargs:
-        try:
-            return phrase.format(**kwargs)
-        except Exception:
-            return phrase
-    return phrase
+        formatted_pool = []
+        for phrase in pool:
+            try:
+                formatted_pool.append(phrase.format(**kwargs))
+            except Exception:
+                formatted_pool.append(phrase)
+        # Check if any formatted phrase is already in RAM PCM cache for instant 0ms speech
+        cached_matches = [f for f in formatted_pool if (f, persona) in _TTS_PCM_CACHE]
+        if cached_matches:
+            return random.choice(cached_matches)
+        return random.choice(formatted_pool)
+
+    # For non-parameterized phrases, if any are already in RAM PCM cache, prefer them
+    cached_matches = [f for f in pool if (f, persona) in _TTS_PCM_CACHE]
+    if cached_matches:
+        return random.choice(cached_matches)
+    return random.choice(pool)
 
 
 async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
     """Generate crystal-clear Azure Neural TTS using edge-tts.
-    - 'anime': Bubbly kawaii anime VTuber streamer girl voice (Microsoft Ava, pitch +32Hz, rate +7% - Bree Dragon HD profile)
+    - 'anime': Bubbly kawaii anime VTuber streamer girl voice (Microsoft Ava, pitch +35Hz, rate +7% - Bree Dragon HD profile)
     - 'mommy': Sultry dommy mommy voice (Microsoft Sonia, pitch -2Hz, rate -4%)
     - 'rude': Sarcastic tsundere voice (Microsoft Aria, pitch +2Hz, rate +4%)
     - 'natural': Clean natural assistant voice (Microsoft Jenny)"""
@@ -1143,7 +1156,7 @@ async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
         "natural": "en-US-JennyNeural"
     }
     voice = voice_map.get(persona, "en-US-AvaNeural")
-    pitch = "+32Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
+    pitch = "+35Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
     rate = "+7%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
 
     # For anime/VTuber persona, phonetically pronounce cute chat slang for natural voice delivery:
@@ -1228,19 +1241,38 @@ async def _fetch_tts_bytes(clean_tts: str, persona: str = "anime") -> bytes:
 
 
 # Build pre-warming list dynamically from top phrases of priority actions for instant startup
-_PRIORITY_ACTIONS = ("greeting", "persona_activated", "pause", "resume", "skip", "skip_10", "volume_muted", "restart", "previous", "shuffle", "bye", "help")
+_PRIORITY_ACTIONS = (
+    "greeting", "persona_activated", "pause", "resume", "skip", "skip_10",
+    "volume_muted", "restart", "previous", "no_previous", "no_music",
+    "shuffle", "bye", "help", "what_to_play", "search_yt_prompt",
+    "search_cancelled", "fav_empty", "unrecognized", "loop_on", "loop_off",
+    "queue_started"
+)
+_COMMON_VOL_PERCENTAGES = (5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100)
 _COMMON_SYSTEM_PHRASES = []
 
 for _act in _PRIORITY_ACTIONS:
     for _p_name, _p_actions in _PERSONA_RESPONSES.items():
         _count = 0
-        _limit = 25 if _p_name == "anime" else 4
+        if _p_name == "anime":
+            _limit = 8 if _act in ("greeting", "skip", "pause", "resume", "help") else 4
+        else:
+            _limit = 2 if _act in ("greeting", "skip", "pause", "resume") else 0
         for _ph in _p_actions.get(_act, []):
             if "{" not in _ph:
                 _COMMON_SYSTEM_PHRASES.append((_ph, _p_name))
                 _count += 1
                 if _count >= _limit:
                     break
+
+# Pre-warm common volume percentages so volume adjustments respond instantly (0ms) from RAM PCM
+for _pct in _COMMON_VOL_PERCENTAGES:
+    _anime_vol = _PERSONA_RESPONSES.get("anime", {}).get("volume_set", [])
+    for _ph in _anime_vol[:2]:
+        try:
+            _COMMON_SYSTEM_PHRASES.append((_ph.format(percent=_pct), "anime"))
+        except Exception:
+            pass
 
 
 def prewarm_voice_cache():
@@ -2262,17 +2294,17 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
             # PRECEDENCE 6: VOLUME CONTROLS
             vol_match = (
-                re.search(r'\b(?:volume|vol|set\s+(?:the\s+|it\s+)?volume|set\s+vol)\s*(?:to\s*)?(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
-                or re.search(r'\b(?:set\s+(?:the\s+|it\s+)?(?:sound|audio)?\s*to\s+)?(\d{1,3})\s*(?:%|percent)?\s*(?:volume|vol)\b', clean_cmd, re.I)
-                or re.search(r'\bset\s+(?:the\s+|it\s+)?(?:volume|sound|audio)?\s*to\s+(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
-                or re.search(r'\b(?:volume|vol)\s+(\d{1,3})\b', clean_cmd, re.I)
+                re.search(r'\b(?:volume|vol|set\s+(?:the\s+|it\s+|of\s+|a\s+)?volume|set\s+vol)\s*(?:to\s*|at\s*|on\s*)?(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
+                or re.search(r'\b(?:turn|put|change|adjust)\s+(?:the\s+|it\s+|of\s+|a\s+)?(?:volume|sound|audio|vol)\s*(?:to\s*|at\s*|on\s*|\s+)?(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
+                or re.search(r'\bset\s+(?:the\s+|it\s+|of\s+|a\s+)?(?:volume|sound|audio|vol)?\s*(?:to\s*|at\s*|on\s*)(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
+                or re.search(r'\b(?:volume|vol|sound|audio)\s*(?:to\s*|at\s*|on\s*)?(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
             )
             is_relative_vol = any(w in clean_cmd for w in (
                 "volume up", "louder", "turn it up",
                 "volume down", "quieter", "lower volume", "turn it down",
                 "mute", "unmute"
             ))
-            if (vol_match or is_relative_vol) and not clean_cmd.startswith(("play ", "search ")):
+            if (vol_match or is_relative_vol) and not clean_cmd.startswith(("play ", "search ")) and not any(w in clean_cmd for w in ("skip", "forward", "back", "rewind")):
                 cur_vol_float = self.cog.get_guild_volume(self.guild_id) if hasattr(self.cog, "get_guild_volume") else 1.0
                 cur_vol = int(cur_vol_float * 100)
 
@@ -2611,7 +2643,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
             # PRECEDENCE 13: HELP / COMMANDS
             is_help = (
-                re.search(r'\b(?:help|commands|command|what\s+can\s+you\s+do|what\s+can\s+i\s+say|help\s+me|can\s+you\s+help|show\s+commands|list\s+commands)\b', clean_cmd, re.I)
+                re.search(r'\b(?:help|commands?|what\s+can\s+(?:you|u)\s+do|what\s+(?:can|do)\s+i\s+say|help\s+me|can\s+you\s+help|show\s+(?:me\s+)?commands?|list\s+commands?|what\s+commands|how\s+to\s+use|how\s+do\s+i\s+use)\b', clean_cmd, re.I)
                 and not any(w in clean_cmd for w in ("play", "search", "save", "volume", "skip"))
             )
             if is_help:
