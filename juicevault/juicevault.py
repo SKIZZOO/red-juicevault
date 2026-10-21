@@ -2052,29 +2052,29 @@ class JuiceVault(commands.Cog):
                     attach_voice_command_sink(self, ctx.guild)
                 await msg.edit(
                     content=(
-                        "✅ **Instalare reușită!**\n"
-                        "Pachetele `discord-ext-voice-recv`, `SpeechRecognition` și `davey` au fost instalate cu succes în mediul botului!\n"
-                        "🎤 **Comenzile vocale Garmin pe voice sunt acum ACTIVE!**\n"
-                        "Încearcă acum pe voice: **„Bă Garmin, dă-i skip”** sau **„Bă Garmin, bagă piesa robbery”**!"
+                        "✅ **Installation successful!**\n"
+                        "Packages `discord-ext-voice-recv`, `SpeechRecognition` and `davey` were installed successfully in the bot's environment!\n"
+                        "🎤 **Garmin voice commands are now ACTIVE!**\n"
+                        "Try speaking in voice: **„Hey Garmin, skip this song”** or **„Garmin, play Robbery”**!"
                     )
                 )
             else:
                 err = proc.stderr or proc.stdout
-                await msg.edit(content=f"❌ **Eroare la instalare:**\n```{err[:1500]}```")
+                await msg.edit(content=f"❌ **Installation error:**\n```{err[:1500]}```")
         except Exception as exc:
-            await msg.edit(content=f"❌ **Eroare:** `{exc}`")
+            await msg.edit(content=f"❌ **Error:** `{exc}`")
 
     @jv.command(name="vclearn", aliases=["voicelearn", "garminlearn"])
     @commands.guild_only()
     async def vc_learn_cmd(self, ctx, *, word_or_phrase: str):
-        """Teach Garmin a new custom wake word or phonetic phrase (e.g. 'carmena', 'băi băiatule')."""
+        """Teach Garmin a new custom wake word or phonetic phrase (e.g. 'carmena', 'gaming')."""
         try:
             from .voice_recognition import add_learned_wake_word, get_learned_wake_words
             await add_learned_wake_word(self, ctx.guild.id, word_or_phrase)
             words = await get_learned_wake_words(self, ctx.guild.id)
-            await ctx.send(f"🧠 **[Garmin]** Am învățat noul apelativ: **\"{word_or_phrase}\"**! 🎙️\nCuvinte active învățate: `{', '.join(sorted(words))}`")
+            await ctx.send(f"🧠 **[Garmin]** Learned new wake phrase: **\"{word_or_phrase}\"**! 🎙️\nActive learned words: `{', '.join(sorted(words))}`")
         except Exception as exc:
-            await ctx.send(f"❌ Eroare: {exc}")
+            await ctx.send(f"❌ Error: {exc}")
 
     @jv.command(name="vclearned", aliases=["voicelearned", "garminlearned"])
     @commands.guild_only()
@@ -2087,21 +2087,21 @@ class JuiceVault(commands.Cog):
             embed = discord.Embed(title="🧠 Garmin Adaptive Memory", color=0xA855F7)
             embed.add_field(
                 name="🎙️ Learned Wake Words",
-                value=", ".join(f"`{w}`" for w in sorted(words)) if words else "*Niciun cuvânt personalizat încă. Garmin învață automat variațiile când vorbești!*",
+                value=", ".join(f"`{w}`" for w in sorted(words)) if words else "*No custom wake words yet. Garmin automatically learns variations as you speak!*",
                 inline=False
             )
             embed.add_field(
                 name="🎵 Learned Song Aliases",
-                value="\n".join(f"• **\"{q}\"** ➔ {t.get('title')}" for q, t in list(queries.items())[:15]) if queries else "*Nicio piesă învățată încă. Căutările pe YouTube sunt reținute automat!*",
+                value="\n".join(f"• **\"{q}\"** ➔ {t.get('title')}" for q, t in list(queries.items())[:15]) if queries else "*No learned tracks yet. YouTube searches are automatically remembered!*",
                 inline=False
             )
             await ctx.send(embed=embed)
         except Exception as exc:
-            await ctx.send(f"❌ Eroare: {exc}")
+            await ctx.send(f"❌ Error: {exc}")
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        """Handle 'da' / 'yes' / 'nu' / 'no' responses to YouTube voice prompts in text chat."""
+        """Handle 'yes' / 'no' responses to YouTube voice prompts in text chat."""
         if not message.guild or message.author.bot:
             return
         pending = getattr(self, "_pending_yt_voice", {}).get(message.guild.id)
@@ -2112,34 +2112,31 @@ class JuiceVault(commands.Cog):
         content = message.content.strip().lower()
 
         # REQUIREMENT: Must come from the SAME person who initiated the command!
-        # Do not respond to anyone else ("sa nu raspunda la altcineva")
         if pending_uid and message.author.id != pending_uid:
             return
 
-
-        is_ro = pending.get("lang") == "ro"
         target_q = None
 
         from .voice_recognition import _active_sinks
         sink = _active_sinks.get(message.guild.id)
 
         if pending.get("awaiting_title"):
-            if content in ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa", "nah", "nope"):
+            if content in ("no", "n", "cancel", "stop", "nevermind", "nah", "nope", "exit"):
                 self._pending_yt_voice.pop(message.guild.id, None)
                 if sink:
                     sink._unlock_session()
-                await message.channel.send("🚫 **[Garmin]** Comandă anulată." if is_ro else "🚫 **[Garmin]** Cancelled.")
+                await message.channel.send("🚫 **[Garmin]** Cancelled.")
                 return
             target_q = message.content.strip()
             self._pending_yt_voice.pop(message.guild.id, None)
-        elif content in ("da", "yes", "y", "sure", "sigur", "baga", "pune-o", "cauta", "pune", "hai", "da te rog", "te rog", "youtube", "pe youtube", "de pe youtube", "dupa youtube", "play it", "ok", "okay", "yeah", "yep", "yup", "dap", "mda"):
+        elif content in ("yes", "y", "sure", "play it", "ok", "okay", "yeah", "yep", "yup", "do it", "stream it", "youtube"):
             self._pending_yt_voice.pop(message.guild.id, None)
             target_q = pending.get("query")
-        elif content in ("nu", "no", "n", "cancel", "anuleaza", "stop", "lasa", "nah", "nope"):
+        elif content in ("no", "n", "cancel", "stop", "nevermind", "nah", "nope", "exit"):
             self._pending_yt_voice.pop(message.guild.id, None)
             if sink:
                 sink._unlock_session()
-            await message.channel.send("🚫 **[Garmin]** Comandă anulată." if is_ro else "🚫 **[Garmin]** Cancelled.")
+            await message.channel.send("🚫 **[Garmin]** Cancelled.")
             return
         else:
             return
@@ -2149,7 +2146,7 @@ class JuiceVault(commands.Cog):
                 sink._unlock_session()
             return
 
-        await message.channel.send(f"🔍 **[Garmin]** Caut *\"{target_q}\"* pe YouTube... ⏳" if is_ro else f"🔍 **[Garmin]** Searching YouTube for *\"{target_q}\"*... ⏳")
+        await message.channel.send(f"🔍 **[Garmin]** Searching YouTube for *\"{target_q}\"*... ⏳")
         try:
             from .voice_recognition import play_chime_and_proceed
             from .external_search_patch import _extract_search
@@ -2187,7 +2184,7 @@ class JuiceVault(commands.Cog):
 
                     await play_chime_and_proceed(message.guild)
                     title = yt_track.get('title') or target_q
-                    await message.channel.send(f"🎥 **[Garmin]** Redare de pe YouTube: **{title}** 🎶" if is_ro else f"🎥 **[Garmin]** Playing from YouTube: **{title}** 🎶")
+                    await message.channel.send(f"🎥 **[Garmin]** Playing from YouTube: **{title}** 🎶")
                     ui = self.bot.get_cog("JuiceVaultUI")
                     if ui:
                         asyncio.create_task(ui.update_panel(gid))
@@ -2197,7 +2194,7 @@ class JuiceVault(commands.Cog):
                         sink._unlock_session()
                     return
 
-            await message.channel.send(f"❌ Nu am găsit pe YouTube: *\"{target_q}\"*" if is_ro else f"❌ Not found on YouTube: *\"{target_q}\"*")
+            await message.channel.send(f"❌ Not found on YouTube: *\"{target_q}\"*")
         except Exception as e:
             await message.channel.send(f"❌ YouTube error: `{e}`")
         finally:

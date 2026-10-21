@@ -10138,8 +10138,7 @@ HTML_INDEX = """<!DOCTYPE html>
       rec.interimResults = true;
       rec.maxAlternatives = 1;
 
-      const userLang = (navigator.language || 'ro-RO');
-      rec.lang = userLang.startsWith('ro') ? 'ro-RO' : (userLang.startsWith('en') ? 'en-US' : userLang);
+      rec.lang = 'en-US';
 
       rec.onstart = function() {
         voiceIsListening = true;
@@ -10368,7 +10367,7 @@ HTML_INDEX = """<!DOCTYPE html>
       }
 
       // Skip forward 10s
-      if (clean.includes('skip 10') || clean.includes('skip ten') || clean.includes('forward 10') || clean.includes('inainte 10') || clean.includes('10 secunde inainte')) {
+      if (clean.includes('skip 10') || clean.includes('skip ten') || clean.includes('forward 10') || clean.includes('forward ten') || clean.includes('fast forward') || clean.includes('forward 10 seconds')) {
         playSiriChime();
         setFeedback('Garmin: Skip +10s');
         action('seek', { delta: 10 });
@@ -10376,20 +10375,18 @@ HTML_INDEX = """<!DOCTYPE html>
       }
 
       // Rewind 10s
-      if (clean.includes('back 10') || clean.includes('inapoi 10') || clean.includes('rewind 10') || clean.includes('10 secunde inapoi')) {
+      if (clean.includes('back 10') || clean.includes('back ten') || clean.includes('rewind 10') || clean.includes('rewind') || clean.includes('back 10 seconds') || clean.includes('rewind 10 seconds')) {
         playSiriChime();
         setFeedback('Garmin: Rewind -10s');
         action('seek', { delta: -10 });
         return;
       }
 
-      // Skip / Next track (handles "skip", "next", "da-i skip", "dai skip", "urmatoarea", "sari")
+      // Skip / Next track
       if (
         clean === 'skip' || clean.startsWith('skip') ||
-        clean.includes('da-i skip') || clean.includes('dai skip') ||
         clean === 'next' || clean.includes('next song') || clean.includes('next track') ||
-        clean.includes('urmatoarea') || clean.includes('urmatorul') ||
-        clean.includes('sari') || clean.includes('schimba') || clean.includes('treci')
+        clean.includes('skip this song') || clean.includes('skip song') || clean.includes('skip track')
       ) {
         playSiriChime();
         setFeedback('Garmin: Skip Track');
@@ -10400,7 +10397,7 @@ HTML_INDEX = """<!DOCTYPE html>
       // Previous track
       if (
         clean === 'prev' || clean === 'previous' || clean.includes('previous song') ||
-        clean.includes('piesa anterioara') || clean.includes('inapoi') || clean.includes('melodia anterioara')
+        clean.includes('previous track') || clean.includes('go back') || clean.includes('last song')
       ) {
         setFeedback('Garmin: Previous Track');
         action('previous');
@@ -10409,8 +10406,8 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // Pause
       if (
-        clean === 'pause' || clean.includes('pauza') ||
-        clean === 'stop' || clean.includes('opreste') || clean.includes('taci')
+        clean === 'pause' || clean === 'stop' || clean.includes('pause playback') ||
+        clean.includes('pause music') || clean.includes('stop playing') || clean.includes('shut up') || clean.includes('hold on')
       ) {
         setFeedback('Garmin: Pause');
         action('pause');
@@ -10420,7 +10417,7 @@ HTML_INDEX = """<!DOCTYPE html>
       // Play / Resume
       if (
         clean === 'play' || clean === 'start' || clean === 'resume' ||
-        clean.includes('continua') || clean.includes('da drumul') || clean.includes('porneste')
+        clean.includes('unpause') || clean.includes('continue') || clean.includes('resume playback') || clean.includes('resume music')
       ) {
         setFeedback('Garmin: Play');
         action('play');
@@ -10428,21 +10425,21 @@ HTML_INDEX = """<!DOCTYPE html>
       }
 
       // Shuffle
-      if (clean.includes('shuffle') || clean.includes('amesteca')) {
+      if (clean.includes('shuffle') || clean.includes('mix')) {
         setFeedback('Garmin: Shuffle Queue');
         action('shuffle');
         return;
       }
 
       // Repeat / Loop
-      if (clean.includes('repeat') || clean.includes('repeta') || clean.includes('loop')) {
+      if (clean.includes('repeat') || clean.includes('loop')) {
         setFeedback('Garmin: Repeat');
         action('repeat');
         return;
       }
 
-      // Volume control (e.g. "volum 80", "volume 50")
-      const volMatch = clean.match(/(?:volum|volume|set volume to|sunet)\\s*(\\d{1,3})/);
+      // Volume control (e.g. "volume 80", "set volume to 50")
+      const volMatch = clean.match(/(?:volume|vol|set volume to|sound to)\\s*(\\d{1,3})/);
       if (volMatch) {
         const val = Math.max(0, Math.min(100, parseInt(volMatch[1], 10)));
         setFeedback(`Garmin: Volume ${val}%`);
@@ -10451,7 +10448,7 @@ HTML_INDEX = """<!DOCTYPE html>
       }
 
       // Like / Favorite
-      if (clean.includes('favorite') || clean.includes('favorit') || clean.includes('like') || clean.includes('apreciaza')) {
+      if (clean.includes('favorite') || clean.includes('like') || clean.includes('love this song') || clean.includes('save this song') || clean.includes('add to favorites')) {
         playSiriChime();
         setFeedback('Garmin: Toggle Favorite');
         if (typeof toggleCurrentSongFavorite === 'function') {
@@ -10462,8 +10459,8 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // Direct YouTube search
       if (clean.includes('youtube')) {
-        let ytQ = clean.replace(/\\b(?:cauta|baga|pune|play|gaseste|search|reda|da-i play la|dai play la)?\\s*(?:pe|de pe|dupa|from|on)?\\s*youtube\\s*(?:pentru|for|cu|de la|by)?\\b/gi, '').trim();
-        ytQ = ytQ.replace(/^(?:cauta|baga|pune|play|gaseste|search|reda|da-i play la|dai play la)\\s+(?:piesa|melodia|track|song)?\\s*(?:cu|de la|by)?\\s*/gi, '').trim();
+        let ytQ = clean.replace(/\\b(?:play|search|find|stream)?\\s*(?:from|on)?\\s*youtube\\s*(?:for|by)?\\b/gi, '').trim();
+        ytQ = ytQ.replace(/^(?:play|search|find|stream)\\s+(?:track|song)?\\s*(?:by)?\\s*/gi, '').trim();
         if (ytQ) {
           playSiriChime();
           setFeedback(`Garmin YouTube: "${ytQ}"...`);
@@ -10478,8 +10475,8 @@ HTML_INDEX = """<!DOCTYPE html>
         }
       }
 
-      // Search & Play query ("play Lucid Dreams", "baga piesa Robbery", "canta Robbery", "cauta Drake", "baga 6ix9ine")
-      const playMatch = clean.match(/^(?:play|canta|pune|baga|asculta|cauta|gaseste|search|reda|da-i play la|dai play la|da play la|da-i drumul la|dai drumul la)\\s+(?:piesa|melodia|melodie|track|song)?\\s*(?:cu|de la|by)?\\s*(.+)$/i);
+      // Search & Play query ("play Lucid Dreams", "search Drake", "listen to Robbery")
+      const playMatch = clean.match(/^(?:play|listen to|search|find|stream|put on)\\s+(?:track|song)?\\s*(?:by)?\\s*(.+)$/i);
       if (playMatch && playMatch[1]) {
         playSiriChime();
         const query = playMatch[1].trim();
