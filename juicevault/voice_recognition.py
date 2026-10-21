@@ -1153,8 +1153,16 @@ def get_persona_response(action: str, persona: str = "anime", **kwargs) -> str:
                 formatted_pool.append(phrase.format(**kwargs))
             except Exception:
                 formatted_pool.append(phrase)
+        # Prefer pre-warmed RAM PCM if available for 0ms instant speech
+        cached = [p for p in formatted_pool if (p, persona) in _TTS_PCM_CACHE]
+        if cached:
+            return random.choice(cached)
         return random.choice(formatted_pool)
 
+    # Prefer pre-warmed RAM PCM if available for 0ms instant speech
+    cached = [p for p in pool if (p, persona) in _TTS_PCM_CACHE]
+    if cached:
+        return random.choice(cached)
     return random.choice(pool)
 
 
@@ -1261,7 +1269,8 @@ async def _fetch_tts_bytes(clean_tts: str, persona: str = "anime") -> bytes:
 _PRIORITY_ACTIONS = (
     "greeting", "persona_activated", "pause", "resume", "skip", "skip_10",
     "volume_muted", "restart", "previous", "no_previous", "no_music",
-    "shuffle", "bye", "help", "what_to_play", "fav_empty"
+    "shuffle", "bye", "help", "what_to_play", "fav_empty", "unrecognized",
+    "save_fav", "remove_fav", "already_fav", "not_in_fav"
 )
 _COMMON_VOL_PERCENTAGES = (5, 10, 20, 50, 100)
 _COMMON_SYSTEM_PHRASES = []
@@ -1269,10 +1278,7 @@ _COMMON_SYSTEM_PHRASES = []
 for _act in _PRIORITY_ACTIONS:
     for _p_name, _p_actions in _PERSONA_RESPONSES.items():
         _count = 0
-        if _p_name == "anime":
-            _limit = 3 if _act in ("greeting", "skip", "pause", "resume", "help") else 2
-        else:
-            _limit = 1 if _act in ("greeting", "skip", "pause", "resume") else 0
+        _limit = 2 if _p_name == "anime" else 1
         for _ph in _p_actions.get(_act, []):
             if "{" not in _ph:
                 _COMMON_SYSTEM_PHRASES.append((_ph, _p_name))
@@ -1280,18 +1286,30 @@ for _act in _PRIORITY_ACTIONS:
                 if _count >= _limit:
                     break
 
-# Pre-warm common volume percentages so volume adjustments respond instantly (0ms) from RAM PCM
+# Pre-warm common volume percentages for all 4 personas so volume adjustments respond instantly (0ms) from RAM PCM
 for _pct in _COMMON_VOL_PERCENTAGES:
-    _anime_vol = _PERSONA_RESPONSES.get("anime", {}).get("volume_set", [])
-    for _ph in _anime_vol[:1]:
-        try:
-            _COMMON_SYSTEM_PHRASES.append((_ph.format(percent=_pct), "anime"))
-        except Exception:
-            pass
+    for _p_name in ("anime", "mommy", "rude", "natural"):
+        _p_vol = _PERSONA_RESPONSES.get(_p_name, {}).get("volume_set", [])
+        for _ph in _p_vol[:1]:
+            try:
+                _COMMON_SYSTEM_PHRASES.append((_ph.format(percent=_pct), _p_name))
+            except Exception:
+                pass
+
+
+_prewarm_started = False
+_prewarm_lock = threading.Lock()
 
 
 def prewarm_voice_cache():
-    """Background task to pre-generate beep PCM and pre-load/decode common system voice phrases into RAM."""
+    """Background task to pre-generate beep PCM and pre-load/decode common system voice phrases into RAM.
+    Protected by singleton guard to prevent duplicate concurrent runs and Edge-TTS rate limits."""
+    global _prewarm_started
+    with _prewarm_lock:
+        if _prewarm_started:
+            return
+        _prewarm_started = True
+
     def _run():
         # 1. Pre-synthesize all beeps into RAM PCM
         for st in ("listening", "understood", "error"):
@@ -1303,7 +1321,7 @@ def prewarm_voice_cache():
             for text, persona in _COMMON_SYSTEM_PHRASES:
                 try:
                     loop.run_until_complete(_fetch_tts_bytes(text, persona=persona))
-                    time.sleep(0.06)
+                    time.sleep(0.08)
                 except Exception:
                     pass
         finally:
@@ -1311,6 +1329,104 @@ def prewarm_voice_cache():
         print(f"[JuiceVault Voice] 🚀 Pre-warmed {len(_TTS_PCM_CACHE)} system voice phrases and PCM chimes into RAM.")
 
     _VOICE_EXECUTOR.submit(_run)
+
+
+_guild_speak_locks = {}
+
+
+async def _play_pcm_unlocked(guild, voice, pcm_bytes: bytes, desc: str = "") -> bool:
+    """Internal helper: stream 48kHz 16-bit stereo PCM bytes directly into Discord voice client.
+    Does NOT acquire _guild_speak_locks (caller must handle locking).
+    Handles ducked mixer overlay, paused player unpause/re-pause, and direct idle playback seamlessly."""
+    if not voice or not voice.is_connected() or not pcm_bytes:
+        return False
+
+    pcm_duration = len(pcm_bytes) / 192000.0
+    timeout = max(2.5, pcm_duration + 2.5)
+    start_t = time.monotonic()
+
+    # Detect current active DuckingAudioSource
+    mixer = None
+    cur_source = getattr(voice, "source", None)
+    if isinstance(cur_source, DuckingAudioSource):
+        mixer = cur_source
+        voice._jv_mixer = cur_source
+    elif isinstance(getattr(voice, "_jv_mixer", None), DuckingAudioSource):
+        mixer = voice._jv_mixer
+
+    try:
+        if voice.is_paused() and mixer is not None:
+            if desc:
+                print(f"[JuiceVault Voice TTS] 🔊 Speaking over paused player in '{guild.name}': {desc}")
+            prev_target = mixer.target_volume
+            mixer.target_volume = 0.0
+            mixer.current_volume = 0.0
+            mixer.set_overlay(MemoryPCMAudioSource(pcm_bytes))
+            voice.resume()
+            while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
+                if not voice.is_connected() or not voice.is_playing() or voice.source is not mixer:
+                    break
+                await asyncio.sleep(0.025)
+            await asyncio.sleep(0.18)
+            if voice.is_connected() and not voice.is_paused():
+                voice.pause()
+            mixer.target_volume = prev_target
+            return True
+
+        elif voice.is_playing() and mixer is not None:
+            if desc:
+                print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking over ducked music (18%) in '{guild.name}': {desc}")
+            overlay = MemoryPCMAudioSource(pcm_bytes)
+            mixer.set_overlay(overlay)
+            while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
+                if not voice.is_connected() or not voice.is_playing() or voice.source is not mixer:
+                    break
+                await asyncio.sleep(0.025)
+            await asyncio.sleep(0.18)
+            return True
+
+        else:
+            # Music is not actively playing with mixer
+            if voice.is_playing():
+                wait_start = time.monotonic()
+                while voice.is_playing() and (time.monotonic() - wait_start < 0.35):
+                    await asyncio.sleep(0.03)
+
+            if desc:
+                print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking in '{guild.name}': {desc}")
+            src = MemoryPCMAudioSource(pcm_bytes)
+            try:
+                voice.play(src)
+            except discord.ClientException:
+                # Concurrent track start! Check if player just attached a DuckingAudioSource:
+                cur_source = getattr(voice, "source", None)
+                if isinstance(cur_source, DuckingAudioSource):
+                    cur_source.set_overlay(src)
+                    while cur_source.is_overlay_playing() and (time.monotonic() - start_t < timeout):
+                        if not voice.is_connected() or not voice.is_playing() or voice.source is not cur_source:
+                            break
+                        await asyncio.sleep(0.025)
+                    await asyncio.sleep(0.18)
+                    return True
+                return False
+
+            while voice.is_playing() and (time.monotonic() - start_t < timeout):
+                if not voice.is_connected():
+                    break
+                await asyncio.sleep(0.025)
+            await asyncio.sleep(0.18)
+            return True
+    except Exception as exc:
+        print(f"[JuiceVault Voice TTS] _play_pcm_unlocked exception: {exc}")
+        return False
+
+
+async def _play_beep_unlocked(guild, voice, sound_type: str = "understood") -> bool:
+    """Internal helper: play feedback beep tone into voice channel without acquiring locks."""
+    pcm_data = _get_beep_pcm(sound_type)
+    if not pcm_data:
+        return False
+    return await _play_pcm_unlocked(guild, voice, pcm_data, desc=f"Beep ({sound_type})")
 
 
 async def play_beep_sound(guild, sound_type: str = "understood", action_coro=None):
@@ -1325,45 +1441,25 @@ async def play_beep_sound(guild, sound_type: str = "understood", action_coro=Non
             await action_coro
         return
 
-    pcm_data = _get_beep_pcm(sound_type)
-    duration = 0.22 if sound_type == "understood" else (0.24 if sound_type == "listening" else 0.26)
-
     lock = _guild_speak_locks.setdefault(guild.id, asyncio.Lock())
-    async with lock:
+    acquired = False
+    try:
         try:
-            mixer = getattr(voice, "_jv_mixer", None)
-            if not isinstance(mixer, DuckingAudioSource):
-                if hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
-                    mixer = voice.source
-                    voice._jv_mixer = mixer
-                else:
-                    mixer = None
+            await asyncio.wait_for(lock.acquire(), timeout=3.0)
+            acquired = True
+        except asyncio.TimeoutError:
+            print(f"[JuiceVault Voice] Beep lock acquisition timeout on guild {guild.id}. Resetting lock.")
+            _guild_speak_locks[guild.id] = asyncio.Lock()
+            lock = _guild_speak_locks[guild.id]
+            await lock.acquire()
+            acquired = True
 
-            if voice.is_paused() and mixer is not None:
-                # Temporarily unpause with music muted so beep plays cleanly without ClientException
-                try:
-                    prev_target = mixer.target_volume
-                    mixer.target_volume = 0.0
-                    mixer.current_volume = 0.0
-                    mixer.set_overlay(MemoryPCMAudioSource(pcm_data))
-                    voice.resume()
-                    await asyncio.sleep(duration + 0.05)
-                    if voice.is_connected() and not voice.is_paused():
-                        voice.pause()
-                    mixer.target_volume = prev_target
-                except Exception:
-                    pass
-            elif voice.is_playing() and mixer is not None:
-                mixer.set_overlay(MemoryPCMAudioSource(pcm_data))
-                await asyncio.sleep(duration + 0.02)
-            elif not voice.is_playing():
-                try:
-                    voice.play(MemoryPCMAudioSource(pcm_data))
-                    await asyncio.sleep(duration + 0.05)
-                except Exception:
-                    pass
-        except Exception as exc:
-            print(f"[JuiceVault Beep] Error ({sound_type}): {exc}")
+        await _play_beep_unlocked(guild, voice, sound_type)
+    except Exception as exc:
+        print(f"[JuiceVault Beep] Error ({sound_type}): {exc}")
+    finally:
+        if acquired and lock.locked():
+            lock.release()
 
     if action_coro is not None:
         await asyncio.sleep(0.02)
@@ -1374,9 +1470,6 @@ async def play_beep_sound(guild, sound_type: str = "understood", action_coro=Non
 async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = False, sound_type: str = "understood"):
     """Play assistant feedback chime in voice channel and execute the command action."""
     await play_beep_sound(guild, sound_type=sound_type, action_coro=action_coro)
-
-
-_guild_speak_locks = {}
 
 
 async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en", chime: str = None):
@@ -1400,121 +1493,73 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
     if not persona:
         persona = _guild_persona_cache.get(guild.id, "anime")
 
+    cache_key = (clean_tts, persona)
+
+    def _wrap_with_chime(raw_pcm: bytes) -> bytes:
+        if not chime or not raw_pcm:
+            return raw_pcm
+        b_pcm = _get_beep_pcm(chime)
+        if not b_pcm:
+            return raw_pcm
+        # 40ms silence gap between chime and voice (48000 * 2 * 2 * 40 / 1000 = 7680 bytes)
+        gap = b'\x00' * 7680
+        return b_pcm + gap + raw_pcm
+
+    # 1. Fast path: pre-decoded PCM in RAM for 0ms instant playback!
+    pcm_data = _TTS_PCM_CACHE.get(cache_key)
+
+    # 2. If not in RAM PCM cache, fetch network TTS OUTSIDE of the speak lock to prevent blocking:
+    data = None
+    if not pcm_data:
+        data = await _fetch_tts_bytes(clean_tts, persona=persona)
+        pcm_data = _TTS_PCM_CACHE.get(cache_key)
+        if not pcm_data and data:
+            try:
+                loop = asyncio.get_running_loop()
+                pcm_data = await loop.run_in_executor(_VOICE_EXECUTOR, _decode_mp3_to_pcm, data)
+                if pcm_data:
+                    _TTS_PCM_CACHE[cache_key] = pcm_data
+            except Exception:
+                pass
+
+    # If completely failed to produce audio:
+    if not pcm_data and not data:
+        if chime:
+            await play_beep_sound(guild, sound_type=chime)
+        return
+
+    # 3. Acquire guild voice lock to stream audio cleanly without colliding:
     lock = _guild_speak_locks.setdefault(guild.id, asyncio.Lock())
-    async with lock:
+    acquired = False
+    try:
         try:
-            cache_key = (clean_tts, persona)
+            await asyncio.wait_for(lock.acquire(), timeout=3.5)
+            acquired = True
+        except asyncio.TimeoutError:
+            print(f"[JuiceVault Voice] Speak lock acquisition timeout on guild {guild.id}. Resetting lock.")
+            _guild_speak_locks[guild.id] = asyncio.Lock()
+            lock = _guild_speak_locks[guild.id]
+            await lock.acquire()
+            acquired = True
 
-            mixer = getattr(voice, "_jv_mixer", None)
-            if not isinstance(mixer, DuckingAudioSource):
-                if hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
-                    mixer = voice.source
-                    voice._jv_mixer = mixer
-                else:
-                    mixer = None
-
-            # Helper function to play PCM bytes across playing, paused, and idle voice states
-            async def _play_pcm(pcm_bytes: bytes) -> bool:
-                pcm_duration = len(pcm_bytes) / 192000.0
-                timeout = max(3.5, pcm_duration + 3.0)
-                start_t = time.monotonic()
-                try:
-                    if voice.is_paused() and mixer is not None:
-                        print(f"[JuiceVault Voice TTS] 🔊 Speaking over paused player in '{guild.name}': \"{clean_tts}\" ({persona})")
-                        prev_target = mixer.target_volume
-                        mixer.target_volume = 0.0
-                        mixer.current_volume = 0.0
-                        mixer.set_overlay(MemoryPCMAudioSource(pcm_bytes))
-                        voice.resume()
-                        while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
-                            await asyncio.sleep(0.03)
-                        # Allow trailing Opus frames in Discord voice queue to finish transmitting cleanly
-                        await asyncio.sleep(0.28)
-                        if voice.is_connected() and not voice.is_paused():
-                            voice.pause()
-                        mixer.target_volume = prev_target
-                        return True
-                    elif voice.is_playing() and mixer is not None:
-                        print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({persona})")
-                        overlay = MemoryPCMAudioSource(pcm_bytes)
-                        mixer.set_overlay(overlay)
-                        while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
-                            await asyncio.sleep(0.03)
-                        # Allow trailing Opus frames to clear before un-ducking music volume
-                        await asyncio.sleep(0.28)
-                        return True
-                    else:
-                        # Music is not actively playing with mixer
-                        if voice.is_playing():
-                            wait_start = time.monotonic()
-                            while voice.is_playing() and (time.monotonic() - wait_start < 2.0):
-                                await asyncio.sleep(0.04)
-                            if voice.is_playing():
-                                try:
-                                    voice.stop()
-                                except Exception:
-                                    pass
-                                await asyncio.sleep(0.04)
-
-                        print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking in '{guild.name}': \"{clean_tts}\" ({persona})")
-                        voice.play(MemoryPCMAudioSource(pcm_bytes))
-                        while voice.is_playing() and (time.monotonic() - start_t < timeout):
-                            await asyncio.sleep(0.03)
-                        # Wait for Discord transmission pipeline to flush completely
-                        await asyncio.sleep(0.28)
-                        return True
-                except Exception as exc:
-                    print(f"[JuiceVault Voice TTS] Memory PCM playback exception: {exc}")
-                return False
-
-            def _wrap_with_chime(raw_pcm: bytes) -> bytes:
-                if not chime or not raw_pcm:
-                    return raw_pcm
-                b_pcm = _get_beep_pcm(chime)
-                if not b_pcm:
-                    return raw_pcm
-                # 40ms silence gap between chime and voice (48000 * 2 * 2 * 40 / 1000 = 7680 bytes)
-                gap = b'\x00' * 7680
-                return b_pcm + gap + raw_pcm
-
-            # 1. Fast path: pre-decoded PCM in RAM for 0ms instant playback!
-            pcm_data = _TTS_PCM_CACHE.get(cache_key)
-            if pcm_data and await _play_pcm(_wrap_with_chime(pcm_data)):
+        if pcm_data:
+            full_pcm = _wrap_with_chime(pcm_data)
+            success = await _play_pcm_unlocked(guild, voice, full_pcm, desc=f"\"{clean_tts}\" ({persona})")
+            if success:
                 return
 
-            # 2. Fetch or retrieve MP3 data
-            data = await _fetch_tts_bytes(clean_tts, persona=persona)
-            if not data:
-                if chime:
-                    await play_beep_sound(guild, chime)
-                return
-
-            # Check if PCM decode completed during fetch
-            pcm_data = _TTS_PCM_CACHE.get(cache_key)
-            if not pcm_data and data:
-                try:
-                    loop = asyncio.get_running_loop()
-                    pcm_data = await loop.run_in_executor(_VOICE_EXECUTOR, _decode_mp3_to_pcm, data)
-                    if pcm_data:
-                        _TTS_PCM_CACHE[cache_key] = pcm_data
-                except Exception:
-                    pass
-
-            if pcm_data and await _play_pcm(_wrap_with_chime(pcm_data)):
-                return
-
-            # 3. Fallback: stream MP3 via temp file + FFmpeg
+        # Rare fallback: FFmpeg playback of raw MP3 if PCM decode somehow failed
+        if data:
             path = os.path.join(tempfile.gettempdir(), f"jv_voice_tts_{guild.id}.mp3")
             try:
                 with open(path, "wb") as f:
                     f.write(data)
-            except Exception:
-                return
-
-            try:
                 exe = _get_ffmpeg_exe()
                 timeout = max(5.0, len(clean_tts) * 0.14 + 3.5)
                 start_t = time.monotonic()
+                cur_source = getattr(voice, "source", None)
+                mixer = cur_source if isinstance(cur_source, DuckingAudioSource) else getattr(voice, "_jv_mixer", None)
+
                 if voice.is_paused() and mixer is not None:
                     prev_target = mixer.target_volume
                     mixer.target_volume = 0.0
@@ -1522,8 +1567,10 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
                     mixer.set_overlay(discord.FFmpegPCMAudio(path, executable=exe))
                     voice.resume()
                     while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
+                        if not voice.is_connected() or not voice.is_playing() or voice.source is not mixer:
+                            break
                         await asyncio.sleep(0.03)
-                    await asyncio.sleep(0.28)
+                    await asyncio.sleep(0.18)
                     if voice.is_connected() and not voice.is_paused():
                         voice.pause()
                     mixer.target_volume = prev_target
@@ -1532,28 +1579,29 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
                     overlay = discord.FFmpegPCMAudio(path, executable=exe)
                     mixer.set_overlay(overlay)
                     while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
+                        if not voice.is_connected() or not voice.is_playing() or voice.source is not mixer:
+                            break
                         await asyncio.sleep(0.03)
-                    await asyncio.sleep(0.28)
+                    await asyncio.sleep(0.18)
                 else:
                     if voice.is_playing():
                         wait_start = time.monotonic()
                         while voice.is_playing() and (time.monotonic() - wait_start < 0.35):
                             await asyncio.sleep(0.02)
-                        if voice.is_playing():
-                            try:
-                                voice.stop()
-                            except Exception:
-                                pass
-                            await asyncio.sleep(0.04)
                     print(f"[JuiceVault Voice TTS] 🔊 Speaking in '{guild.name}': \"{clean_tts}\" ({persona})")
                     voice.play(discord.FFmpegPCMAudio(path, executable=exe))
                     while voice.is_playing() and (time.monotonic() - start_t < timeout):
+                        if not voice.is_connected():
+                            break
                         await asyncio.sleep(0.03)
-                    await asyncio.sleep(0.28)
+                    await asyncio.sleep(0.18)
             except Exception as exc:
                 print(f"[JuiceVault Voice TTS] FFmpeg playback error: {exc}")
-        except Exception as exc:
-            print(f"[JuiceVault Voice TTS] speak_in_voice general error: {exc}")
+    except Exception as exc:
+        print(f"[JuiceVault Voice TTS] speak_in_voice general error: {exc}")
+    finally:
+        if acquired and lock.locked():
+            lock.release()
 
 DAVEY_AVAILABLE = False
 try:
