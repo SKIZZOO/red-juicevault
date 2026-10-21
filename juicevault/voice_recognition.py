@@ -8,6 +8,7 @@ receiving packages are not installed on the host.
 
 import array
 import asyncio
+import collections
 import concurrent.futures
 import functools
 import logging
@@ -778,16 +779,19 @@ class MemoryPCMAudioSource(discord.AudioSource):
 
 
 def _synthesize_beep_pcm(notes: list) -> bytes:
-    """Synthesize raw 48kHz 16-bit stereo PCM bytes directly in RAM from a list of (freq, duration, volume)."""
+    """Synthesize raw 48kHz 16-bit stereo PCM bytes directly in RAM from a list of (freq, duration, volume).
+    Uses a smooth attack/decay envelope with harmonic overtone for a crystal-clear Siri-like acoustic chime."""
     sample_rate = 48000
     frames = bytearray()
     for freq, duration, vol in notes:
         total_samples = int(sample_rate * duration)
         for i in range(total_samples):
             t = i / sample_rate
-            env = (1.0 - math.cos(math.pi * min(1.0, i / (sample_rate * 0.010)))) * 0.5
-            decay = (1.0 - (i / total_samples)) ** 1.4
-            val = int(env * decay * vol * math.sin(2 * math.pi * freq * t))
+            env = (1.0 - math.cos(math.pi * min(1.0, i / (sample_rate * 0.008)))) * 0.5
+            decay = (1.0 - (i / total_samples)) ** 1.35
+            # Fundamental sine + subtle 2nd harmonic (0.18 amplitude) for crystalline Siri marimba timbre
+            harm = math.sin(2 * math.pi * freq * t) + 0.18 * math.sin(4 * math.pi * freq * t)
+            val = int(env * decay * vol * harm * 0.84)
             val = max(-32767, min(32767, val))
             frames.extend(struct.pack('<hh', val, val))
     return bytes(frames)
@@ -799,14 +803,14 @@ def _get_beep_pcm(sound_type: str) -> bytes:
         return _BEEP_PCM_CACHE[sound_type]
 
     if sound_type == "listening":
-        # Ascending bright chime (D5 -> A5)
-        notes = [(587.33, 0.08, 17000), (880.00, 0.14, 20000)]
+        # Ascending bright Siri activation chime (D5 -> A5)
+        notes = [(587.33, 0.085, 19000), (880.00, 0.140, 22000)]
     elif sound_type == "error":
         # Descending gentle low tone (A4 -> E4)
-        notes = [(440.00, 0.08, 17000), (329.63, 0.15, 19000)]
+        notes = [(440.00, 0.090, 18000), (329.63, 0.150, 20000)]
     else:  # "understood"
-        # Bright snappy affirmative double chime (G5 -> C6)
-        notes = [(783.99, 0.06, 17000), (1046.50, 0.14, 21000)]
+        # Bright snappy affirmative Siri double chime (G5 -> C6)
+        notes = [(783.99, 0.065, 18500), (1046.50, 0.135, 23000)]
 
     pcm = _synthesize_beep_pcm(notes)
     _BEEP_PCM_CACHE[sound_type] = pcm
@@ -968,12 +972,14 @@ def _mix_pcm(music_pcm: bytes, overlay_pcm: bytes, music_vol: float) -> bytes:
 
 class DuckingAudioSource(discord.AudioSource):
     """AudioSource wrapper that ducks the main music volume to 18% whenever
-    an overlay audio stream (Garmin TTS or Siri chime) is playing, and provides master volume control."""
+    an overlay audio stream (Garmin TTS or Siri chime) is playing, and provides master volume control.
+    Supports a smart FIFO overlay queue so beeps and voice prompts never stomp or cancel each other."""
 
     def __init__(self, main_source, initial_volume: float = 1.0):
         super().__init__()
         self.main_source = main_source
         self.overlay_source = None
+        self.overlay_queue = collections.deque()
         self._lock = threading.Lock()
         init_vol = max(0.0, min(1.5, float(initial_volume)))
         self.master_volume = init_vol
@@ -987,7 +993,7 @@ class DuckingAudioSource(discord.AudioSource):
         """Set master volume between 0.0 (0%) and 1.5 (150%)."""
         with self._lock:
             self.master_volume = max(0.0, min(1.5, float(vol)))
-            if self.overlay_source:
+            if self.overlay_source or self.overlay_queue:
                 self.target_volume = 0.18 * self.master_volume
             else:
                 self.target_volume = self.master_volume
@@ -996,19 +1002,34 @@ class DuckingAudioSource(discord.AudioSource):
         with self._lock:
             return self.master_volume
 
-    def set_overlay(self, overlay_source):
+    def set_overlay(self, overlay_source, immediate: bool = False):
+        """Add an overlay audio source.
+        By default, if an overlay is currently playing, queues this audio source so it plays seamlessly right after.
+        If immediate=True, cancels any currently playing overlay and plays this immediately."""
         with self._lock:
-            if self.overlay_source:
-                try:
-                    self.overlay_source.cleanup()
-                except Exception:
-                    pass
-            self.overlay_source = overlay_source
+            if immediate:
+                if self.overlay_source:
+                    try:
+                        self.overlay_source.cleanup()
+                    except Exception:
+                        pass
+                    self.overlay_source = None
+                while self.overlay_queue:
+                    try:
+                        self.overlay_queue.popleft().cleanup()
+                    except Exception:
+                        pass
+                self.overlay_source = overlay_source
+            else:
+                if self.overlay_source is None:
+                    self.overlay_source = overlay_source
+                else:
+                    self.overlay_queue.append(overlay_source)
             self.target_volume = 0.18 * self.master_volume  # Duck music down to 18% of master volume
 
     def is_overlay_playing(self) -> bool:
         with self._lock:
-            return self.overlay_source is not None
+            return (self.overlay_source is not None) or bool(self.overlay_queue)
 
     def read(self) -> bytes:
         music_data = b''
@@ -1019,6 +1040,8 @@ class DuckingAudioSource(discord.AudioSource):
                 music_data = b''
 
         with self._lock:
+            if not self.overlay_source and self.overlay_queue:
+                self.overlay_source = self.overlay_queue.popleft()
             overlay = self.overlay_source
 
         if not music_data and not overlay:
@@ -1040,7 +1063,7 @@ class DuckingAudioSource(discord.AudioSource):
                 overlay_data = b''
 
             if not overlay_data:
-                # Overlay stream completed
+                # Current overlay stream completed! Clean up and advance to next in queue
                 with self._lock:
                     if self.overlay_source is overlay:
                         try:
@@ -1048,7 +1071,14 @@ class DuckingAudioSource(discord.AudioSource):
                         except Exception:
                             pass
                         self.overlay_source = None
-                        self.target_volume = self.master_volume  # Restore music volume to user's master volume!
+                        if self.overlay_queue:
+                            self.overlay_source = self.overlay_queue.popleft()
+                            try:
+                                overlay_data = self.overlay_source.read()
+                            except Exception:
+                                overlay_data = b''
+                        else:
+                            self.target_volume = self.master_volume  # Restore music volume to user's master volume!
 
         if not overlay_data and abs(vol - 1.0) < 0.02 and abs(self.master_volume - 1.0) < 0.02:
             return music_data
@@ -1066,6 +1096,11 @@ class DuckingAudioSource(discord.AudioSource):
                 except Exception:
                     pass
                 self.overlay_source = None
+            while self.overlay_queue:
+                try:
+                    self.overlay_queue.popleft().cleanup()
+                except Exception:
+                    pass
         if self.main_source:
             try:
                 self.main_source.cleanup()
@@ -1280,7 +1315,7 @@ def prewarm_voice_cache():
 
 async def play_beep_sound(guild, sound_type: str = "understood", action_coro=None):
     """Play an acoustic feedback tone in the voice channel using pre-rendered RAM PCM buffers:
-    - 'listening': ascending tone indicating Garmin is actively listening
+    - 'listening': ascending tone indicating Garmin is actively listening (Siri activation)
     - 'understood': bright positive tone indicating Garmin understood the command
     - 'error': descending gentle tone indicating Garmin didn't understand / error
     Ducks active music to 18% volume without interrupting playback and with zero FFmpeg overhead."""
@@ -1293,45 +1328,47 @@ async def play_beep_sound(guild, sound_type: str = "understood", action_coro=Non
     pcm_data = _get_beep_pcm(sound_type)
     duration = 0.22 if sound_type == "understood" else (0.24 if sound_type == "listening" else 0.26)
 
-    try:
-        mixer = getattr(voice, "_jv_mixer", None)
-        if not isinstance(mixer, DuckingAudioSource):
-            if hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
-                mixer = voice.source
-                voice._jv_mixer = mixer
-            else:
-                mixer = None
+    lock = _guild_speak_locks.setdefault(guild.id, asyncio.Lock())
+    async with lock:
+        try:
+            mixer = getattr(voice, "_jv_mixer", None)
+            if not isinstance(mixer, DuckingAudioSource):
+                if hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
+                    mixer = voice.source
+                    voice._jv_mixer = mixer
+                else:
+                    mixer = None
 
-        if voice.is_paused() and mixer is not None:
-            # Temporarily unpause with music muted so beep plays cleanly without ClientException
-            try:
-                prev_target = mixer.target_volume
-                mixer.target_volume = 0.0
-                mixer.current_volume = 0.0
+            if voice.is_paused() and mixer is not None:
+                # Temporarily unpause with music muted so beep plays cleanly without ClientException
+                try:
+                    prev_target = mixer.target_volume
+                    mixer.target_volume = 0.0
+                    mixer.current_volume = 0.0
+                    mixer.set_overlay(MemoryPCMAudioSource(pcm_data))
+                    voice.resume()
+                    await asyncio.sleep(duration + 0.05)
+                    if voice.is_connected() and not voice.is_paused():
+                        voice.pause()
+                    mixer.target_volume = prev_target
+                except Exception:
+                    pass
+            elif voice.is_playing() and mixer is not None:
                 mixer.set_overlay(MemoryPCMAudioSource(pcm_data))
-                voice.resume()
-                await asyncio.sleep(duration)
-                if voice.is_connected() and not voice.is_paused():
-                    voice.pause()
-                mixer.target_volume = prev_target
-            except Exception:
-                pass
-        elif voice.is_playing() and mixer is not None:
-            mixer.set_overlay(MemoryPCMAudioSource(pcm_data))
-        elif mixer is None and not voice.is_playing() and not voice.is_paused():
-            try:
-                voice.play(MemoryPCMAudioSource(pcm_data))
-            except Exception:
-                pass
-    except Exception as exc:
-        print(f"[JuiceVault Beep] Error ({sound_type}): {exc}")
+                await asyncio.sleep(duration + 0.02)
+            elif not voice.is_playing():
+                try:
+                    voice.play(MemoryPCMAudioSource(pcm_data))
+                    await asyncio.sleep(duration + 0.05)
+                except Exception:
+                    pass
+        except Exception as exc:
+            print(f"[JuiceVault Beep] Error ({sound_type}): {exc}")
 
     if action_coro is not None:
-        await asyncio.sleep(0.04)
+        await asyncio.sleep(0.02)
         if asyncio.iscoroutine(action_coro):
             await action_coro
-    else:
-        await asyncio.sleep(duration)
 
 
 async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bool = False, sound_type: str = "understood"):
@@ -1342,9 +1379,10 @@ async def play_chime_and_proceed(guild, action_coro=None, interrupt_playback: bo
 _guild_speak_locks = {}
 
 
-async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"):
+async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en", chime: str = None):
     """Fetch Neural TTS and speak out loud directly in the voice channel.
     Utilizes in-memory RAM caches (_TTS_PCM_CACHE and _TTS_RAM_CACHE) for near-instant 0ms response.
+    If chime is specified ('understood', 'error', 'listening'), prepends a crisp Siri chime to the voice output.
     If music is actively playing, ducks music to 18% volume and speaks over it."""
     if not guild:
         return
@@ -1354,6 +1392,8 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
 
     clean_tts = re.sub(r'[*_~`#<>|]', '', text).strip()
     if not clean_tts:
+        if chime:
+            await play_beep_sound(guild, sound_type=chime)
         return
     clean_tts = clean_tts[:350]
 
@@ -1407,8 +1447,8 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
                         # Music is not actively playing with mixer
                         if voice.is_playing():
                             wait_start = time.monotonic()
-                            while voice.is_playing() and (time.monotonic() - wait_start < 0.35):
-                                await asyncio.sleep(0.02)
+                            while voice.is_playing() and (time.monotonic() - wait_start < 2.0):
+                                await asyncio.sleep(0.04)
                             if voice.is_playing():
                                 try:
                                     voice.stop()
@@ -1427,19 +1467,40 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
                     print(f"[JuiceVault Voice TTS] Memory PCM playback exception: {exc}")
                 return False
 
+            def _wrap_with_chime(raw_pcm: bytes) -> bytes:
+                if not chime or not raw_pcm:
+                    return raw_pcm
+                b_pcm = _get_beep_pcm(chime)
+                if not b_pcm:
+                    return raw_pcm
+                # 40ms silence gap between chime and voice (48000 * 2 * 2 * 40 / 1000 = 7680 bytes)
+                gap = b'\x00' * 7680
+                return b_pcm + gap + raw_pcm
+
             # 1. Fast path: pre-decoded PCM in RAM for 0ms instant playback!
             pcm_data = _TTS_PCM_CACHE.get(cache_key)
-            if pcm_data and await _play_pcm(pcm_data):
+            if pcm_data and await _play_pcm(_wrap_with_chime(pcm_data)):
                 return
 
             # 2. Fetch or retrieve MP3 data
             data = await _fetch_tts_bytes(clean_tts, persona=persona)
             if not data:
+                if chime:
+                    await play_beep_sound(guild, chime)
                 return
 
             # Check if PCM decode completed during fetch
             pcm_data = _TTS_PCM_CACHE.get(cache_key)
-            if pcm_data and await _play_pcm(pcm_data):
+            if not pcm_data and data:
+                try:
+                    loop = asyncio.get_running_loop()
+                    pcm_data = await loop.run_in_executor(_VOICE_EXECUTOR, _decode_mp3_to_pcm, data)
+                    if pcm_data:
+                        _TTS_PCM_CACHE[cache_key] = pcm_data
+                except Exception:
+                    pass
+
+            if pcm_data and await _play_pcm(_wrap_with_chime(pcm_data)):
                 return
 
             # 3. Fallback: stream MP3 via temp file + FFmpeg
@@ -1753,8 +1814,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     buf = self._buffers.setdefault(uid, bytearray())
                     if len(buf) == 0:
                         print(f"[JuiceVault Voice] 🎙️ Audio received from {getattr(user, 'display_name', user)} - listening...")
-                    # Buffer up to 10 seconds of audio (~960,000 bytes)
-                    if len(buf) < 960_000:
+                    # Buffer up to 10 seconds of 48kHz 16-bit stereo PCM audio (~1,920,000 bytes)
+                    if len(buf) < 1_920_000:
                         buf.extend(pcm)
                     self._last_speech[uid] = now
             except Exception as exc:
@@ -1778,15 +1839,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             buf_len = len(self._buffers.get(uid, b""))
 
                             # Adaptive silence detection:
-                            # 0.16s for short "da"/"nu" pending answers
-                            # 0.22s for short utterances (<= 1.6s of audio: "Hey Garmin", "Ok Garmin", "skip", "pause", "shuffle")
-                            # 0.38s for longer speech (song requests)
+                            # 0.55s for short "yes"/"no" pending answers
+                            # 1.15s for general speech so users can naturally pause between "Garmin" and their command
+                            # without being prematurely cut off!
                             if is_pending:
-                                silence_needed = 0.16
-                            elif buf_len <= 320_000:
-                                silence_needed = 0.22
+                                silence_needed = 0.55
                             else:
-                                silence_needed = 0.38
+                                silence_needed = 1.15
 
                             if now - last >= silence_needed:
                                 buf = self._buffers.pop(uid, bytearray())
@@ -1896,7 +1955,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             wait_speech = get_persona_response("yt_search", persona, query=clean_q)
 
             await self._notify(guild, f"🔍 **[Garmin]** {user_name}: Searching YouTube for *\"{clean_q}\"*... ⏳")
-            asyncio.create_task(speak_in_voice(guild, wait_speech, persona=persona))
+            asyncio.create_task(speak_in_voice(guild, wait_speech, persona=persona, chime="understood"))
 
             # Launch YouTube extraction concurrently in background while speaking confirmation!
             from .external_search_patch import _extract_search
@@ -1921,12 +1980,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                 fail_msg = get_persona_response("yt_not_found", persona, query=clean_q)
                 await self._notify(guild, f"❌ **[Garmin]** {fail_msg}")
-                asyncio.create_task(speak_in_voice(guild, fail_msg, persona=persona))
+                asyncio.create_task(speak_in_voice(guild, fail_msg, persona=persona, chime="error"))
             except Exception as exc:
                 print(f"[Garmin YouTube] Error searching '{clean_q}': {exc}")
                 fail_msg = get_persona_response("yt_not_found", persona, query=clean_q)
                 await self._notify(guild, f"❌ **[Garmin]** {fail_msg}")
-                asyncio.create_task(speak_in_voice(guild, fail_msg, persona=persona))
+                asyncio.create_task(speak_in_voice(guild, fail_msg, persona=persona, chime="error"))
             finally:
                 self._unlock_session()
 
@@ -2019,7 +2078,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self._unlock_session()
                     persona = await get_guild_persona(self.cog, self.guild_id)
                     cancel_speech = get_persona_response("search_cancelled", persona)
-                    await speak_in_voice(guild, cancel_speech, persona=persona)
+                    await speak_in_voice(guild, cancel_speech, persona=persona, chime="understood")
                     await self._notify(guild, "🚫 **[Garmin]** Search cancelled.")
                     return
 
@@ -2072,15 +2131,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 persona = await get_guild_persona(self.cog, self.guild_id)
 
                 if not cmd_part:
-                    # User only said "Garmin" / "Hey Garmin" / "Ok Garmin" -> open 12s wake window and greet INSTANTLY!
+                    # User only said "Garmin" / "Hey Garmin" / "Ok Garmin" -> open 15s wake window and play Siri listening chime!
                     with self._lock:
-                        self._wake_windows[user_id] = now + 12.0
+                        self._wake_windows[user_id] = now + 15.0
                     print(f"[JuiceVault Voice] Wake word '{wake_word}' activated by {user_name} ({persona}). Waiting for command...")
-                    greeting = get_persona_response("greeting", persona)
-
-                    # Play instant greeting directly from pre-warmed RAM PCM! (0ms latency!)
-                    await self._notify(guild, f"🎤 **[Garmin]** {greeting} 🟢")
-                    await speak_in_voice(guild, greeting, persona=persona)
+                    await self._notify(guild, f"🎤 **[Garmin]** Listening... (Say your command) 🟢")
+                    await play_beep_sound(guild, "listening")
                     return
 
                 # User said "Garmin" + command in one single breath!
@@ -2126,7 +2182,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 self._unlock_session()
                 await self._notify(guild, f"💢 **[Garmin]** {user_name}: *\"{text}\"* ➔ **Rude / Tsundere** voice activated! 💥")
                 confirm = get_persona_response("persona_activated", "rude")
-                asyncio.create_task(speak_in_voice(guild, confirm, persona="rude"))
+                asyncio.create_task(speak_in_voice(guild, confirm, persona="rude", chime="understood"))
                 return
 
             if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:anime|anima|anim|ani\s+me|vtuber|v-tuber|v\s+tuber)(?:\s+(?:girl\s+)?(?:voice|mode))?\b', clean_cmd, re.I) \
@@ -2136,7 +2192,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 self._unlock_session()
                 await self._notify(guild, f"✨ **[Garmin]** {user_name}: *\"{text}\"* ➔ **Anime & VTuber Girl** voice activated! 🎀")
                 confirm = get_persona_response("persona_activated", "anime")
-                asyncio.create_task(speak_in_voice(guild, confirm, persona="anime"))
+                asyncio.create_task(speak_in_voice(guild, confirm, persona="anime", chime="understood"))
                 return
 
             if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:mommy|dommy\s+mommy)(?:\s+(?:voice|mode))?\b', clean_cmd, re.I) \
@@ -2146,7 +2202,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 self._unlock_session()
                 await self._notify(guild, f"💋 **[Garmin]** {user_name}: *\"{text}\"* ➔ **Dommy Mommy** voice activated! 👠")
                 confirm = get_persona_response("persona_activated", "mommy")
-                asyncio.create_task(speak_in_voice(guild, confirm, persona="mommy"))
+                asyncio.create_task(speak_in_voice(guild, confirm, persona="mommy", chime="understood"))
                 return
 
             if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:natural|normal|default)(?:\s+(?:voice|mode|assistant))?\b', clean_cmd, re.I) \
@@ -2156,7 +2212,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 self._unlock_session()
                 await self._notify(guild, f"🎙️ **[Garmin]** {user_name}: *\"{text}\"* ➔ **Natural Assistant** voice activated! 🎧")
                 confirm = get_persona_response("persona_activated", "natural")
-                asyncio.create_task(speak_in_voice(guild, confirm, persona="natural"))
+                asyncio.create_task(speak_in_voice(guild, confirm, persona="natural", chime="understood"))
                 return
 
             # PRECEDENCE 1: PREVIOUS / BACK
@@ -2168,12 +2224,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Previous track! ⏮️")
                     speech = get_persona_response("previous", persona)
-                    asyncio.create_task(speak_in_voice(guild, speech, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, speech, persona=persona, chime="understood"))
                 else:
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: No previous track in history.")
                     no_prev_speech = get_persona_response("no_previous", persona)
-                    asyncio.create_task(speak_in_voice(guild, no_prev_speech, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, no_prev_speech, persona=persona, chime="error"))
                 return
 
             # PRECEDENCE 2: SKIP / NEXT
@@ -2188,13 +2244,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped 10 tracks! ⏩")
                     speech = get_persona_response("skip_10", persona)
-                    asyncio.create_task(speak_in_voice(guild, speech, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, speech, persona=persona, chime="understood"))
                 else:
                     await self._execute_skip(guild, 1)
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped track! ⏭️")
                     speech = get_persona_response("skip", persona)
-                    asyncio.create_task(speak_in_voice(guild, speech, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, speech, persona=persona, chime="understood"))
                 return
 
             # PRECEDENCE 3: RESTART / REPLAY
@@ -2204,7 +2260,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 self._unlock_session()
                 await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Restarting from beginning! ⏪")
                 speech = get_persona_response("restart", persona)
-                asyncio.create_task(speak_in_voice(guild, speech, persona=persona))
+                asyncio.create_task(speak_in_voice(guild, speech, persona=persona, chime="understood"))
                 return
 
             # PRECEDENCE 4: SHUFFLE / RANDOM
@@ -2250,7 +2306,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         asyncio.create_task(self.cog.web_remote.broadcast_state(self.guild_id))
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Shuffled queue! 🔀")
-                    asyncio.create_task(speak_in_voice(guild, speech, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, speech, persona=persona, chime="understood"))
                 else:
                     self._unlock_session()
                 return
@@ -2283,7 +2339,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         asyncio.create_task(panel.update_panel(self.guild_id))
                     self._unlock_session()
                     await self._notify(guild, f"🔁 **[Garmin]** {user_name}: *\"{text}\"* ➔ {rep_msg}")
-                    asyncio.create_task(speak_in_voice(guild, rep_msg, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, rep_msg, persona=persona, chime="understood"))
                     return
 
             # PRECEDENCE 6: VOLUME CONTROLS
@@ -2326,7 +2382,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 vol_msg = get_persona_response("volume_muted", persona) if target_pct == 0 else get_persona_response("volume_set", persona, percent=target_pct)
                 self._unlock_session()
                 await self._notify(guild, f"🔊 **[Garmin]** {user_name}: *\"{text}\"* ➔ {vol_msg}")
-                asyncio.create_task(speak_in_voice(guild, vol_msg, persona=persona))
+                asyncio.create_task(speak_in_voice(guild, vol_msg, persona=persona, chime="understood"))
                 return
 
             # PRECEDENCE 7: NOW PLAYING / SONG INFO
@@ -2356,12 +2412,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self._unlock_session()
                     await self._notify(guild, f"🎵 **[Garmin]** Currently playing: **{title}** — *{artist}* 🎶")
                     np_speech = get_persona_response("now_playing", persona, title=title, artist=artist)
-                    asyncio.create_task(speak_in_voice(guild, np_speech, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, np_speech, persona=persona, chime="understood"))
                 else:
                     self._unlock_session()
                     await self._notify(guild, "ℹ️ **[Garmin]** No track is currently playing.")
                     no_music_speech = get_persona_response("no_music", persona)
-                    asyncio.create_task(speak_in_voice(guild, no_music_speech, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, no_music_speech, persona=persona, chime="error"))
                 return
 
             # PRECEDENCE 8: PAUSE / STOP
@@ -2375,7 +2431,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         voice.pause()
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Paused! ⏸️")
-                    asyncio.create_task(speak_in_voice(guild, pause_msg, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, pause_msg, persona=persona, chime="understood"))
                 else:
                     self._unlock_session()
                 return
@@ -2395,7 +2451,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     resume_msg = get_persona_response("resume", persona)
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Resumed playback! ▶️")
-                    asyncio.create_task(speak_in_voice(guild, resume_msg, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, resume_msg, persona=persona, chime="understood"))
                     return
                 elif voice and not voice.is_playing() and (self.guild_id not in self.cog.tasks or self.cog.tasks[self.guild_id].done()):
                     category = await self.cog.config.guild(guild).category()
@@ -2414,7 +2470,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         start_msg = get_persona_response("queue_started", persona)
                         self._unlock_session()
                         await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Started playback! ▶️")
-                        asyncio.create_task(speak_in_voice(guild, start_msg, persona=persona))
+                        asyncio.create_task(speak_in_voice(guild, start_msg, persona=persona, chime="understood"))
                     else:
                         self._unlock_session()
                     return
@@ -2436,7 +2492,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     prompt_speech = get_persona_response("what_to_play", persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: {prompt_speech} ⏳")
                     try:
-                        await asyncio.wait_for(speak_in_voice(guild, prompt_speech, persona=persona), timeout=4.5)
+                        await asyncio.wait_for(speak_in_voice(guild, prompt_speech, persona=persona, chime="understood"), timeout=4.5)
                     except Exception:
                         pass
                     await play_beep_sound(guild, "listening")
@@ -2479,7 +2535,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     no_favs_speech = get_persona_response("fav_empty", persona)
                     self._unlock_session()
                     await self._notify(guild, f"💔 **[Garmin]** {user_name}: You don't have any favorites. Say *„Garmin, save this song”* while listening to a track!")
-                    asyncio.create_task(speak_in_voice(guild, no_favs_speech, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, no_favs_speech, persona=persona, chime="error"))
                     return
 
                 import random
@@ -2491,7 +2547,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 await self._play_track_now(guild, dict(fav_track))
                 self._unlock_session()
                 await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Playing favorite: **{track_name}** — *{artist_name}* 🎶")
-                asyncio.create_task(speak_in_voice(guild, play_speech, persona=persona))
+                asyncio.create_task(speak_in_voice(guild, play_speech, persona=persona, chime="understood"))
                 return
 
             # PRECEDENCE 11B: REMOVE CURRENT SONG FROM FAVORITES
@@ -2512,7 +2568,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     no_music_msg = get_persona_response("no_music", persona)
                     self._unlock_session()
                     await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
-                    asyncio.create_task(speak_in_voice(guild, no_music_msg, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, no_music_msg, persona=persona, chime="error"))
                     return
 
                 uid_str = str(user_id)
@@ -2545,12 +2601,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     rem_msg = get_persona_response("fav_removed", persona, title=track_title)
                     self._unlock_session()
                     await self._notify(guild, f"💔 **[Garmin]** {user_name}: *\"{text}\"* ➔ Removed **{track_title}** from your favorites! ({len(user_list)} remaining)")
-                    asyncio.create_task(speak_in_voice(guild, rem_msg, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, rem_msg, persona=persona, chime="understood"))
                 else:
                     not_in_msg = get_persona_response("fav_not_in_list", persona, title=track_title)
                     self._unlock_session()
                     await self._notify(guild, f"ℹ️ **[Garmin]** {user_name}: *\"{text}\"* ➔ **{track_title}** is not in your favorites list!")
-                    asyncio.create_task(speak_in_voice(guild, not_in_msg, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, not_in_msg, persona=persona, chime="error"))
                 return
 
             # PRECEDENCE 11C: SAVE / FAVORITE CURRENT SONG
@@ -2575,7 +2631,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     no_music_msg = get_persona_response("no_music", persona)
                     self._unlock_session()
                     await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
-                    asyncio.create_task(speak_in_voice(guild, no_music_msg, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, no_music_msg, persona=persona, chime="error"))
                     return
 
                 uid_str = str(user_id)
@@ -2600,7 +2656,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     already_msg = get_persona_response("fav_exists", persona, title=track_title)
                     self._unlock_session()
                     await self._notify(guild, f"❤️ **[Garmin]** {user_name}: **{track_title}** is already in your favorites! ({len(user_list)} saved)")
-                    asyncio.create_task(speak_in_voice(guild, already_msg, persona=persona))
+                    asyncio.create_task(speak_in_voice(guild, already_msg, persona=persona, chime="understood"))
                     return
 
                 clean_fav = {
@@ -2627,7 +2683,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 success_speech = get_persona_response("fav_saved", persona, title=track_title)
                 self._unlock_session()
                 await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Saved **{track_title}** by {track_artist} to favorites! ({count} saved) ⭐")
-                asyncio.create_task(speak_in_voice(guild, success_speech, persona=persona))
+                asyncio.create_task(speak_in_voice(guild, success_speech, persona=persona, chime="understood"))
                 return
 
             # PRECEDENCE 12: LEAVE / DISCONNECT
@@ -2636,7 +2692,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 self._unlock_session()
                 await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Left voice channel! 👋")
                 try:
-                    await asyncio.wait_for(speak_in_voice(guild, bye_speech, persona=persona), timeout=2.5)
+                    await asyncio.wait_for(speak_in_voice(guild, bye_speech, persona=persona, chime="understood"), timeout=2.5)
                 except Exception:
                     pass
                 await self.cog.config.guild(guild).enabled.set(False)
@@ -2668,7 +2724,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     "• *„Garmin what's playing?”* / *„Garmin save this song”*\n"
                     "• *„Garmin switch to mommy voice”* / *„Garmin anime voice”* / *„Garmin rude voice”*"
                 )
-                asyncio.create_task(speak_in_voice(guild, help_speech, persona=persona))
+                asyncio.create_task(speak_in_voice(guild, help_speech, persona=persona, chime="understood"))
                 return
 
             # PRECEDENCE 14: DIRECT YOUTUBE SEARCH & PLAY
@@ -2691,7 +2747,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     prompt_speech = get_persona_response("search_yt_prompt", persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: {prompt_speech} ⏳")
                     try:
-                        await asyncio.wait_for(speak_in_voice(guild, prompt_speech, persona=persona), timeout=4.5)
+                        await asyncio.wait_for(speak_in_voice(guild, prompt_speech, persona=persona, chime="understood"), timeout=4.5)
                     except Exception:
                         pass
                     await play_beep_sound(guild, "listening")
@@ -2766,7 +2822,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             unrec_speech = get_persona_response("unrecognized", persona)
             self._unlock_session()
             await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Command not recognized. Say *„Garmin help”* for available commands.")
-            asyncio.create_task(speak_in_voice(guild, unrec_speech, persona=persona))
+            asyncio.create_task(speak_in_voice(guild, unrec_speech, persona=persona, chime="error"))
 
         def _downsample_to_16k_mono(self, pcm_bytes: bytes) -> bytes:
             """Downsample Discord 48kHz 16-bit stereo PCM to 16kHz mono PCM using SIMD/NumPy when available."""

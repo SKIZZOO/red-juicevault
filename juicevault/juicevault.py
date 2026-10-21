@@ -43,12 +43,12 @@ class JuiceVault(commands.Cog):
     DOWNLOAD_CHUNK_SIZE = 256 * 1024
 
     VIP_USER_IDS = {612747552999211011, 340511257067257857}
-    VIP_VIDEO_URL = "https://www.youtube.com/watch?v=7uNd46F3Ubs"
-    VIP_START_OFFSET = 4.0
-    VIP_PLAY_DURATION = 6.0
+    VIP_VIDEO_URL = "https://www.youtube.com/watch?v=QeX0wYlnUt0"
+    VIP_START_OFFSET = 1.0
+    VIP_PLAY_DURATION = 5.0
     VIP_DELAY_SECONDS = 0.5
-    VIP_AUDIO_SLICED = os.path.join(tempfile.gettempdir(), "juicevault_vip_sliced_6s.wav")
-    VIP_AUDIO_RAW = os.path.join(tempfile.gettempdir(), "juicevault_vip_raw.mp3")
+    VIP_AUDIO_SLICED = os.path.join(tempfile.gettempdir(), "juicevault_skizzoo_entrance_5s.wav")
+    VIP_AUDIO_RAW = os.path.join(tempfile.gettempdir(), "juicevault_skizzoo_raw.mp3")
     VIP_COOLDOWN_SECONDS = 20.0
     VIP_VOLUME = 0.30  # 30% volume for VIP greeting and Skizzoo entrance intros
 
@@ -1567,74 +1567,8 @@ class JuiceVault(commands.Cog):
         return False
 
     async def _ensure_vip_audio(self):
-        if os.path.isfile(self.VIP_AUDIO_SLICED) and os.path.getsize(self.VIP_AUDIO_SLICED) > 1024:
-            return self.VIP_AUDIO_SLICED, True
-        if os.path.isfile(self.VIP_AUDIO_RAW) and os.path.getsize(self.VIP_AUDIO_RAW) > 1024:
-            raw_path = self.VIP_AUDIO_RAW
-            try:
-                ffmpeg_bin = self._ffmpeg_executable()
-                slice_cmd = [
-                    ffmpeg_bin,
-                    "-y",
-                    "-ss", str(self.VIP_START_OFFSET),
-                    "-t", str(self.VIP_PLAY_DURATION),
-                    "-i", raw_path,
-                    "-vn",
-                    "-ar", "48000",
-                    "-ac", "2",
-                    self.VIP_AUDIO_SLICED,
-                ]
-                import subprocess
-                sub_res = subprocess.run(slice_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=12)
-                if sub_res.returncode == 0 and os.path.isfile(self.VIP_AUDIO_SLICED) and os.path.getsize(self.VIP_AUDIO_SLICED) > 512:
-                    return self.VIP_AUDIO_SLICED, True
-            except Exception:
-                pass
-            return self.VIP_AUDIO_RAW, False
-
-        def _do_download():
-            try:
-                from .external_search_patch import _download_with_ytdlp
-                tempdir = tempfile.mkdtemp(prefix="juicevault-vip-")
-                try:
-                    downloaded = _download_with_ytdlp(self.VIP_VIDEO_URL, tempdir)
-                    if downloaded and os.path.isfile(downloaded) and os.path.getsize(downloaded) > 1024:
-                        shutil.copyfile(downloaded, self.VIP_AUDIO_RAW)
-                        ffmpeg_bin = self._ffmpeg_executable()
-                        sliced_target = os.path.join(tempdir, "vip_sliced.wav")
-                        slice_cmd = [
-                            ffmpeg_bin,
-                            "-y",
-                            "-ss", str(self.VIP_START_OFFSET),
-                            "-t", str(self.VIP_PLAY_DURATION),
-                            "-i", downloaded,
-                            "-vn",
-                            "-ar", "48000",
-                            "-ac", "2",
-                            sliced_target,
-                        ]
-                        try:
-                            import subprocess
-                            sub_res = subprocess.run(
-                                slice_cmd,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                timeout=15,
-                            )
-                            if sub_res.returncode == 0 and os.path.isfile(sliced_target) and os.path.getsize(sliced_target) > 512:
-                                shutil.copyfile(sliced_target, self.VIP_AUDIO_SLICED)
-                                return self.VIP_AUDIO_SLICED, True
-                        except Exception as slice_err:
-                            print(f"[JuiceVault Entrance] VIP slice notice: {slice_err}")
-
-                        return self.VIP_AUDIO_RAW, False
-                finally:
-                    shutil.rmtree(tempdir, ignore_errors=True)
-            except Exception as exc:
-                print(f"[JuiceVault Entrance] VIP audio cache error: {exc}")
-                return None, False
-
-        return await asyncio.to_thread(_do_download)
+        """VIP entrance uses the exact same sliced audio theme as Skizzoo."""
+        return await self._ensure_skizzoo_audio()
 
     async def _trigger_vip_join(self, guild, member, target_channel_id):
         await asyncio.sleep(self.VIP_DELAY_SECONDS)
@@ -1653,7 +1587,7 @@ class JuiceVault(commands.Cog):
         is_pre_sliced = vip_audio_res[1] if isinstance(vip_audio_res, tuple) else False
 
         if not vip_audio or not os.path.isfile(vip_audio):
-            print(f"[JuiceVault] VIP audio not available for member {member.id}.")
+            print(f"[JuiceVault Entrance] VIP audio not available for member {member.id}.")
             return
 
         exe = self._ffmpeg_executable()
@@ -1681,11 +1615,11 @@ class JuiceVault(commands.Cog):
         if voice.is_playing() and mixer is not None:
             vip_source = discord.FFmpegPCMAudio(vip_audio, executable=exe, before_options=before_opts, options=extra_opts)
             mixer.set_overlay(vip_source)
-            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting (4s-10s at 30% volume) over ducked music (18%) in '{guild.name}'")
+            print(f"[JuiceVault Entrance] 👑 Playing VIP entrance theme (1s-6s at 30% volume) over ducked music (18%) in '{guild.name}' for {member.display_name}")
         elif not voice.is_playing():
             vip_source = discord.FFmpegPCMAudio(vip_audio, executable=exe, before_options=before_opts, options=extra_opts)
             voice.play(vip_source)
-            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting (4s-10s at 30% volume) directly in '{guild.name}'")
+            print(f"[JuiceVault Entrance] 👑 Playing VIP entrance theme (1s-6s at 30% volume) directly in '{guild.name}' for {member.display_name}")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
