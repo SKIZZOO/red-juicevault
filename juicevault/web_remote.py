@@ -1006,6 +1006,10 @@ class JuiceVaultWebRemote:
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-JuiceVault-Token"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Server"] = "JuiceVault-Edge"
         return response
 
     async def _authenticate(self, request):
