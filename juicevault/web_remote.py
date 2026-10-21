@@ -39,6 +39,13 @@ from .web_assets import (
 from .juicevault_ui import category_label, JuiceVaultPanelView
 from .eq_ui_patch import EQ_OPTIONS
 
+_CRAWLER_PROBE_REGEX = re.compile(
+    r'(?:\.(?:env|git|aws|ssh|docker|kube|azure|config|conf|key|pem|crt|sql|db|bak|old|save|toml|ya?ml|php|asp|jsp)|'
+    r'/(?:wp-|admin|graphql|swagger|icecoder|flowise|langflow|terminal-xhr|file-control|userfiles|portal|console|dashboard/|backoffice|onboarding|checkout|billing|api/v1)|'
+    r'proc/self|var/run|\.\.)',
+    re.IGNORECASE
+)
+
 
 def get_local_ip():
     """Detect the host machine's primary local LAN IP address."""
@@ -286,12 +293,19 @@ class JuiceVaultWebRemote:
         async with self._server_lock:
             await self._stop_server_internal()
 
+            # Quiet logging: suppress aiohttp.access INFO logs from flooding console
+            import logging
+            logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
+
             app = web.Application()
-            # CORS middleware headers
+            # Security & CORS middlewares
+            app.middlewares.append(self._security_middleware)
             app.middlewares.append(self._cors_middleware)
 
             # Web App & PWA routes
             app.router.add_get("/", self._handle_index)
+            app.router.add_post("/", self._handle_index)
+            app.router.add_get("/robots.txt", self._handle_robots)
             app.router.add_get("/manifest.json", self._handle_manifest)
             app.router.add_get("/sw.js", self._handle_service_worker)
             app.router.add_get("/ws", self._handle_ws)
@@ -372,7 +386,7 @@ class JuiceVaultWebRemote:
                 else:
                     print(f"[JuiceVault Web Remote] Warning: SSL cert/key file path not found ({cert_path}, {key_path})")
 
-            self.runner = web.AppRunner(app)
+            self.runner = web.AppRunner(app, access_log=None)
             await self.runner.setup()
             self.site = web.TCPSite(self.runner, host, port, ssl_context=ssl_ctx)
             try:
@@ -965,6 +979,25 @@ class JuiceVaultWebRemote:
                 await self.config.custom_url.set(None)
 
     @web.middleware
+    async def _security_middleware(self, request, handler):
+        """Silently block automated vulnerability scanners, path traversal probes, and bot crawlers."""
+        path = request.path
+        if not path or path in ("/", "/robots.txt", "/manifest.json", "/sw.js", "/ws", "/favicon.ico", "/favicon.svg", "/icon-192.png", "/icon-512.png"):
+            return await handler(request)
+
+        norm_path = unquote(path).lower()
+        if ".." in norm_path or "/proc/" in norm_path or "/var/run" in norm_path:
+            return web.Response(status=403, text="Forbidden")
+
+        if norm_path.startswith(("/.", ".env", "/@fs")) or "/." in norm_path:
+            return web.Response(status=404, text="Not Found")
+
+        if _CRAWLER_PROBE_REGEX.search(norm_path):
+            return web.Response(status=404, text="Not Found")
+
+        return await handler(request)
+
+    @web.middleware
     async def _cors_middleware(self, request, handler):
         if request.method == "OPTIONS":
             response = web.Response(status=204)
@@ -1203,10 +1236,21 @@ class JuiceVaultWebRemote:
                         self.ws_clients.discard(ws)
 
     # Web App Route Handlers
+    async def _handle_robots(self, request):
+        """Serve robots.txt instructing all web crawlers and AI bots not to index the web remote."""
+        return web.Response(
+            text="User-agent: *\nDisallow: /\n",
+            content_type="text/plain",
+            headers={"Cache-Control": "public, max-age=86400"}
+        )
+
     async def _handle_index(self, request):
         ip = self._get_client_ip(request)
         guild = self._resolve_guild(request)
-        self.record_view(ip, guild_id=guild.id if guild else None)
+        ua = (request.headers.get("User-Agent") or "").lower()
+        is_bot = any(b in ua for b in ("bot", "spider", "crawl", "slurp", "fetch", "headless", "mediapartners", "preview"))
+        if not is_bot:
+            self.record_view(ip, guild_id=guild.id if guild else None)
         return web.Response(text=HTML_INDEX, content_type="text/html", charset="utf-8")
 
     async def _handle_manifest(self, request):
