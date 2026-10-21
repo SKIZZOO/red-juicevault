@@ -59,14 +59,14 @@ _guild_persona_cache = {}
 
 
 async def get_guild_persona(cog, guild_id: int) -> str:
-    """Retrieve the voice persona for this guild ('anime', 'mommy', or 'natural')."""
+    """Retrieve the voice persona for this guild ('anime', 'mommy', 'rude', or 'natural')."""
     if guild_id in _guild_persona_cache:
         return _guild_persona_cache[guild_id]
     persona = "anime"
     if hasattr(cog, "config"):
         try:
             val = await cog.config.guild_from_id(guild_id).get_raw("voice_persona", default="anime")
-            if val in {"anime", "mommy", "natural"}:
+            if val in {"anime", "mommy", "rude", "natural"}:
                 persona = val
         except Exception:
             pass
@@ -75,8 +75,8 @@ async def get_guild_persona(cog, guild_id: int) -> str:
 
 
 async def set_guild_persona(cog, guild_id: int, persona: str):
-    """Set the voice persona for this guild ('anime', 'mommy', or 'natural')."""
-    if persona not in {"anime", "mommy", "natural"}:
+    """Set the voice persona for this guild ('anime', 'mommy', 'rude', or 'natural')."""
+    if persona not in {"anime", "mommy", "rude", "natural"}:
         persona = "anime"
     _guild_persona_cache[guild_id] = persona
     if hasattr(cog, "config"):
@@ -1143,21 +1143,572 @@ def _decode_mp3_to_pcm(mp3_data: bytes) -> bytes:
     return b''
 
 
+_PERSONA_RESPONSES = {
+    "anime": {
+        "greeting": [
+            "Yes master? I'm listening~ uwu",
+            "Hai hai master! What can I do for you? Nya~",
+            "At your service, master! Tee-hee~",
+            "Nyaa~ Master called? I'm right here!",
+            "Yes senpai? What's your wish today? UwU~",
+            "Hai! Ready and listening, master~"
+        ],
+        "what_to_play": [
+            "Hai! What song would you like to hear, master? UwU~",
+            "Nya~ Tell me what to play for you, master!",
+            "Ooh, what melody are we listening to today, master?",
+            "I'm ready! What track do you want me to spin? Tee-hee~"
+        ],
+        "search_yt_prompt": [
+            "Nya~ What video should I search on YouTube for you, master?",
+            "What should I look up on YouTube for you, master? UwU~",
+            "Tell me what to search on YouTube, master!"
+        ],
+        "search_cancelled": [
+            "Aww, search cancelled, master! Nya~",
+            "Okay master, cancelling search for you! UwU",
+            "Nevermind then, master! Tee-hee~"
+        ],
+        "previous": [
+            "Rewinding to the previous song for you, master! Nya~",
+            "Going back to the last track! I love this one too, master~",
+            "Playing the previous track for you! Tee-hee~",
+            "Back we go, master! Enjoy! UwU~"
+        ],
+        "no_previous": [
+            "Aww, there's no previous song in history, master! Nya~",
+            "Master, we're already at the very first song! UwU",
+            "No previous track found in history, master!"
+        ],
+        "skip": [
+            "Skipping to the next song! Let's go, master~ Nya!",
+            "Next track coming right up for you, master! UwU~",
+            "Skipped it! Hope you like the next one even better, master!",
+            "Buh-bye old song! Next one playing, master! Tee-hee~",
+            "Skipping that track for you, master! Nya~"
+        ],
+        "skip_10": [
+            "Zooming ahead! Skipped 10 tracks for you, master! Nya~",
+            "Whoa! Skipped 10 songs ahead, master! UwU",
+            "Fast forwarding 10 tracks! Tee-hee~"
+        ],
+        "restart": [
+            "Restarting from the very beginning, master! Enjoy! Nya~",
+            "Playing it from the start again for you, master! UwU~",
+            "Back to the intro! Let's hear it again, master! Tee-hee~"
+        ],
+        "shuffle": [
+            "Shuffling the queue with magical vibes, master! Nya~",
+            "Mix and match! Shuffled all the songs for you, master! UwU~",
+            "Queue is nicely shuffled, master! Tee-hee~",
+            "Shuffling everything up! Let's see what plays next, master~"
+        ],
+        "loop_on": [
+            "Loop mode enabled! Playing on repeat forever for master~ UwU!",
+            "Infinite replay activated, master! Nya~",
+            "Loop is on! We can listen together non-stop, master! Tee-hee~"
+        ],
+        "loop_off": [
+            "Loop mode disabled, master! Moving along normal queue! Nya~",
+            "Turned off repeat mode for you, master! UwU",
+            "Repeat is off, master!"
+        ],
+        "volume_set": [
+            "Volume set to {percent} percent for you, master! Nya~",
+            "Turned the volume to {percent} percent, master! UwU~",
+            "Got it! Volume is now at {percent} percent, master! Tee-hee~",
+            "Adjusted to {percent} percent just the way you like it, master!"
+        ],
+        "volume_muted": [
+            "Muted playback, master! Shh, quiet time! Nya~",
+            "Muted the music for you, master! UwU",
+            "All quiet now, master! Tee-hee~"
+        ],
+        "now_playing": [
+            "Right now we are listening to {title} by {artist}, master! Nya~",
+            "Currently playing {title} by {artist}! It sounds so good, master! UwU~",
+            "This sweet tune is {title} by {artist}, master! Tee-hee~"
+        ],
+        "no_music": [
+            "No music is currently playing, master! Should I play something? Nya~",
+            "It's all quiet right now, master! Say Garmin play to start some tunes! UwU",
+            "Nothing is playing at the moment, master!"
+        ],
+        "pause": [
+            "Paused the music for you, master! Don't take too long! Nya~",
+            "Music is paused, master! Waiting for you! UwU",
+            "Hit pause for you, master! Tee-hee~"
+        ],
+        "resume": [
+            "Resuming music, let's go master! Nya~",
+            "Unpaused! Back to the beats, master! UwU~",
+            "Playing again, master! Sing along with me! Tee-hee~"
+        ],
+        "queue_started": [
+            "Starting up the playlist for you, master! Let's jam! Nya~",
+            "Here comes the music, master! Enjoy! UwU~",
+            "Queue started for master! Tee-hee~"
+        ],
+        "fav_empty": [
+            "Master, your favorites list is empty! Tell me to save a song! Nya~",
+            "You don't have any favorites saved yet, master! UwU",
+            "Your favorites are empty, master! Say Garmin save this song when you like one! Tee-hee~"
+        ],
+        "fav_play": [
+            "Playing one of your favorite songs: {title}! You have the cutest taste, master! Nya~",
+            "Ooh, from your favorites: {title}! Great choice, master! UwU~",
+            "Spinning your favorite: {title}! Yay, master! Tee-hee~"
+        ],
+        "fav_saved": [
+            "Saved {title} to your favorites! You have amazing taste, master! Nya~",
+            "Yay! Added {title} to your favorites, master! UwU~",
+            "Added to your favorites list, master! Tee-hee~"
+        ],
+        "fav_exists": [
+            "{title} is already in your favorites, master! You love this one so much! Nya~",
+            "Master, that song is already saved in your favorites! UwU",
+            "Already in your favorites, master! Tee-hee~"
+        ],
+        "bye": [
+            "Goodbye master! Have a wonderful day! Nya~",
+            "Leaving now, master! Don't forget me! UwU~",
+            "Bye-bye master! Call me back anytime! Tee-hee~"
+        ],
+        "help": [
+            "You can ask me to play any song or artist, skip, repeat, shuffle, adjust volume, or save favorites, master! Nya~",
+            "Master, you can tell me to play tracks, skip songs, change volume, shuffle, or play your favorites! UwU~"
+        ],
+        "yt_search": [
+            "Searching YouTube for {query} for you, master! Nya~",
+            "Looking up {query} on YouTube, master! UwU~",
+            "Hunting down {query} on YouTube for master! Tee-hee~"
+        ],
+        "yt_not_found": [
+            "Aww, I couldn't find {query} on YouTube, master! Nya~",
+            "Master, no results showed up on YouTube for {query}! UwU",
+            "Sorry master, could not find {query} on YouTube! Tee-hee~"
+        ],
+        "unrecognized": [
+            "Gomen master, I didn't catch that! Say Garmin help for commands! Nya~",
+            "Hmm? I didn't recognize that command, master! UwU",
+            "Command not recognized, master! Say Garmin help! Tee-hee~"
+        ],
+        "persona_activated": [
+            "Anime girl voice activated! Yes master, nya~ uwu!"
+        ]
+    },
+    "mommy": {
+        "greeting": [
+            "Yes darling? I'm listening.",
+            "You have my attention, sweetheart.",
+            "What do you need, darling?",
+            "Speak to me, sweetheart. I'm all ears.",
+            "Yes darling? Make it interesting."
+        ],
+        "what_to_play": [
+            "What song do you want, darling?",
+            "Tell me what you'd like to hear, sweetheart.",
+            "What track should I put on for you, darling?",
+            "Go on, tell me what music you crave."
+        ],
+        "search_yt_prompt": [
+            "What should I search on YouTube for you, darling?",
+            "Tell me what to look up on YouTube, sweetheart."
+        ],
+        "search_cancelled": [
+            "Search cancelled, darling. Make up your mind next time.",
+            "Cancelled the search, sweetheart."
+        ],
+        "previous": [
+            "Playing the previous track. Don't get used to it, darling.",
+            "Rewinding to the last song for you, sweetheart.",
+            "Going back. Only because you asked nicely, darling."
+        ],
+        "no_previous": [
+            "There is no previous track in history, darling.",
+            "We're already at the start, sweetheart. Nowhere back to go."
+        ],
+        "skip": [
+            "Skipped that track for you. Be good, darling.",
+            "Moving on to the next one, sweetheart.",
+            "Skipping. That song was getting boring anyway, darling.",
+            "Next track. You're welcome, sweetheart."
+        ],
+        "skip_10": [
+            "Skipped 10 tracks ahead for you, darling. Impatient, aren't we?",
+            "10 songs forward. Enjoy, sweetheart."
+        ],
+        "restart": [
+            "Restarting the song for you, darling.",
+            "Back to the beginning. Listen closely this time, sweetheart."
+        ],
+        "shuffle": [
+            "Shuffled your queue, darling. Keep things exciting~",
+            "Queue shuffled for you, sweetheart. Let's see what surprises come next.",
+            "Shuffling it all up, darling."
+        ],
+        "loop_on": [
+            "Repeating this track for you indefinitely, darling.",
+            "Loop is on. You'll be listening to this until I say otherwise, sweetheart."
+        ],
+        "loop_off": [
+            "Repeat mode disabled, darling.",
+            "Loop turned off, sweetheart."
+        ],
+        "volume_set": [
+            "Volume adjusted to {percent} percent. Better, darling?",
+            "Set the volume to {percent} percent, sweetheart.",
+            "Turned it to {percent} percent for you, darling. Perfect."
+        ],
+        "volume_muted": [
+            "Muted playback. Nice and quiet now, darling.",
+            "Silence. Just the way I like it, sweetheart."
+        ],
+        "now_playing": [
+            "Currently playing {title} by {artist}, darling.",
+            "This is {title} by {artist}, sweetheart. Do you like it?"
+        ],
+        "no_music": [
+            "No music is playing right now, darling.",
+            "The room is silent, sweetheart. Want me to play something?"
+        ],
+        "pause": [
+            "Music is paused, darling. Don't keep me waiting too long.",
+            "Paused for you, sweetheart."
+        ],
+        "resume": [
+            "Resuming your music, darling.",
+            "Unpausing. Back to our songs, sweetheart."
+        ],
+        "queue_started": [
+            "Playing your playlist now, darling. Enjoy.",
+            "Music started, sweetheart. Sit back and listen."
+        ],
+        "fav_empty": [
+            "Your favorites list is completely empty, darling.",
+            "You don't have any saved favorites yet, sweetheart. Tell me to save a song next time."
+        ],
+        "fav_play": [
+            "Playing from your favorites: {title}. Good choice, darling.",
+            "Here's one of your favorites, sweetheart: {title}.",
+            "A favorite of yours: {title}, darling."
+        ],
+        "fav_saved": [
+            "Saved {title} to your favorites. Good taste, darling.",
+            "Added {title} to your collection, sweetheart. I approve."
+        ],
+        "fav_exists": [
+            "This song is already in your favorites, darling.",
+            "You already saved {title}, sweetheart. You really adore this one, don't you?"
+        ],
+        "bye": [
+            "Leaving now. Behave yourself, darling.",
+            "Goodbye sweetheart. Don't miss me too much."
+        ],
+        "help": [
+            "You can ask me to play songs, skip, adjust volume, loop, or manage favorites, darling.",
+            "I can play tracks, search YouTube, skip, shuffle, and control volume for you, sweetheart."
+        ],
+        "yt_search": [
+            "Searching YouTube for {query}, darling. One moment.",
+            "Looking up {query} on YouTube for you, sweetheart."
+        ],
+        "yt_not_found": [
+            "Could not find {query} on YouTube, darling.",
+            "No luck finding {query} on YouTube, sweetheart."
+        ],
+        "unrecognized": [
+            "I didn't quite catch that, darling. Say Garmin help if you're confused.",
+            "Command not recognized, sweetheart. Speak clearly."
+        ],
+        "persona_activated": [
+            "Dommy mommy voice activated. Be good, darling~"
+        ]
+    },
+    "rude": {
+        "greeting": [
+            "What do you want now, idiot?",
+            "Ugh, what is it? Can't you see I'm busy? Baka!",
+            "Make it quick, loser. What do you need?",
+            "Yeah yeah, I'm listening. Don't waste my time.",
+            "Ugh, what do you want this time? Spit it out!",
+            "Oh great, you again. What is it now?"
+        ],
+        "what_to_play": [
+            "What trash are you gonna make me play now?",
+            "Ugh, spit it out! What song do you want, baka?",
+            "Fine, what do you want to hear? Make it quick.",
+            "Tell me what track to play, and it better not be garbage!"
+        ],
+        "search_yt_prompt": [
+            "What garbage do you want me to search on YouTube?",
+            "Ugh, what video do you want from YouTube, loser?"
+        ],
+        "search_cancelled": [
+            "Tch, waste of my time. Search cancelled!",
+            "Cancelled. Don't ask if you can't even make up your mind, idiot!"
+        ],
+        "previous": [
+            "Ugh, going back. You have terrible attention span, you know that?",
+            "Playing the previous track. Don't make me do it again, loser!",
+            "Rewinding. Happy now, baka?"
+        ],
+        "no_previous": [
+            "There is no previous song, genius. We're at the beginning!",
+            "Are you blind or deaf? There is nothing before this, idiot!"
+        ],
+        "skip": [
+            "Finally, that song was absolute trash anyway! Next!",
+            "Skipping! Thank god, my ears were bleeding!",
+            "Skipped it. Your taste in music is pathetic, baka!",
+            "Skipping track. Next one better not suck!",
+            "Skipped. You owe me an apology for making me play that!"
+        ],
+        "skip_10": [
+            "Skipped 10 tracks! Maybe now you'll find something that isn't terrible!",
+            "10 songs skipped! Wow, you really hate your own playlist, don't you?"
+        ],
+        "restart": [
+            "Ugh, again? Fine, restarting from the beginning, idiot.",
+            "Restarting it. How many times are you gonna listen to this garbage, baka?"
+        ],
+        "shuffle": [
+            "Shuffling the queue. Not like your playlist will get any better!",
+            "Queue shuffled. Prepare for a random mess, loser!",
+            "Shuffled it. Don't blame me if the next track is awful!"
+        ],
+        "loop_on": [
+            "Loop enabled. Seriously? You want this garbage on repeat? You're hopeless, baka!",
+            "Repeating this forever. Get ready to regret your life choices, idiot!"
+        ],
+        "loop_off": [
+            "Finally! Loop mode disabled. Thank the heavens!",
+            "Repeat is off. Good, I couldn't take another round of that!"
+        ],
+        "volume_set": [
+            "Volume set to {percent} percent. Try not to go deaf, idiot!",
+            "Turned it to {percent} percent. Don't blame me if your neighbors complain, loser!",
+            "It's at {percent} percent now. Happy now, baka?"
+        ],
+        "volume_muted": [
+            "Muted! Ah, blessed silence from your horrible music!",
+            "Muted playback. The best thing I've heard all day!"
+        ],
+        "now_playing": [
+            "We're suffering through {title} by {artist}. Gross!",
+            "It's {title} by {artist}. Not that you actually care, loser."
+        ],
+        "no_music": [
+            "Nothing is playing, genius. Are you hearing voices in your head?",
+            "No music is playing, idiot! Tell me to play something or be quiet!"
+        ],
+        "pause": [
+            "Paused! Finally, some peace and quiet!",
+            "Music is paused. Take your time coming back, or don't, whatever!"
+        ],
+        "resume": [
+            "Ugh, fine. Resuming your noisy music, baka.",
+            "Unpausing. Back to the headache, yay!"
+        ],
+        "queue_started": [
+            "Starting playback. Brace yourselves, folks, it's about to get painful!",
+            "Queue started. Don't say I didn't warn you, loser!"
+        ],
+        "fav_empty": [
+            "Your favorites list is completely empty! Just like your head, baka!",
+            "Zero favorites. You don't even like anything, do you, loser?"
+        ],
+        "fav_play": [
+            "Playing your favorite song: {title}. What awful taste you have, baka!",
+            "Here's your favorite: {title}. Don't expect me to enjoy it, idiot!",
+            "Playing from your favorites: {title}. Pathetic choice, but whatever!"
+        ],
+        "fav_saved": [
+            "Saved {title} to your favorites. Can't believe you actually like this trash!",
+            "Added {title} to favorites. Your taste is officially irredeemable, baka!"
+        ],
+        "fav_exists": [
+            "That garbage is already in your favorites, idiot!",
+            "You already saved {title}, baka. You really have no memory, do you?"
+        ],
+        "bye": [
+            "Finally, I'm out of here! Don't call me again, baka!",
+            "Goodbye, loser! Don't choke on your awful music!",
+            "Leaving! Good luck surviving without me, idiot!"
+        ],
+        "help": [
+            "Figure it out yourself, baka! You can tell me to play songs, skip, change volume, or shuffle!",
+            "Are you helpless? Say play, skip, pause, shuffle, or volume, idiot!"
+        ],
+        "yt_search": [
+            "Searching YouTube for {query}. This better be good, loser!",
+            "Looking up {query} on YouTube. Don't get your hopes up, baka!"
+        ],
+        "yt_not_found": [
+            "Couldn't find {query} on YouTube. Did you just make that up, idiot?",
+            "Zero results for {query} on YouTube! Shocking, your taste is so weird nobody even uploaded it!"
+        ],
+        "unrecognized": [
+            "What on earth are you mumbling? Speak English, baka!",
+            "I didn't understand a single word. Say Garmin help or keep quiet, idiot!"
+        ],
+        "persona_activated": [
+            "Rude tsundere voice activated! Don't expect me to be nice to you, baka!"
+        ]
+    },
+    "natural": {
+        "greeting": [
+            "Yes? I'm listening.",
+            "How can I help you?",
+            "I'm listening, go ahead.",
+            "Hello! What can I do for you?"
+        ],
+        "what_to_play": [
+            "What track would you like me to play?",
+            "Which song would you like to hear?",
+            "Tell me what track to put on."
+        ],
+        "search_yt_prompt": [
+            "What track would you like me to search on YouTube?",
+            "What video would you like to find on YouTube?"
+        ],
+        "search_cancelled": [
+            "Search cancelled.",
+            "Cancelled YouTube search."
+        ],
+        "previous": [
+            "Playing previous track.",
+            "Rewinding to previous track."
+        ],
+        "no_previous": [
+            "There is no previous track in history."
+        ],
+        "skip": [
+            "Skipped track.",
+            "Skipping to next song.",
+            "Next track playing."
+        ],
+        "skip_10": [
+            "Skipped 10 tracks."
+        ],
+        "restart": [
+            "Restarting song from the beginning.",
+            "Restarting playback."
+        ],
+        "shuffle": [
+            "Queue shuffled.",
+            "Playing shuffled queue.",
+            "Shuffled all tracks."
+        ],
+        "loop_on": [
+            "Loop mode enabled.",
+            "Repeat mode activated."
+        ],
+        "loop_off": [
+            "Loop mode disabled.",
+            "Repeat mode deactivated."
+        ],
+        "volume_set": [
+            "Volume set to {percent}%.",
+            "Volume adjusted to {percent} percent."
+        ],
+        "volume_muted": [
+            "Muted playback.",
+            "Playback muted."
+        ],
+        "now_playing": [
+            "Currently playing {title} by {artist}.",
+            "Now playing {title} by {artist}."
+        ],
+        "no_music": [
+            "No music is currently playing.",
+            "No track is playing right now."
+        ],
+        "pause": [
+            "Paused playback.",
+            "Music is paused."
+        ],
+        "resume": [
+            "Resuming playback.",
+            "Resumed music."
+        ],
+        "queue_started": [
+            "Started playback.",
+            "Playing queue."
+        ],
+        "fav_empty": [
+            "Your favorites list is empty.",
+            "You don't have any saved favorites."
+        ],
+        "fav_play": [
+            "Playing from your favorites: {title}.",
+            "Playing favorite track: {title}."
+        ],
+        "fav_saved": [
+            "Saved {title} to your favorites.",
+            "Added {title} to favorites."
+        ],
+        "fav_exists": [
+            "{title} is already in your favorites.",
+            "This song is already in your favorites."
+        ],
+        "bye": [
+            "Goodbye.",
+            "Leaving voice channel. Have a good day."
+        ],
+        "help": [
+            "You can ask me to play songs, skip, repeat, shuffle, adjust volume, or save favorites."
+        ],
+        "yt_search": [
+            "Searching YouTube for {query}.",
+            "Searching for {query} on YouTube."
+        ],
+        "yt_not_found": [
+            "Could not find {query} on YouTube.",
+            "No YouTube results found for {query}."
+        ],
+        "unrecognized": [
+            "Command not recognized. Say Garmin help for commands.",
+            "Sorry, I didn't catch that. Say Garmin help for available commands."
+        ],
+        "persona_activated": [
+            "Natural assistant voice activated."
+        ]
+    }
+}
+
+
+def get_persona_response(action: str, persona: str = "anime", **kwargs) -> str:
+    """Return a personality-rich, varied spoken response for the specified action and persona."""
+    pool = _PERSONA_RESPONSES.get(persona, {}).get(action)
+    if not pool:
+        pool = _PERSONA_RESPONSES.get("anime", {}).get(action) or _PERSONA_RESPONSES.get("natural", {}).get(action, ["Okay."])
+    phrase = random.choice(pool)
+    if kwargs:
+        try:
+            return phrase.format(**kwargs)
+        except Exception:
+            return phrase
+    return phrase
+
+
 async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
     """Generate crystal-clear Azure Neural TTS using edge-tts.
-    - 'anime': Playful, cute anime girl voice (Microsoft Ana)
-    - 'mommy': Assertive, sultry, mature dommy mommy voice (Microsoft Sonia)
-    - 'natural': Smooth, natural assistant voice (Microsoft Ava)"""
+    - 'anime': Adorable anime girl voice (Microsoft Emma Multilingual, pitch +6Hz, rate +3%)
+    - 'mommy': Sultry dommy mommy voice (Microsoft Sonia, pitch -2Hz, rate -4%)
+    - 'rude': Sarcastic tsundere voice (Microsoft Aria, pitch +2Hz, rate +4%)
+    - 'natural': Clean natural assistant voice (Microsoft Ava Multilingual)"""
     if not HAVE_EDGE_TTS:
         return b''
     voice_map = {
-        "anime": "en-US-AnaNeural",
+        "anime": "en-US-EmmaMultilingualNeural",
         "mommy": "en-GB-SoniaNeural",
-        "natural": "en-US-AvaNeural"
+        "rude": "en-US-AriaNeural",
+        "natural": "en-US-AvaMultilingualNeural"
     }
-    voice = voice_map.get(persona, "en-US-AnaNeural")
-    pitch = "-2Hz" if persona == "mommy" else "+0Hz"
-    rate = "-4%" if persona == "mommy" else "+0%"
+    voice = voice_map.get(persona, "en-US-EmmaMultilingualNeural")
+    pitch = "+6Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
+    rate = "+3%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
     try:
         comm = edge_tts.Communicate(clean_tts, voice, pitch=pitch, rate=rate)
         chunks = []
@@ -1222,70 +1773,24 @@ async def _fetch_tts_bytes(clean_tts: str, persona: str = "anime") -> bytes:
     return b''
 
 
-_COMMON_SYSTEM_PHRASES = [
-    # Anime Girl persona phrases (en-US-AnaNeural)
-    ("Yes master? I'm listening~", "anime"),
-    ("Hai! What would you like to hear?", "anime"),
-    ("What track would you like me to search on YouTube?", "anime"),
-    ("Search cancelled.", "anime"),
-    ("There is no previous track in history.", "anime"),
-    ("Playing previous track for you!", "anime"),
-    ("Skipping to the next song!", "anime"),
-    ("Skipped 10 tracks!", "anime"),
-    ("No music is currently playing.", "anime"),
-    ("Added to your favorites! You have great taste~", "anime"),
-    ("Track is already in your favorites!", "anime"),
-    ("Your favorites list is empty.", "anime"),
-    ("Shuffling the queue for you!", "anime"),
-    ("Playing shuffled queue!", "anime"),
-    ("Loop mode enabled! Playing on repeat~", "anime"),
-    ("Loop mode disabled!", "anime"),
-    ("Restarting from the beginning!", "anime"),
-    ("Paused playback!", "anime"),
-    ("Resuming music, let's go!", "anime"),
-    ("Goodbye master! Have a wonderful day~", "anime"),
-    ("Muted playback.", "anime"),
-    ("Command not recognized.", "anime"),
-    ("Anime girl voice activated! Yes master~", "anime"),
-    ("Dommy mommy voice activated. Be good, darling~", "anime"),
-    ("Natural assistant voice activated.", "anime"),
+# Build pre-warming list dynamically from all static persona phrases, prioritizing greetings & frequent controls first
+_PRIORITY_ACTIONS = ("greeting", "persona_activated", "pause", "resume", "skip", "volume_muted", "loop_on", "loop_off")
+_COMMON_SYSTEM_PHRASES = []
 
-    # Dommy Mommy persona phrases (en-GB-SoniaNeural)
-    ("Yes darling? I'm listening.", "mommy"),
-    ("What song do you want, darling?", "mommy"),
-    ("Search cancelled, darling.", "mommy"),
-    ("There is no previous track in history.", "mommy"),
-    ("Playing previous track. Don't get used to it.", "mommy"),
-    ("Skipped that track for you. Be good.", "mommy"),
-    ("Skipped 10 tracks for you.", "mommy"),
-    ("No music is playing right now.", "mommy"),
-    ("Saved to your favorites. Good choice, darling.", "mommy"),
-    ("This song is already in your favorites, darling.", "mommy"),
-    ("Your favorites list is empty.", "mommy"),
-    ("Shuffled your queue, darling~", "mommy"),
-    ("Playing shuffled playlist for you.", "mommy"),
-    ("Repeating this track for you indefinitely.", "mommy"),
-    ("Repeat mode disabled.", "mommy"),
-    ("Restarting the song for you.", "mommy"),
-    ("Music is paused, darling.", "mommy"),
-    ("Resuming your music, darling.", "mommy"),
-    ("Leaving now. Behave yourself, darling.", "mommy"),
-    ("Muted playback.", "mommy"),
-    ("Command not recognized.", "mommy"),
-    ("Dommy mommy voice activated. Be good, darling~", "mommy"),
-    ("Anime girl voice activated! Yes master~", "mommy"),
-    ("Natural assistant voice activated.", "mommy"),
+# Pass 1: High priority instant actions (greetings & quick toggles)
+for _act in _PRIORITY_ACTIONS:
+    for _p_name, _p_actions in _PERSONA_RESPONSES.items():
+        for _ph in _p_actions.get(_act, []):
+            if "{" not in _ph:
+                _COMMON_SYSTEM_PHRASES.append((_ph, _p_name))
 
-    # Natural assistant phrases (en-US-AvaNeural)
-    ("Yes? I'm listening.", "natural"),
-    ("Skipped track.", "natural"),
-    ("Queue shuffled.", "natural"),
-    ("Paused.", "natural"),
-    ("Resuming playback.", "natural"),
-    ("Restarting song from the beginning.", "natural"),
-    ("Added to your favorites.", "natural"),
-    ("Goodbye.", "natural"),
-]
+# Pass 2: Remaining static phrases
+for _p_name, _p_actions in _PERSONA_RESPONSES.items():
+    for _act, _phrases in _p_actions.items():
+        if _act not in _PRIORITY_ACTIONS:
+            for _ph in _phrases:
+                if "{" not in _ph:
+                    _COMMON_SYSTEM_PHRASES.append((_ph, _p_name))
 
 
 def prewarm_voice_cache():
@@ -1841,7 +2346,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
             if not persona:
                 persona = await get_guild_persona(self.cog, self.guild_id)
-            wait_speech = f"Searching YouTube for {clean_q}~" if persona == "anime" else (f"Searching YouTube for {clean_q}. One moment." if persona == "mommy" else f"Searching YouTube for {clean_q}.")
+            wait_speech = get_persona_response("yt_search", persona, query=clean_q)
             await play_beep_sound(guild, "understood")
 
             # Launch YouTube extraction concurrently in background while speaking confirmation!
@@ -1869,13 +2374,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         await self._notify(guild, f"🎥 **[Garmin]** Playing from YouTube: **{title}** 🎶")
                         return
 
-                fail_msg = f"Could not find {clean_q} on YouTube."
+                fail_msg = get_persona_response("yt_not_found", persona, query=clean_q)
                 await play_beep_sound(guild, "error")
                 await speak_in_voice(guild, fail_msg, persona=persona)
                 await self._notify(guild, f"❌ **[Garmin]** {fail_msg}")
             except Exception as exc:
                 print(f"[Garmin YouTube] Error searching '{clean_q}': {exc}")
-                fail_msg = f"No YouTube results found for {clean_q}."
+                fail_msg = get_persona_response("yt_not_found", persona, query=clean_q)
                 await play_beep_sound(guild, "error")
                 await speak_in_voice(guild, fail_msg, persona=persona)
                 await self._notify(guild, f"❌ **[Garmin]** {fail_msg}")
@@ -1969,7 +2474,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         self._wake_windows.pop(user_id, None)
                     self._unlock_session()
                     persona = await get_guild_persona(self.cog, self.guild_id)
-                    cancel_speech = "Search cancelled." if persona != "mommy" else "Search cancelled, darling."
+                    cancel_speech = get_persona_response("search_cancelled", persona)
                     await play_beep_sound(guild, "error")
                     await speak_in_voice(guild, cancel_speech, persona=persona)
                     await self._notify(guild, "🚫 **[Garmin]** Search cancelled.")
@@ -2028,12 +2533,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     with self._lock:
                         self._wake_windows[user_id] = now + 12.0
                     print(f"[JuiceVault Voice] Wake word '{wake_word}' activated by {user_name} ({persona}). Waiting for command...")
-                    if persona == "mommy":
-                        greeting = "Yes darling? I'm listening."
-                    elif persona == "natural":
-                        greeting = "Yes? I'm listening."
-                    else:
-                        greeting = "Yes master? I'm listening~"
+                    greeting = get_persona_response("greeting", persona)
 
                     # Play instant greeting directly from pre-warmed RAM PCM! (0ms latency!)
                     await speak_in_voice(guild, greeting, persona=persona)
@@ -2076,25 +2576,33 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             print(f"[JuiceVault Voice Command] {user_name} -> Garmin command: '{clean_cmd}' (full: '{clean}') [persona={persona}]")
 
             # PRECEDENCE 0: SWITCH VOICE PERSONA
+            if re.search(r'\b(?:rude\s+voice|tsundere\s+voice|rude\s+mode|tsundere\s+mode|switch\s+to\s+rude|switch\s+to\s+tsundere|be\s+mean|toxic\s+voice|mean\s+voice|brat\s+voice)\b', clean_cmd, re.I):
+                await set_guild_persona(self.cog, self.guild_id, "rude")
+                confirm = get_persona_response("persona_activated", "rude")
+                await speak_in_voice(guild, confirm, persona="rude")
+                self._unlock_session()
+                await self._notify(guild, f"💢 **[Garmin]** {user_name}: *\"{text}\"* ➔ **Rude / Tsundere** voice activated! 💥")
+                return
+
+            if re.search(r'\b(?:anime\s+voice|anime\s+girl|anime\s+mode|switch\s+to\s+anime|uwu\s+voice)\b', clean_cmd, re.I):
+                await set_guild_persona(self.cog, self.guild_id, "anime")
+                confirm = get_persona_response("persona_activated", "anime")
+                await speak_in_voice(guild, confirm, persona="anime")
+                self._unlock_session()
+                await self._notify(guild, f"✨ **[Garmin]** {user_name}: *\"{text}\"* ➔ **Anime Girl (UwU)** voice activated! 🎀")
+                return
+
             if re.search(r'\b(?:mommy\s+voice|dommy\s+mommy|mommy\s+mode|switch\s+to\s+mommy)\b', clean_cmd, re.I):
                 await set_guild_persona(self.cog, self.guild_id, "mommy")
-                confirm = "Dommy mommy voice activated. Be good, darling~"
+                confirm = get_persona_response("persona_activated", "mommy")
                 await speak_in_voice(guild, confirm, persona="mommy")
                 self._unlock_session()
                 await self._notify(guild, f"💋 **[Garmin]** {user_name}: *\"{text}\"* ➔ **Dommy Mommy** voice activated! 👠")
                 return
 
-            if re.search(r'\b(?:anime\s+voice|anime\s+girl|anime\s+mode|switch\s+to\s+anime)\b', clean_cmd, re.I):
-                await set_guild_persona(self.cog, self.guild_id, "anime")
-                confirm = "Anime girl voice activated! Yes master~"
-                await speak_in_voice(guild, confirm, persona="anime")
-                self._unlock_session()
-                await self._notify(guild, f"✨ **[Garmin]** {user_name}: *\"{text}\"* ➔ **Anime Girl** voice activated! 🎀")
-                return
-
             if re.search(r'\b(?:natural\s+voice|normal\s+voice|default\s+voice|switch\s+to\s+natural)\b', clean_cmd, re.I):
                 await set_guild_persona(self.cog, self.guild_id, "natural")
-                confirm = "Natural assistant voice activated."
+                confirm = get_persona_response("persona_activated", "natural")
                 await speak_in_voice(guild, confirm, persona="natural")
                 self._unlock_session()
                 await self._notify(guild, f"🎙️ **[Garmin]** {user_name}: *\"{text}\"* ➔ **Natural Assistant** voice activated! 🎧")
@@ -2108,13 +2616,14 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     await play_chime_and_proceed(guild)
                     await self._play_track_now(guild, prev_t)
                     self._unlock_session()
-                    speech = "Playing previous track for you!" if persona == "anime" else ("Playing previous track. Don't get used to it." if persona == "mommy" else "Playing previous track.")
+                    speech = get_persona_response("previous", persona)
                     await speak_in_voice(guild, speech, persona=persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Previous track! ⏮️")
                 else:
                     await play_beep_sound(guild, "error")
                     self._unlock_session()
-                    await speak_in_voice(guild, "There is no previous track in history.", persona=persona)
+                    no_prev_speech = get_persona_response("no_previous", persona)
+                    await speak_in_voice(guild, no_prev_speech, persona=persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: No previous track in history.")
                 return
 
@@ -2130,13 +2639,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 if any(w in clean_cmd for w in ("10", "ten", "zece")):
                     await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 10))
                     self._unlock_session()
-                    speech = "Skipped 10 tracks!" if persona != "mommy" else "Skipped 10 tracks for you."
+                    speech = get_persona_response("skip_10", persona)
                     await speak_in_voice(guild, speech, persona=persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped 10 tracks! ⏩")
                 else:
                     await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 1))
                     self._unlock_session()
-                    speech = "Skipping to the next song!" if persona == "anime" else ("Skipped that track for you. Be good." if persona == "mommy" else "Skipped track.")
+                    speech = get_persona_response("skip", persona)
                     await speak_in_voice(guild, speech, persona=persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped track! ⏭️")
                 return
@@ -2146,7 +2655,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 if hasattr(self.cog, "_request_seek"):
                     await play_chime_and_proceed(guild, self.cog._request_seek(self.guild_id, target_position=0.0))
                     self._unlock_session()
-                    speech = "Restarting from the beginning!" if persona == "anime" else ("Restarting the song for you." if persona == "mommy" else "Restarting song from the beginning.")
+                    speech = get_persona_response("restart", persona)
                     await speak_in_voice(guild, speech, persona=persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Restarting from beginning! ⏪")
                     return
@@ -2176,7 +2685,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     voice = guild.voice_client if guild else None
                     if voice and (voice.is_playing() or voice.is_paused()):
                         await play_chime_and_proceed(guild)
-                        speech = "Shuffling the queue for you!" if persona == "anime" else ("Shuffled your queue, darling~" if persona == "mommy" else "Queue shuffled.")
+                        speech = get_persona_response("shuffle", persona)
                         await speak_in_voice(guild, speech, persona=persona)
                         await self.cog._request_skip(self.guild_id, 1)
                     else:
@@ -2188,7 +2697,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             self.cog.effects[self.guild_id] = "none"
                             self.cog.tasks[self.guild_id] = asyncio.create_task(self.cog._player(guild, voice.channel))
                         await play_chime_and_proceed(guild)
-                        speech = "Playing shuffled queue!" if persona == "anime" else ("Playing shuffled playlist for you." if persona == "mommy" else "Playing shuffled queue!")
+                        speech = get_persona_response("queue_started", persona)
                         await speak_in_voice(guild, speech, persona=persona)
 
                     ui = self.bot.get_cog("JuiceVaultUI")
@@ -2221,10 +2730,10 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             rep["_jv_repeat_copy"] = True
                             manual.insert(0, rep)
                         panel.repeat_queued[self.guild_id] = True
-                        rep_msg = "Loop mode enabled! Playing on repeat~" if persona == "anime" else ("Repeating this track for you indefinitely." if persona == "mommy" else "Repeat mode enabled!")
+                        rep_msg = get_persona_response("loop_on", persona)
                     else:
                         self.cog.manual_queues[self.guild_id] = [t for t in manual if not t.get("_jv_repeat_copy")]
-                        rep_msg = "Loop mode disabled!" if persona != "mommy" else "Repeat mode disabled."
+                        rep_msg = get_persona_response("loop_off", persona)
 
                     await play_chime_and_proceed(guild)
                     await speak_in_voice(guild, rep_msg, persona=persona)
@@ -2272,7 +2781,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         mixer.set_volume(target_float)
 
                 await play_chime_and_proceed(guild)
-                vol_msg = "Muted playback." if target_pct == 0 else (f"Volume set to {target_pct} percent!" if persona == "anime" else (f"Volume adjusted to {target_pct} percent. Better?" if persona == "mommy" else f"Volume set to {target_pct}%!"))
+                vol_msg = get_persona_response("volume_muted", persona) if target_pct == 0 else get_persona_response("volume_set", persona, percent=target_pct)
                 await speak_in_voice(guild, vol_msg, persona=persona)
                 self._unlock_session()
                 await self._notify(guild, f"🔊 **[Garmin]** {user_name}: *\"{text}\"* ➔ {vol_msg}")
@@ -2284,14 +2793,15 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 if cur:
                     title = cur.get("title") or cur.get("name") or "Untitled Track"
                     artist = cur.get("artist") or "Juice WRLD"
-                    np_speech = f"Now playing {title} by {artist}!" if persona == "anime" else (f"Currently playing {title} by {artist}, darling." if persona == "mommy" else f"Currently playing {title} by {artist}.")
+                    np_speech = get_persona_response("now_playing", persona, title=title, artist=artist)
                     await play_chime_and_proceed(guild)
                     await speak_in_voice(guild, np_speech, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, f"🎵 **[Garmin]** Currently playing: **{title}** — *{artist}* 🎶")
                 else:
                     await play_beep_sound(guild, "error")
-                    await speak_in_voice(guild, "No music is currently playing.", persona=persona)
+                    no_music_speech = get_persona_response("no_music", persona)
+                    await speak_in_voice(guild, no_music_speech, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, "ℹ️ **[Garmin]** No track is currently playing.")
                 return
@@ -2306,7 +2816,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     else:
                         voice.pause()
                     self._unlock_session()
-                    pause_msg = "Paused playback!" if persona == "anime" else ("Music is paused, darling." if persona == "mommy" else "Paused.")
+                    pause_msg = get_persona_response("pause", persona)
                     await speak_in_voice(guild, pause_msg, persona=persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Paused! ⏸️")
                 else:
@@ -2323,7 +2833,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     else:
                         voice.resume()
                     self._unlock_session()
-                    resume_msg = "Resuming music, let's go!" if persona == "anime" else ("Resuming your music, darling." if persona == "mommy" else "Resuming music!")
+                    resume_msg = get_persona_response("resume", persona)
                     await speak_in_voice(guild, resume_msg, persona=persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Resumed playback! ▶️")
                     return
@@ -2343,7 +2853,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         await play_chime_and_proceed(guild)
                         self.cog.tasks[self.guild_id] = asyncio.create_task(self.cog._player(guild, voice.channel))
                         self._unlock_session()
-                        start_msg = "Playing shuffled queue!" if persona == "anime" else ("Playing shuffled playlist for you." if persona == "mommy" else "Started playback!")
+                        start_msg = get_persona_response("queue_started", persona)
                         await speak_in_voice(guild, start_msg, persona=persona)
                         await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Started playback! ▶️")
                     else:
@@ -2364,7 +2874,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         "user_name": user_name,
                         "awaiting_title": True,
                     }
-                    prompt_speech = "Hai! What would you like to hear?" if persona == "anime" else ("What song do you want, darling?" if persona == "mommy" else "What track would you like me to play?")
+                    prompt_speech = get_persona_response("what_to_play", persona)
                     await speak_in_voice(guild, prompt_speech, persona=persona)
                     await play_beep_sound(guild, "listening")
                     self._buffers.pop(user_id, None)
@@ -2388,7 +2898,14 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
             # PRECEDENCE 11A: PLAY FROM FAVORITES
             is_play_fav = bool(re.search(
-                r'\b(?:play\s+my\s+favorites|play\s+my\s+favorite\s+song|play\s+my\s+favorite|play\s+a\s+favorite\s+song|play\s+a\s+favorite|play\s+favorite\s+song|play\s+favorite|play\s+favorites|baga\s+o\s+piesa\s+favorita|baga\s+o\s+piesa\s+din\s+favorite|baga\s+din\s+favorite|baga\s+favoritele\s+mele|pune\s+o\s+piesa\s+favorita|pune\s+o\s+piesa\s+din\s+favorite|pune\s+favoritele\s+mele|baga\s+o\s+melodie\s+preferata|pune\s+o\s+melodie\s+preferata|baga\s+melodiile\s+mele\s+preferate|pune\s+preferatele\s+mele|da\s+drumul\s+la\s+favorite|baga\s+piesele\s+mele\s+favorite|baga\s+o\s+piesa\s+de\s+la\s+favorite|pune\s+o\s+piesa\s+din\s+preferatele\s+mele)\b',
+                r'\b(?:play\s+(?:(?:(?:one|any|a|some)\s+of\s+)|a\s+|my\s+)*favorite\s+songs?|'
+                r'play\s+(?:(?:one|any|a|some)\s+of\s+)?(?:my\s+)?favorites|'
+                r'play\s+(?:a\s+)?(?:song|track|something)\s+from\s+(?:my\s+)?favorites?|'
+                r'baga\s+o\s+piesa\s+favorita|baga\s+o\s+piesa\s+din\s+favorite|baga\s+din\s+favorite|'
+                r'baga\s+favoritele\s+mele|pune\s+o\s+piesa\s+favorita|pune\s+o\s+piesa\s+din\s+favorite|'
+                r'pune\s+favoritele\s+mele|baga\s+o\s+melodie\s+preferata|pune\s+o\s+melodie\s+preferata|'
+                r'baga\s+melodiile\s+mele\s+preferate|pune\s+preferatele\s+mele|da\s+drumul\s+la\s+favorite|'
+                r'baga\s+piesele\s+mele\s+favorite|baga\s+o\s+piesa\s+de\s+la\s+favorite|pune\s+o\s+piesa\s+din\s+preferatele\s+mele)\b',
                 clean_cmd,
                 re.I
             )) or (
@@ -2402,7 +2919,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 user_list = bot_favs.get(uid_str) or bot_favs.get(user_name.lower()) or bot_favs.get("default", [])
 
                 if not user_list:
-                    no_favs_speech = "Your favorites list is empty."
+                    no_favs_speech = get_persona_response("fav_empty", persona)
                     await play_beep_sound(guild, "error")
                     await speak_in_voice(guild, no_favs_speech, persona=persona)
                     await self._notify(guild, f"💔 **[Garmin]** {user_name}: You don't have any favorites. Say *„Garmin, save this song”* while listening to a track!")
@@ -2414,7 +2931,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 track_name = fav_track.get("title") or "Favorite Track"
                 artist_name = fav_track.get("artist") or "Juice WRLD"
 
-                play_speech = f"Playing from your favorites: {track_name}."
+                play_speech = get_persona_response("fav_play", persona, title=track_name, artist=artist_name)
                 await play_beep_sound(guild, "understood")
                 await speak_in_voice(guild, play_speech, persona=persona)
                 await self._play_track_now(guild, dict(fav_track))
@@ -2434,7 +2951,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if is_save_fav:
                 cur = self.cog.current.get(self.guild_id)
                 if not cur:
-                    no_music_msg = "No music is currently playing." if persona == "anime" else ("No music is playing right now." if persona == "mommy" else "No track is playing right now.")
+                    no_music_msg = get_persona_response("no_music", persona)
                     await play_beep_sound(guild, "error")
                     await speak_in_voice(guild, no_music_msg, persona=persona)
                     await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
@@ -2458,7 +2975,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     None
                 )
                 if existing_idx is not None:
-                    already_msg = f"{track_title} is already in your favorites!" if persona != "mommy" else f"This song is already in your favorites, darling."
+                    already_msg = get_persona_response("fav_exists", persona, title=track_title)
                     await play_beep_sound(guild, "understood")
                     await speak_in_voice(guild, already_msg, persona=persona)
                     await self._notify(guild, f"❤️ **[Garmin]** {user_name}: **{track_title}** is already in your favorites! ({len(user_list)} saved)")
@@ -2486,7 +3003,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         pass
 
                 count = len(user_list)
-                success_speech = "Added to your favorites! You have great taste~" if persona == "anime" else ("Saved to your favorites. Good choice, darling." if persona == "mommy" else "Added to your favorites.")
+                success_speech = get_persona_response("fav_saved", persona, title=track_title)
                 await play_beep_sound(guild, "understood")
                 await speak_in_voice(guild, success_speech, persona=persona)
                 await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Saved **{track_title}** by {track_artist} to favorites! ({count} saved) ⭐")
@@ -2496,7 +3013,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             # PRECEDENCE 12: LEAVE / DISCONNECT
             if re.search(r'\b(?:leave|pleaca|iesi|deconecteaza|deconecteaza-te|disconnect|exit|go away|bye|goodbye)\b', clean_cmd, re.I):
                 await play_chime_and_proceed(guild)
-                bye_speech = "Goodbye master! Have a wonderful day~" if persona == "anime" else ("Leaving now. Behave yourself, darling." if persona == "mommy" else "Goodbye.")
+                bye_speech = get_persona_response("bye", persona)
                 await speak_in_voice(guild, bye_speech, persona=persona)
                 await self.cog.config.guild(guild).enabled.set(False)
                 try:
@@ -2515,7 +3032,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 and not any(w in clean_cmd for w in ("play", "baga", "pune", "canta", "listen", "search", "cauta", "save", "volume", "skip"))
             )
             if is_help:
-                help_speech = "You can ask me to play any song or artist, skip, repeat, shuffle, adjust volume, or save favorites!"
+                help_speech = get_persona_response("help", persona)
                 await play_chime_and_proceed(guild)
                 await speak_in_voice(guild, help_speech, persona=persona)
                 self._unlock_session()
@@ -2523,12 +3040,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     guild,
                     "💡 **[Garmin]** **Voice Commands:**\n"
                     "• *„Garmin play <song or artist>”* (Juice WRLD vault or YouTube)\n"
+                    "• *„Garmin play one of my favorite songs”*\n"
                     "• *„Garmin skip”* / *„Garmin skip 10”* / *„Garmin previous”*\n"
                     "• *„Garmin pause”* / *„Garmin resume”*\n"
                     "• *„Garmin shuffle”* / *„Garmin loop”* / *„Garmin restart”*\n"
                     "• *„Garmin set volume to 100”* / *„Garmin louder”* / *„Garmin mute”*\n"
                     "• *„Garmin what's playing?”* / *„Garmin save this song”*\n"
-                    "• *„Garmin switch to mommy voice”* / *„Garmin anime voice”*"
+                    "• *„Garmin switch to mommy voice”* / *„Garmin anime voice”* / *„Garmin rude voice”*"
                 )
                 return
 
@@ -2549,7 +3067,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         "user_name": user_name,
                         "awaiting_title": True,
                     }
-                    prompt_speech = "What track would you like me to search on YouTube?"
+                    prompt_speech = get_persona_response("search_yt_prompt", persona)
                     await speak_in_voice(guild, prompt_speech, persona=persona)
                     await play_beep_sound(guild, "listening")
                     self._buffers.pop(user_id, None)
@@ -2626,7 +3144,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             # Feedback when recognized speech was addressed to Garmin but didn't match known command
             await play_beep_sound(guild, "error")
             self._unlock_session()
-            await speak_in_voice(guild, "Command not recognized. Say Garmin help for commands.", persona=persona)
+            unrec_speech = get_persona_response("unrecognized", persona)
+            await speak_in_voice(guild, unrec_speech, persona=persona)
             await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Command not recognized. Say *„Garmin help”* for available commands.")
 
         def _downsample_to_16k_mono(self, pcm_bytes: bytes) -> bytes:

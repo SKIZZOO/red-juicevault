@@ -2654,33 +2654,43 @@ class JuiceVault(commands.Cog):
 
     @jv.command(name="persona", aliases=["voice"])
     async def set_voice_persona(self, ctx, persona: str = None):
-        """Set or view the voice persona for Garmin (anime, mommy, natural)."""
+        """Set or view the voice persona for Garmin (anime, mommy, rude, natural)."""
         valid = {
-            "anime": "🎀 Anime Girl (cute & cheerful - Microsoft Ana)",
+            "anime": "🎀 Anime Girl (cute & uwu - Microsoft Emma)",
             "mommy": "👠 Dommy Mommy (sultry & dominant - Microsoft Sonia)",
+            "rude": "💢 Rude / Tsundere (sarcastic & edgy - Microsoft Aria)",
             "natural": "🎧 Natural Assistant (standard & clear - Microsoft Ava)"
+        }
+        aliases = {
+            "tsundere": "rude",
+            "brat": "rude",
+            "toxic": "rude",
+            "mean": "rude",
+            "uwu": "anime"
         }
         current = await self.config.guild(ctx.guild).voice_persona()
         if not persona:
             await ctx.send(
                 f"🎙️ **Current Voice Persona:** {valid.get(current, current)}\n\n"
                 f"**Available personas:**\n"
-                f"• `{ctx.clean_prefix}4jv persona anime` — Adorable anime girl voice (`en-US-AnaNeural`)\n"
+                f"• `{ctx.clean_prefix}4jv persona anime` — Adorable anime girl voice (`en-US-EmmaMultilingualNeural`)\n"
                 f"• `{ctx.clean_prefix}4jv persona mommy` — Sultry dommy mommy voice (`en-GB-SoniaNeural`)\n"
-                f"• `{ctx.clean_prefix}4jv persona natural` — Clean natural assistant (`en-US-AvaNeural`)\n\n"
-                f"💡 *You can also say in voice chat:* **„Garmin, switch to mommy voice”** or **„Garmin, anime girl voice”**!"
+                f"• `{ctx.clean_prefix}4jv persona rude` — Sarcastic tsundere voice (`en-US-AriaNeural`)\n"
+                f"• `{ctx.clean_prefix}4jv persona natural` — Clean natural assistant (`en-US-AvaMultilingualNeural`)\n\n"
+                f"💡 *You can also say in voice chat:* **„Garmin, switch to mommy voice”**, **„Garmin, rude voice”**, or **„Garmin, anime girl voice”**!"
             )
             return
 
-        choice = persona.lower().strip()
+        raw_choice = persona.lower().strip()
+        choice = aliases.get(raw_choice, raw_choice)
         if choice not in valid:
-            await ctx.send(f"❌ Invalid persona `{persona}`. Choose from: `anime`, `mommy`, `natural`.")
+            await ctx.send(f"❌ Invalid persona `{persona}`. Choose from: `anime`, `mommy`, `rude`, `natural`.")
             return
 
         await self.config.guild(ctx.guild).voice_persona.set(choice)
-        from .voice_recognition import set_guild_persona, speak_in_voice
+        from .voice_recognition import set_guild_persona, speak_in_voice, get_persona_response
         await set_guild_persona(self, ctx.guild.id, choice)
         await ctx.send(f"✅ Voice persona set to: **{valid[choice]}**!")
         if ctx.guild.voice_client and ctx.guild.voice_client.is_connected():
-            test_phrase = "Anime girl voice activated! Yes master~" if choice == "anime" else ("Dommy mommy voice activated. Be good, darling~" if choice == "mommy" else "Natural assistant voice activated.")
+            test_phrase = get_persona_response("persona_activated", choice)
             await speak_in_voice(ctx.guild, test_phrase, persona=choice)
