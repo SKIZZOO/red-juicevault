@@ -315,21 +315,21 @@ def _clean_music_query(query: str) -> str:
     q = _resolve_artist_phonetics(q)
 
     # 2. Remove wake words if present at start
-    q = re.sub(r'^(?:hey\s+|ok\s+|okay\s+|hi\s+|hello\s+|hei\s+|ba\s+|bai\s+|alo\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin|carmen|darmin|german|barmin)\s*', '', q, flags=re.I).strip()
+    q = re.sub(r'^(?:hey\s+|ok\s+|okay\s+|hi\s+|hello\s+|yo\s+)?(?:garmin|garmen|garmon|garmyn|carmin|carmen|darmin|german|barmin)\s*', '', q, flags=re.I).strip()
 
     # 3. Remove YouTube references anywhere in the query
-    q = re.sub(r'\b(?:pe|de\s+pe|dupa|din|on|from)\s+(?:youtube|yt)\b', '', q, flags=re.I)
+    q = re.sub(r'\b(?:on|from)\s+(?:youtube|yt)\b', '', q, flags=re.I)
     q = re.sub(r'\b(?:youtube|yt)\b', '', q, flags=re.I)
     q = re.sub(r'\s+', ' ', q).strip()
 
     # 4. Strip conversational request prefixes iteratively
     prefix_patterns = [
-        r'^(?:te\s+rog|please|hai|ba|bai|alo|yo|si\s+tu|si\s+mie)\s+',
-        r'^(?:vreau\s+sa\s+ascult|as\s+vrea\s+sa\s+ascult|da-i\s+drumul\s+la|dai\s+drumul\s+la|da\s+drumul\s+la|da-i\s+play\s+la|dai\s+play\s+la|da\s+play\s+la)\s+',
-        r'^(?:cauta-mi|cautami|cauta|baga-mi|bagami|baga|pune-mi|punemi|pune|canta-mi|cantami|canta|gaseste-mi|gaseste|search|play|find|listen\s+to|put\s+on)\s+',
-        r'^(?:niste|some|ceva\s+de\s+la|ceva\s+cu|ceva|o\s+piesa\s+cu|o\s+piesa\s+de\s+la|o\s+melodie\s+cu|o\s+melodie\s+de\s+la|a\s+song\s+by|a\s+track\s+by)\s+',
-        r'^(?:muzica\s+cu|muzica\s+de\s+la|muzica|piesa\s+cu|piesa\s+de\s+la|piesa|melodia\s+cu|melodia\s+de\s+la|melodia|melodie|track|song|music)\s+',
-        r'^(?:cu|de\s+la|de|by|from|la|numit|numita|called)\s+',
+        r'^(?:please|yo)\s+',
+        r'^(?:i\s+want\s+to\s+listen\s+to|i\s+want\s+to\s+hear|can\s+you\s+play|could\s+you\s+play|let\'?s\s+hear|let\'?s\s+listen\s+to)\s+',
+        r'^(?:search\s+for|search|play|find|listen\s+to|put\s+on|stream)\s+',
+        r'^(?:some|a\s+song\s+by|a\s+track\s+by|the\s+song|the\s+track)\s+',
+        r'^(?:track|song|music)\s+',
+        r'^(?:by|from|called)\s+',
     ]
     changed = True
     passes = 0
@@ -342,18 +342,18 @@ def _clean_music_query(query: str) -> str:
                 q = new_q
                 changed = True
 
-    # 5. Strip trailing fillers like "te rog", "please", "frate", "man", "bro"
-    q = re.sub(r'\s+(?:te\s+rog|please|frate|man|bro)$', '', q, flags=re.I).strip()
+    # 5. Strip trailing fillers like "please", "man", "bro"
+    q = re.sub(r'\s+(?:please|man|bro)$', '', q, flags=re.I).strip()
     q = q.strip(" ,.:;!?-")
 
     # 6. Re-resolve artist phonetics once more in case stripped prefixes exposed them
     q = _resolve_artist_phonetics(q)
 
-    # 7. Strip trailing & leading Juice WRLD artist specifiers (e.g. "robbery de la juice wrld" -> "robbery")
+    # 7. Strip trailing & leading Juice WRLD artist specifiers (e.g. "robbery by juice wrld" -> "robbery")
     # while preserving "juice wrld" if that was the entire query
     is_only_juice = bool(re.match(r'^(?:juice\s+wrld|juice\s+world|juice|gius\s+wrld|gius\s+uorld|jus\s+wrld|juicewrld)$', q.strip(), flags=re.I))
     if not is_only_juice:
-        juice_trailing = r'\s+(?:de\s+la|by|de|cu|canta(?:ta)?\s+de)\s+(?:juice\s+wrld|juice\s+world|juice|gius\s+wrld|gius\s+uorld|jus\s+wrld|juicewrld)$'
+        juice_trailing = r'\s+(?:by|from)\s+(?:juice\s+wrld|juice\s+world|juice|gius\s+wrld|gius\s+uorld|jus\s+wrld|juicewrld)$'
         sub_q = re.sub(juice_trailing, '', q, flags=re.I).strip()
         if sub_q:
             q = sub_q
@@ -362,59 +362,42 @@ def _clean_music_query(query: str) -> str:
         if sub_q:
             q = sub_q
 
-    # 8. Convert Romanian 'de la' / 'cantata de' before any other artist into clean spacing
-    # e.g. "magnolia de la carti" -> "magnolia carti", "fein de la travis scott" -> "fein travis scott"
-    q = re.sub(r'\s+(?:de\s+la|cantata\s+de)\s+', ' ', q, flags=re.I).strip()
-
     return q.strip()
 
 
 
 
 _MULTI_WORD_WAKE_REGEX = re.compile(
-    r'^(?:hey\s+|ok\s+|okay\s+|hei\s+|alo\s+|yo\s+|hi\s+|hello\s+)?(?:god\s+i\'?m\s+in|god\s+im\s+in|egger\s+man|eggar\s+man|eggerman|edgar\s+man|eger\s+man|eger\s+men|egr\s+man|egr\s+men|elgar\s+man|elgar\s+men|got\s+him\s+in|i\s+got\s+him\s+in|a\s+garden|the\s+garden|call\s+man|call\s+men)\b',
+    r'^(?:hey\s+|ok\s+|okay\s+|yo\s+|hi\s+|hello\s+)?(?:god\s+i\'?m\s+in|god\s+im\s+in|egger\s+man|eggar\s+man|eggerman|edgar\s+man|eger\s+man|eger\s+men|egr\s+man|egr\s+men|elgar\s+man|elgar\s+men|got\s+him\s+in|i\s+got\s+him\s+in|a\s+garden|the\s+garden|call\s+man|call\s+men)\b',
     re.IGNORECASE
 )
 
 _SINGLE_WORD_WAKE_REGEX = re.compile(
-    r'\b(?:(?:hey|ok|okay|hei|ba|bai|alo|yo|bre|ma|fa|auzi|zi|spune|hi|hello|e|a|the|de)\s+){0,3}(?:garmin|garmen|garmon|garmyn|garminn|garmy|garminu|garminul|garmini|carmin|carmen|carmina|carman|carme|carmyn|darmin|damin|darmon|barmin|karmin|karmen|jarmin|parmin|garden|gardon|gardi|gardin|gaming|germain|german|germane|elgar|edgar|eggar|egger|egr|eger|calmin|starmin|sharmin|barman|beggar|garment|garments|government|armin|darling)\b',
+    r'\b(?:(?:hey|ok|okay|hi|hello|yo|the)\s+){0,2}(?:garmin|garmen|garmon|garmyn|garminn|garmy|carmen|carmin|carman|darmin|karmin|karmen|jarmin|parmin|garden|gardon|gardin|gaming|germain|german|germane|elgar|edgar|eggar|egger|garment|garments|darling)\b',
     re.IGNORECASE
 )
 
 # In-memory adaptive learning caches
 _learned_wake_words_cache = {}    # guild_id -> set of lowercase words
 _learned_song_queries_cache = {}  # guild_id -> dict of {query: track_dict}
-_user_preferred_languages = {}    # user_id -> "ro" | "en"
+_user_preferred_languages = {}    # user_id -> "en"
 
 AFFIRMATIVE_WORDS = {
-    "da", "dap", "mda", "aha", "ihi", "dai", "da-i", "dă",
     "yes", "yeah", "yep", "yup", "sure", "ok", "okay",
-    "baga", "pune", "cauta", "canta", "play", "hai",
-    "sigur", "categoric", "normal", "clar", "bine", "please",
-    "search", "ahead", "bag-o", "bago", "bagao", "pune-o",
-    "puneo", "pun-o", "cauta-o", "cautao", "fa-o", "fao",
-    "ia-o", "ia", "merge", "exact", "corect",
-    # Phonetic STT misrecognitions of short "da" / "yes" from Romanian speakers
-    "the", "that", "duh", "dar", "de", "dada", "done", "does", "dust", "go"
+    "please", "play", "play it", "go ahead", "go",
+    "ahead", "correct", "exact", "absolutely", "definitely"
 }
 AFFIRMATIVE_PHRASES = (
-    "baga-o", "baga o", "pune-o", "pune o", "cauta-o", "cauta o",
-    "da te rog", "te rog", "da frate", "da man", "of course", "play it",
-    "go ahead", "da da", "fa-o", "fa o", "da baga", "da pune", "da cauta", "da bag-o", "da pune-o", "da caut-o",
-    "da ma", "da ba", "da bro", "da normal", "da-i drumul", "dai drumul", "baga pe youtube", "pune pe youtube",
-    "cauta pe youtube", "da pe youtube", "da o vreau", "da vreau", "yes please", "yes play"
+    "yes please", "yes play", "play it", "go ahead", "of course",
+    "sure thing", "sounds good", "do it"
 )
 NEGATIVE_WORDS = {
-    "nu", "nop", "nope", "nah", "no", "cancel", "anuleaza", "stop",
-    "lasa", "niciun", "niciuna", "dont", "not", "nevermind", "pas",
-    "las-o", "laso", "opreste", "nimic", "nici",
-    # Phonetic STT misrecognitions of short "nu" / "no"
-    "new", "know", "now", "nuu"
+    "no", "nop", "nope", "nah", "cancel", "stop",
+    "nevermind", "dont", "not", "nothing", "never"
 }
 NEGATIVE_PHRASES = (
-    "nu mai", "nu cauta", "las-o", "las o", "nu vreau", "niciun caz", "nici gand",
-    "don't", "nu da", "nu baga", "las-o balta", "nu te rog", "nu frate", "nu ma", "nu ba",
-    "nu pune", "nu mersi", "mersi nu", "lasa asa"
+    "no thanks", "no thank you", "don't play", "never mind",
+    "cancel search", "stop searching", "do not"
 )
 
 
@@ -596,7 +579,7 @@ async def _recognize_speech_groq(mono_16k: bytes, api_key: str, prompt: str = No
     try:
         import aiohttp
     except ImportError:
-        return None, "ro-RO"
+        return None, "en-US"
 
     wav_bytes = _pcm16_to_wav_bytes(mono_16k, sample_rate=16000, channels=1)
     url = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -604,13 +587,13 @@ async def _recognize_speech_groq(mono_16k: bytes, api_key: str, prompt: str = No
         "Authorization": f"Bearer {api_key}"
     }
 
-    # Prime vocabulary with artists, tracks, and common commands
+    # Prime vocabulary with artists, tracks, and common English commands
     default_prompt = (
         "Garmin, Juice WRLD, Yeat, Money So Big, Quavo, Playboi Carti, Travis Scott, Ken Carson, "
         "Lil Uzi Vert, Drake, Future, Metro Boomin, Trippie Redd, unreleased, robbery, "
-        "burn, bandit, lucid dreams, lean wit me, skip, da skip, dai skip, pause, "
-        "resume, shuffle, favorite, da, nu, Flawless, Out The Way, Fein, Magnolia, "
-        "baga yeat money so big, pune yeat, canta yeat."
+        "burn, bandit, lucid dreams, lean wit me, skip, next, pause, resume, shuffle, "
+        "favorite, remove from favorites, save this song, what song is this, volume, "
+        "Flawless, Out The Way, Fein, Magnolia, play Yeat, play Carti."
     )
     if prompt:
         default_prompt = f"{prompt}, {default_prompt}"
@@ -629,27 +612,19 @@ async def _recognize_speech_groq(mono_16k: bytes, api_key: str, prompt: str = No
                 if resp.status == 200:
                     result = await resp.json()
                     text = (result.get("text") or "").strip()
-                    lang_raw = (result.get("language") or "").lower().strip()
-                    if "ro" in lang_raw or "rum" in lang_raw:
-                        lang = "ro-RO"
-                    elif "en" in lang_raw:
-                        lang = "en-US"
-                    else:
-                        lang = "ro-RO"
-                    return text, lang
+                    return text, "en-US"
                 else:
                     err_text = await resp.text()
                     print(f"[JuiceVault Voice Groq] API error {resp.status}: {err_text[:160]}")
-                    return None, "ro-RO"
+                    return None, "en-US"
     except Exception as exc:
         print(f"[JuiceVault Voice Groq] Network exception: {exc}")
-        return None, "ro-RO"
+        return None, "en-US"
 
 
 def _match_wake_word(text: str, custom_words: set = None) -> tuple:
     """Permissive wake word detector returning (matched: bool, cmd_part: str, wake_word: str).
-    Matches standard 'Garmin', Romanian salutations ('bă Garmin', 'ok Garmin', 'băi Garmin'),
-    misrecognized English STT phrases ('hey god i'm in', 'egger man', 'a garden', 'carmen'),
+    Matches standard 'Garmin', misrecognized English STT phrases ('hey god i'm in', 'egger man', 'a garden', 'carmen'),
     learned custom words, and Levenshtein edit distance <= 2."""
     clean = _normalize_speech(text)
     if not clean:
@@ -657,7 +632,7 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
 
     def _clean_wake_cmd(c_str: str) -> str:
         res = c_str.strip().strip(",.:;!?- ")
-        return re.sub(r'^(?:hey|hei|ok|okay|hi|hello|yo|ba|bai|alo|bre|ma|fa)\s+', '', res, flags=re.I).strip().strip(",.:;!?- ")
+        return re.sub(r'^(?:hey|ok|okay|hi|hello|yo)\s+', '', res, flags=re.I).strip().strip(",.:;!?- ")
 
     # 1. Multi-word phonetic misrecognitions
     m = _MULTI_WORD_WAKE_REGEX.search(clean)
@@ -668,7 +643,7 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
         cmd = _clean_wake_cmd(f"{before} {after}")
         return True, cmd, wake
 
-    # 2. Single-word names with optional multi-prefix salutations ('bă Garmin', 'ok Garmin', etc.)
+    # 2. Single-word names with optional salutations ('hey Garmin', 'ok Garmin', etc.)
     m = _SINGLE_WORD_WAKE_REGEX.search(clean)
     if m:
         wake = m.group(0).strip()
@@ -693,7 +668,7 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
     # 4. Levenshtein fuzzy distance matching on leading words (distance <= 2 to 'garmin')
     tokens = clean.split()
     if tokens:
-        prefix_tokens = {"hey", "hei", "ok", "okay", "hi", "hello", "oak", "oh", "alright", "ba", "bai", "alo", "yo", "a", "the", "e", "de", "bre", "ma", "fa", "auzi", "zi"}
+        prefix_tokens = {"hey", "ok", "okay", "hi", "hello", "oak", "oh", "alright", "yo", "a", "the"}
         cand_idx = 0
         while cand_idx < len(tokens) and tokens[cand_idx] in prefix_tokens:
             cand_idx += 1
@@ -922,29 +897,9 @@ def _get_ffmpeg_exe() -> str:
     return res
 
 
-def _detect_user_language(text: str, default_lang: str = "ro-RO") -> str:
-    """Return 'ro' or 'en' based on vocabulary. Defaults to 'ro' unless clear English command keywords are used."""
-    clean = _normalize_speech(text)
-    words = set(re.findall(r'[a-z0-9]+', clean))
-    ro_markers = {
-        "ba", "bai", "hei", "cauta", "baga", "pune", "canta", "da", "nu", "piesa",
-        "melodia", "melodie", "urmatoarea", "sari", "schimba", "dupa", "de", "pe",
-        "te", "rog", "sigur", "bine", "hai", "inapoi", "vreau", "ascult", "da-i",
-        "dai", "opreste", "taci", "liniste", "amesteca", "lasa"
-    }
-    en_markers = {
-        "search", "skip", "next", "pause", "resume", "forward", "back", "rewind",
-        "shuffle", "what", "please", "leave", "disconnect", "cancel"
-    }
-
-    ro_score = len(words & ro_markers)
-    en_score = len(words & en_markers)
-
-    if ro_score > en_score:
-        return "ro"
-    if en_score > ro_score and en_score >= 1:
-        return "en"
-    return "ro"
+def _detect_user_language(text: str, default_lang: str = "en-US") -> str:
+    """Return language code for user, strictly English."""
+    return "en"
 
 
 
@@ -1141,10 +1096,12 @@ def _decode_mp3_to_pcm(mp3_data: bytes) -> bytes:
     try:
         import subprocess
         exe = _get_ffmpeg_exe()
-        cmd = [exe, "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "-ac", "2", "-loglevel", "quiet", "pipe:1"]
-        proc = subprocess.run(cmd, input=mp3_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=4)
+        proc = subprocess.run(cmd, input=mp3_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=6)
         if proc.returncode == 0 and proc.stdout:
-            return proc.stdout
+            # Append 350ms of trailing PCM silence (48kHz * 2 ch * 2 bytes * 0.35s = 67200 bytes)
+            # to guarantee trailing words and syllables are never cut off by Discord voice queue or volume un-ducking
+            trailing_silence = b'\x00' * 67200
+            return proc.stdout + trailing_silence
     except Exception as exc:
         log.debug(f"[JuiceVault Voice] PCM decode error: {exc}")
     return b''
@@ -1185,8 +1142,8 @@ async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
         "natural": "en-US-AvaMultilingualNeural"
     }
     voice = voice_map.get(persona, "en-US-JennyNeural")
-    pitch = "+24Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
-    rate = "+6%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
+    pitch = "+38Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
+    rate = "+8%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
 
     # For anime/VTuber persona, phonetically pronounce cute chat slang for natural voice delivery:
     spoken_text = clean_tts
@@ -1194,6 +1151,12 @@ async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
         spoken_text = re.sub(r'\b[uU][wW][uU]\b', 'oo-woo', spoken_text)
         spoken_text = re.sub(r'\b[oO][wW][oO]\b', 'oh-woh', spoken_text)
         spoken_text = re.sub(r'\b[sS]enpai\b', 'sen-pai', spoken_text)
+        spoken_text = re.sub(r'\b[kK]awaii\b', 'ka-wai-ee', spoken_text)
+        spoken_text = re.sub(r'\b[nN]ya\b', 'nyah', spoken_text)
+        spoken_text = re.sub(r'\b[bB]aka\b', 'ba-ka', spoken_text)
+        spoken_text = re.sub(r'\b[yY]atta\b', 'yat-ta', spoken_text)
+        spoken_text = re.sub(r'\b[tT]ee-?hee\b', 'tee hee', spoken_text)
+        spoken_text = re.sub(r'\b[aA]ra [aA]ra\b', 'ah-rah ah-rah', spoken_text)
 
     try:
         comm = edge_tts.Communicate(spoken_text, voice, pitch=pitch, rate=rate)
@@ -1216,7 +1179,7 @@ async def _fetch_tts_bytes(clean_tts: str, persona: str = "anime") -> bytes:
     data = None
     if HAVE_EDGE_TTS:
         try:
-            data = await asyncio.wait_for(_synthesize_edge_tts(clean_tts, persona=persona), timeout=3.5)
+            data = await asyncio.wait_for(_synthesize_edge_tts(clean_tts, persona=persona), timeout=8.0)
         except Exception as exc:
             log.debug(f"[JuiceVault Voice] Edge-TTS fetch timeout or error: {exc}")
             data = None
@@ -2113,7 +2076,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 1: PREVIOUS / BACK
-            if re.search(r'\b(?:previous|prev|back|inapoi|dinainte|anterioara|piesa dinainte|melodia dinainte|piesa anterioara|last\s+song|previous\s+song|go\s+back|play\s+previous)\b', clean_cmd, re.I):
+            if re.search(r'\b(?:previous|prev|back|last\s+song|previous\s+song|go\s+back|play\s+previous|play\s+last\s+song)\b', clean_cmd, re.I):
                 hist = self.cog.history.get(self.guild_id, [])
                 if hist:
                     prev_t = hist.pop()
@@ -2133,14 +2096,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
             # PRECEDENCE 2: SKIP / NEXT
             skip_pattern = (
-                r'\b(?:skip|next|urmatoarea|sari|treci\s+peste|treci\s+la\s+urmatoarea|schimba|schimb-o|'
-                r'alta\s+piesa|alta\s+melodie|da-i\s+skip|dai\s+skip|da\s+skip|dă-i\s+skip|dă\s+skip|dăi\s+skip|'
-                r'skip\s+la\s+piesa|skip\s+piesa|skip\s+this|skip\s+song|next\s+song|next\s+track|'
+                r'\b(?:skip|next|skip\s+this|skip\s+song|next\s+song|next\s+track|skip\s+this\s+song|skip\s+this\s+track|'
                 r'the\s+escape|the\s+scape|they\s+skip|the\s+skip|day\s+skip|they\s+scape|they\s+skep|'
                 r'the\s+skep|escape|scape|the\s+scope|they\s+scope|they\s+keep|the\s+keep)\b'
             )
-            if re.search(skip_pattern, clean_cmd, re.I) or any(w in clean_cmd for w in ("da-i skip", "dai skip", "da skip", "skip la piesa", "skip piesa", "urmatoarea piesa", "schimba piesa", "the escape", "escape", "they skip", "the scape")):
-                if any(w in clean_cmd for w in ("10", "ten", "zece")):
+            if re.search(skip_pattern, clean_cmd, re.I) or any(w in clean_cmd for w in ("the escape", "escape", "they skip", "the scape")):
+                if any(w in clean_cmd for w in ("10", "ten")):
                     await play_chime_and_proceed(guild)
                     speech = get_persona_response("skip_10", persona)
                     await speak_in_voice(guild, speech, persona=persona)
@@ -2167,7 +2128,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return
 
             # PRECEDENCE 4: SHUFFLE / RANDOM
-            if re.search(r'\b(?:shuffle|amesteca|amesteca\s+piesele|amesteca\s+coada|random|mix|la intamplare|random song|piesa la intamplare|shuffle\s+queue|shuffle\s+playlist)\b', clean_cmd, re.I):
+            if re.search(r'\b(?:shuffle|random|mix|random\s+song|shuffle\s+queue|shuffle\s+playlist)\b', clean_cmd, re.I):
                 q = self.cog.queues.get(self.guild_id, [])
                 if not q:
                     try:
@@ -2218,7 +2179,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 5: LOOP / REPEAT
-            if re.search(r'\b(?:loop\s+song|repeat\s+song|loop\s+track|repeat\s+track|loop|repeat)\b', clean_cmd, re.I) and not any(w in clean_cmd for w in ("play", "search", "cauta", "baga")):
+            if re.search(r'\b(?:loop\s+song|repeat\s+song|loop\s+track|repeat\s+track|loop|repeat)\b', clean_cmd, re.I) and not any(w in clean_cmd for w in ("play", "search")):
                 ui = self.bot.get_cog("JuiceVaultUI")
                 panel = ui.panel if ui and hasattr(ui, "panel") else None
                 cur = self.cog.current.get(self.guild_id)
@@ -2251,25 +2212,25 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
             # PRECEDENCE 6: VOLUME CONTROLS
             vol_match = (
-                re.search(r'\b(?:volume|vol|volum|set\s+(?:the\s+|it\s+)?volume|set\s+vol)\s*(?:to\s*|la\s*)?(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
-                or re.search(r'\b(?:set\s+(?:the\s+|it\s+)?(?:sound|audio)?\s*to\s+)?(\d{1,3})\s*(?:%|percent)?\s*(?:volume|vol|volum)\b', clean_cmd, re.I)
+                re.search(r'\b(?:volume|vol|set\s+(?:the\s+|it\s+)?volume|set\s+vol)\s*(?:to\s*)?(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
+                or re.search(r'\b(?:set\s+(?:the\s+|it\s+)?(?:sound|audio)?\s*to\s+)?(\d{1,3})\s*(?:%|percent)?\s*(?:volume|vol)\b', clean_cmd, re.I)
                 or re.search(r'\bset\s+(?:the\s+|it\s+)?(?:volume|sound|audio)?\s*to\s+(\d{1,3})\s*(?:%|percent)?\b', clean_cmd, re.I)
-                or re.search(r'\b(?:volume|vol|volum)\s+(\d{1,3})\b', clean_cmd, re.I)
+                or re.search(r'\b(?:volume|vol)\s+(\d{1,3})\b', clean_cmd, re.I)
             )
             is_relative_vol = any(w in clean_cmd for w in (
-                "volume up", "louder", "turn it up", "mai tare", "da mai tare",
-                "volume down", "quieter", "lower volume", "turn it down", "mai incet", "da mai incet",
+                "volume up", "louder", "turn it up",
+                "volume down", "quieter", "lower volume", "turn it down",
                 "mute", "unmute"
             ))
-            if (vol_match or is_relative_vol) and not clean_cmd.startswith(("play ", "baga ", "pune ", "canta ")):
+            if (vol_match or is_relative_vol) and not clean_cmd.startswith(("play ", "search ")):
                 cur_vol_float = self.cog.get_guild_volume(self.guild_id) if hasattr(self.cog, "get_guild_volume") else 1.0
                 cur_vol = int(cur_vol_float * 100)
 
                 if vol_match:
                     target_pct = max(0, min(150, int(vol_match.group(1))))
-                elif any(w in clean_cmd for w in ("volume up", "louder", "turn it up", "mai tare", "da mai tare")):
+                elif any(w in clean_cmd for w in ("volume up", "louder", "turn it up")):
                     target_pct = min(150, cur_vol + 15)
-                elif any(w in clean_cmd for w in ("volume down", "quieter", "lower volume", "turn it down", "mai incet", "da mai incet")):
+                elif any(w in clean_cmd for w in ("volume down", "quieter", "lower volume", "turn it down")):
                     target_pct = max(0, cur_vol - 15)
                 elif "unmute" in clean_cmd:
                     target_pct = 100
@@ -2301,14 +2262,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 r'name\s+of\s+(?:this|the)\s+(?:song|track)|'
                 r'what(?:\'?s|\s+is)\s+playing|what\s+song\s+(?:is\s+)?playing|what\s+track\s+(?:is\s+)?playing|'
                 r'what\s+are\s+we\s+listening\s+to|what(?:\'?s|\s+is)\s+this\s+music|'
-                r'current\s+song|current\s+track|song\s+info|track\s+info|now\s+playing|'
-                r'ce\s+piesa\s+(?:e\s+asta|se\s+aude|canta)|ce\s+melodie\s+(?:e\s+asta|se\s+aude|canta)|cum\s+se\s+numeste\s+piesa'
+                r'current\s+song|current\s+track|song\s+info|track\s+info|now\s+playing'
                 r')\b'
             )
             is_now_playing = bool(re.search(now_playing_pattern, clean_cmd, re.I)) or (
-                any(w in clean_cmd for w in ("what", "cum", "ce"))
-                and any(s in clean_cmd for s in ("song", "track", "piesa", "melodia", "melodie", "name", "playing"))
-                and not any(p in clean_cmd for p in ("play", "search", "cauta", "baga", "pune", "skip"))
+                "what" in clean_cmd
+                and any(s in clean_cmd for s in ("song", "track", "name", "playing", "music"))
+                and not any(p in clean_cmd for p in ("play", "search", "skip"))
             )
             if is_now_playing:
                 cur = self.cog.current.get(self.guild_id)
@@ -2329,7 +2289,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 8: PAUSE / STOP
-            if re.search(r'\b(?:pause|pauza|stop|opreste|opreste-te|taci|taci din gura|liniste|shut up|hold|freeze|quiet)\b', clean_cmd, re.I):
+            if re.search(r'\b(?:pause|stop|shut\s+up|hold|freeze|quiet)\b', clean_cmd, re.I):
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_playing():
                     await play_chime_and_proceed(guild)
@@ -2346,7 +2306,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 9: RESUME / PLAY
-            if clean_cmd.strip() in {"play", "resume", "continua", "porneste", "da drumul", "baga", "unpause"} or clean_cmd.strip() == "play":
+            if clean_cmd.strip() in {"play", "resume", "unpause"}:
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_paused():
                     await play_chime_and_proceed(guild)
@@ -2405,13 +2365,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return
 
             # PRECEDENCE 10: SEEK / FORWARD / REWIND 10s
-            if any(w in clean_cmd for w in ("inainte 10", "forward 10", "skip 10s", "10 secunde inainte", "fast forward")):
+            if any(w in clean_cmd for w in ("forward 10", "skip 10s", "fast forward", "forward 10 seconds", "forward ten")):
                 if hasattr(self.cog, "_request_seek"):
                     await play_chime_and_proceed(guild, self.cog._request_seek(self.guild_id, delta=10.0))
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Forward +10s ⏩")
                     return
-            elif any(w in clean_cmd for w in ("inapoi 10", "back 10", "rewind 10", "10 secunde inapoi", "rewind")):
+            elif any(w in clean_cmd for w in ("back 10", "rewind 10", "rewind", "back 10 seconds", "back ten", "rewind 10 seconds")):
                 if hasattr(self.cog, "_request_seek"):
                     await play_chime_and_proceed(guild, self.cog._request_seek(self.guild_id, delta=-10.0))
                     self._unlock_session()
@@ -2422,18 +2382,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             is_play_fav = bool(re.search(
                 r'\b(?:play\s+(?:(?:(?:one|any|a|some)\s+of\s+)|a\s+|my\s+)*favorite\s+songs?|'
                 r'play\s+(?:(?:one|any|a|some)\s+of\s+)?(?:my\s+)?favorites|'
-                r'play\s+(?:a\s+)?(?:song|track|something)\s+from\s+(?:my\s+)?favorites?|'
-                r'baga\s+o\s+piesa\s+favorita|baga\s+o\s+piesa\s+din\s+favorite|baga\s+din\s+favorite|'
-                r'baga\s+favoritele\s+mele|pune\s+o\s+piesa\s+favorita|pune\s+o\s+piesa\s+din\s+favorite|'
-                r'pune\s+favoritele\s+mele|baga\s+o\s+melodie\s+preferata|pune\s+o\s+melodie\s+preferata|'
-                r'baga\s+melodiile\s+mele\s+preferate|pune\s+preferatele\s+mele|da\s+drumul\s+la\s+favorite|'
-                r'baga\s+piesele\s+mele\s+favorite|baga\s+o\s+piesa\s+de\s+la\s+favorite|pune\s+o\s+piesa\s+din\s+preferatele\s+mele)\b',
+                r'play\s+(?:a\s+)?(?:song|track|something)\s+from\s+(?:my\s+)?favorites?)\b',
                 clean_cmd,
                 re.I
             )) or (
-                any(p in clean_cmd for p in ("play", "baga", "pune", "reda", "da drumul", "canta"))
-                and any(f in clean_cmd for f in ("favorite", "favorita", "preferata", "preferate", "favorit", "favorites"))
-                and not any(s in clean_cmd for s in ("salveaza", "adauga", "save", "add", "baga la", "pune la"))
+                "play" in clean_cmd
+                and any(f in clean_cmd for f in ("favorite", "favorites", "fav"))
+                and not any(s in clean_cmd for s in ("save", "add", "remove", "delete"))
             )
             if is_play_fav:
                 uid_str = str(user_id)
@@ -2464,14 +2419,14 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             # PRECEDENCE 11B: REMOVE CURRENT SONG FROM FAVORITES
             remove_fav_pattern = (
                 r'\b(?:'
-                r'(?:remove|delete|sterge|scoate|elimina|take\s+off|drop|unfavorite|un-favorite|disown)\s+(?:this\s+)?(?:song|track|piesa|melodia)?\s*(?:from|off|out\s+of|de\s+la|din)?\s*(?:my\s+)?(?:favorites?|preferate)|'
-                r'(?:remove|delete|sterge|scoate|elimina|unfavorite|un-favorite)\s+(?:this|this\s+song|this\s+track|piesa\s+asta|melodia\s+asta)|'
+                r'(?:remove|delete|take\s+off|drop|unfavorite|un-favorite|disown)\s+(?:this\s+)?(?:song|track)?\s*(?:from|off|out\s+of)?\s*(?:my\s+)?favorites?|'
+                r'(?:remove|delete|unfavorite|un-favorite)\s+(?:this|this\s+song|this\s+track)|'
                 r'disowned?\s+(?:to|from)\s+(?:my\s+)?favorites?'
                 r')\b'
             )
             is_remove_fav = bool(re.search(remove_fav_pattern, clean_cmd, re.I)) or (
-                any(r in clean_cmd for r in ("remove", "delete", "sterge", "scoate", "elimina", "unfavorite", "disown", "disowned"))
-                and any(f in clean_cmd for f in ("favorite", "favorites", "fav", "preferate"))
+                any(r in clean_cmd for r in ("remove", "delete", "unfavorite", "disown", "disowned"))
+                and any(f in clean_cmd for f in ("favorite", "favorites", "fav"))
             )
             if is_remove_fav:
                 cur = self.cog.current.get(self.guild_id)
@@ -2530,18 +2485,14 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 r'favorite\s+this\s+song|favorite\s+this|favorite\s+song|favorite\s+track|'
                 r'add\s+to\s+favorites|add\s+to\s+favorite|add\s+this\s+to\s+(?:my\s+)?favorites?|'
                 r'add\s+this\s+song\s+to\s+(?:my\s+)?favorites?|add\s+song\s+to\s+(?:my\s+)?favorites?|'
-                r'love\s+this\s+song|like\s+this\s+song|'
-                r'salveaza\s+piesa\s+asta|salveaza\s+piesa|salveaza\s+melodia|salveaz-o|'
-                r'adauga\s+la\s+favorite|pune\s+la\s+favorite|baga\s+la\s+favorite|'
-                r'adauga\s+la\s+preferate|pune\s+la\s+preferate|baga\s+la\s+preferate|favoriteaza|'
-                r'imi\s+place\s+piesa|imi\s+place\s+melodia'
+                r'love\s+this\s+song|like\s+this\s+song'
                 r')\b',
                 clean_cmd,
                 re.I
             )) or (
-                any(f in clean_cmd for f in ("favorite", "fav", "favorit", "like", "salveaza", "save"))
-                and any(s in clean_cmd for s in ("song", "track", "this", "piesa", "melodia", "asta", "o", "add"))
-                and not any(r in clean_cmd for r in ("remove", "delete", "sterge", "scoate", "elimina", "unfavorite", "disown"))
+                any(f in clean_cmd for f in ("favorite", "fav", "like", "save"))
+                and any(s in clean_cmd for s in ("song", "track", "this", "add"))
+                and not any(r in clean_cmd for r in ("remove", "delete", "unfavorite", "disown"))
             )
             if is_save_fav:
                 cur = self.cog.current.get(self.guild_id)
@@ -2608,7 +2559,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 12: LEAVE / DISCONNECT
-            if re.search(r'\b(?:leave|pleaca|iesi|deconecteaza|deconecteaza-te|disconnect|exit|go away|bye|goodbye)\b', clean_cmd, re.I):
+            if re.search(r'\b(?:leave|disconnect|exit|go\s+away|bye|goodbye)\b', clean_cmd, re.I):
                 await play_chime_and_proceed(guild)
                 bye_speech = get_persona_response("bye", persona)
                 await speak_in_voice(guild, bye_speech, persona=persona)
@@ -2625,8 +2576,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
             # PRECEDENCE 13: HELP / COMMANDS
             is_help = (
-                re.search(r'\b(?:help|commands|command|what\s+can\s+you\s+do|what\s+can\s+i\s+say|help\s+me|can\s+you\s+help|show\s+commands|list\s+commands|ajutor|comenzi|ce\s+poti\s+sa\s+faci|ce\s+stii\s+sa\s+faci)\b', clean_cmd, re.I)
-                and not any(w in clean_cmd for w in ("play", "baga", "pune", "canta", "listen", "search", "cauta", "save", "volume", "skip"))
+                re.search(r'\b(?:help|commands|command|what\s+can\s+you\s+do|what\s+can\s+i\s+say|help\s+me|can\s+you\s+help|show\s+commands|list\s+commands)\b', clean_cmd, re.I)
+                and not any(w in clean_cmd for w in ("play", "search", "save", "volume", "skip"))
             )
             if is_help:
                 help_speech = get_persona_response("help", persona)
@@ -2678,15 +2629,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 15: GENERIC SONG SEARCH & PLAY
-            # Requires explicit play intent verbs (play, baga, pune, canta, listen, search, etc.)
+            # Requires explicit play intent verbs (play, search, find, listen, etc.)
             # OR an explicit known artist name (Yeat, Carti, Travis Scott, Drake, etc.)
             play_match = re.search(
                 r'\b(?:can\s+you\s+play|could\s+you\s+play|please\s+play|i\s+want\s+to\s+hear|let\'?s\s+hear|let\'?s\s+listen\s+to|'
-                r'play|pune|baga|baga-mi|pune-mi|baga\s+si\s+mie|pune\s+si\s+mie|'
-                r'canta|asculta|cauta|gaseste|search|search\s+for|reda|find|'
-                r'da-i\s+play\s+la|dai\s+play\s+la|da\s+play\s+la|da-i\s+drumul\s+la|dai\s+drumul\s+la|da\s+drumul\s+la|'
-                r'put\s+on|listen\s+to|listen|stream)\b\s*'
-                r'(?:piesa|melodia|melodie|track|song)?\s*(?:cu|de\s+la|by)?\s*(.+)$',
+                r'play|search|search\s+for|find|put\s+on|listen\s+to|listen|stream)\b\s*'
+                r'(?:track|song)?\s*(?:by|from)?\s*(.+)$',
                 clean_cmd,
                 re.IGNORECASE
             )
@@ -2827,7 +2775,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return future.result(timeout=6.0)
                 return loop.run_until_complete(self._recognize_speech_parallel(pcm_bytes))
             except Exception:
-                return None, "ro-RO"
+                return None, "en-US"
 
         async def _notify(self, guild, message):
             """Send feedback message strictly to the active voice channel chat where the bot is connected."""
