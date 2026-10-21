@@ -1096,6 +1096,7 @@ def _decode_mp3_to_pcm(mp3_data: bytes) -> bytes:
     try:
         import subprocess
         exe = _get_ffmpeg_exe()
+        cmd = [exe, "-i", "pipe:0", "-f", "s16le", "-ar", "48000", "-ac", "2", "-loglevel", "quiet", "pipe:1"]
         proc = subprocess.run(cmd, input=mp3_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=6)
         if proc.returncode == 0 and proc.stdout:
             # Append 350ms of trailing PCM silence (48kHz * 2 ch * 2 bytes * 0.35s = 67200 bytes)
@@ -1129,21 +1130,21 @@ def get_persona_response(action: str, persona: str = "anime", **kwargs) -> str:
 
 async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
     """Generate crystal-clear Azure Neural TTS using edge-tts.
-    - 'anime': Bubbly kawaii anime VTuber streamer girl voice (Microsoft Jenny, pitch +24Hz, rate +6%)
+    - 'anime': Bubbly kawaii anime VTuber streamer girl voice (Microsoft Ava, pitch +32Hz, rate +7% - Bree Dragon HD profile)
     - 'mommy': Sultry dommy mommy voice (Microsoft Sonia, pitch -2Hz, rate -4%)
     - 'rude': Sarcastic tsundere voice (Microsoft Aria, pitch +2Hz, rate +4%)
-    - 'natural': Clean natural assistant voice (Microsoft Ava Multilingual)"""
+    - 'natural': Clean natural assistant voice (Microsoft Jenny)"""
     if not HAVE_EDGE_TTS:
         return b''
     voice_map = {
-        "anime": "en-US-JennyNeural",
+        "anime": "en-US-AvaNeural",
         "mommy": "en-GB-SoniaNeural",
         "rude": "en-US-AriaNeural",
-        "natural": "en-US-AvaMultilingualNeural"
+        "natural": "en-US-JennyNeural"
     }
-    voice = voice_map.get(persona, "en-US-JennyNeural")
-    pitch = "+38Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
-    rate = "+8%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
+    voice = voice_map.get(persona, "en-US-AvaNeural")
+    pitch = "+32Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
+    rate = "+7%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
 
     # For anime/VTuber persona, phonetically pronounce cute chat slang for natural voice delivery:
     spoken_text = clean_tts
@@ -1227,17 +1228,18 @@ async def _fetch_tts_bytes(clean_tts: str, persona: str = "anime") -> bytes:
 
 
 # Build pre-warming list dynamically from top phrases of priority actions for instant startup
-_PRIORITY_ACTIONS = ("greeting", "persona_activated", "pause", "resume", "skip", "volume_muted")
+_PRIORITY_ACTIONS = ("greeting", "persona_activated", "pause", "resume", "skip", "skip_10", "volume_muted", "restart", "previous", "shuffle", "bye", "help")
 _COMMON_SYSTEM_PHRASES = []
 
 for _act in _PRIORITY_ACTIONS:
     for _p_name, _p_actions in _PERSONA_RESPONSES.items():
         _count = 0
+        _limit = 25 if _p_name == "anime" else 4
         for _ph in _p_actions.get(_act, []):
             if "{" not in _ph:
                 _COMMON_SYSTEM_PHRASES.append((_ph, _p_name))
                 _count += 1
-                if _count >= 3:
+                if _count >= _limit:
                     break
 
 
@@ -1280,17 +1282,11 @@ async def play_beep_sound(guild, sound_type: str = "understood", action_coro=Non
 
     try:
         mixer = getattr(voice, "_jv_mixer", None)
-        if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
-            mixer = voice.source
-            voice._jv_mixer = mixer
-        elif mixer is None and (voice.is_playing() or voice.is_paused()) and hasattr(voice, "source") and voice.source:
-            try:
-                mixer = DuckingAudioSource(voice.source)
-                voice.source = mixer
-                if hasattr(voice, "_player") and voice._player:
-                    voice._player.source = mixer
+        if not isinstance(mixer, DuckingAudioSource):
+            if hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
+                mixer = voice.source
                 voice._jv_mixer = mixer
-            except Exception:
+            else:
                 mixer = None
 
         if voice.is_paused() and mixer is not None:
@@ -1309,7 +1305,7 @@ async def play_beep_sound(guild, sound_type: str = "understood", action_coro=Non
                 pass
         elif voice.is_playing() and mixer is not None:
             mixer.set_overlay(MemoryPCMAudioSource(pcm_data))
-        elif not voice.is_playing() and not voice.is_paused():
+        elif mixer is None and not voice.is_playing() and not voice.is_paused():
             try:
                 voice.play(MemoryPCMAudioSource(pcm_data))
             except Exception:
@@ -1349,17 +1345,11 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
     cache_key = (clean_tts, persona)
 
     mixer = getattr(voice, "_jv_mixer", None)
-    if mixer is None and hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
-        mixer = voice.source
-        voice._jv_mixer = mixer
-    elif mixer is None and (voice.is_playing() or voice.is_paused()) and hasattr(voice, "source") and voice.source:
-        try:
-            mixer = DuckingAudioSource(voice.source)
-            voice.source = mixer
-            if hasattr(voice, "_player") and voice._player:
-                voice._player.source = mixer
+    if not isinstance(mixer, DuckingAudioSource):
+        if hasattr(voice, "source") and isinstance(voice.source, DuckingAudioSource):
+            mixer = voice.source
             voice._jv_mixer = mixer
-        except Exception:
+        else:
             mixer = None
 
     # Helper function to play PCM bytes across playing, paused, and idle voice states
@@ -1392,7 +1382,19 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
                 # Allow trailing Opus frames to clear before un-ducking music volume
                 await asyncio.sleep(0.28)
                 return True
-            elif not voice.is_playing() and not voice.is_paused():
+            else:
+                # Music is not actively playing with mixer
+                if voice.is_playing():
+                    wait_start = time.monotonic()
+                    while voice.is_playing() and (time.monotonic() - wait_start < 0.35):
+                        await asyncio.sleep(0.02)
+                    if voice.is_playing():
+                        try:
+                            voice.stop()
+                        except Exception:
+                            pass
+                        await asyncio.sleep(0.04)
+
                 print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking in '{guild.name}': \"{clean_tts}\" ({persona})")
                 voice.play(MemoryPCMAudioSource(pcm_bytes))
                 while voice.is_playing() and (time.monotonic() - start_t < timeout):
@@ -1450,7 +1452,17 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
             while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
                 await asyncio.sleep(0.03)
             await asyncio.sleep(0.28)
-        elif not voice.is_playing() and not voice.is_paused():
+        else:
+            if voice.is_playing():
+                wait_start = time.monotonic()
+                while voice.is_playing() and (time.monotonic() - wait_start < 0.35):
+                    await asyncio.sleep(0.02)
+                if voice.is_playing():
+                    try:
+                        voice.stop()
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.04)
             print(f"[JuiceVault Voice TTS] 🔊 Speaking in '{guild.name}': \"{clean_tts}\" ({persona})")
             voice.play(discord.FFmpegPCMAudio(path, executable=exe))
             while voice.is_playing() and (time.monotonic() - start_t < timeout):
@@ -1797,6 +1809,56 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             finally:
                 self._unlock_session()
 
+        async def _execute_skip(self, guild, count: int = 1) -> bool:
+            """Robustly skip the current track and guarantee playback advances even if the player was idle or reconnected."""
+            gid = self.guild_id
+            voice = getattr(guild, "voice_client", None)
+            count = max(1, min(int(count), 100))
+
+            # Attempt standard skip if player task is running and active
+            skipped = False
+            try:
+                skipped = await self.cog._request_skip(gid, count)
+            except Exception as exc:
+                print(f"[JuiceVault Voice Skip] _request_skip exception: {exc}")
+
+            if skipped:
+                return True
+
+            # Fallback path: player task was idle, finished previous track, or reconnected
+            print(f"[JuiceVault Voice Skip] Fallback skip invoked for guild {gid} (count={count}). Advancing queue manually...")
+            mq = self.cog.manual_queues.get(gid, [])
+            q = self.cog.queues.get(gid, [])
+
+            remaining = count
+            while remaining > 0 and mq:
+                mq.pop(0)
+                remaining -= 1
+            while remaining > 0 and q:
+                q.pop(0)
+                remaining -= 1
+
+            self.cog.play_positions.pop(gid, None)
+            self.cog._cleanup_prefetch(gid)
+            self.cog._trigger_next_prefetch(gid)
+
+            # Ensure player task is running
+            if gid not in self.cog.tasks or self.cog.tasks[gid].done():
+                if voice and voice.channel:
+                    self.cog.stop_events[gid] = asyncio.Event()
+                    self.cog.skip_events[gid] = asyncio.Event()
+                    self.cog.seek_events[gid] = asyncio.Event()
+                    self.cog.skip_counts[gid] = 0
+                    self.cog.effects[gid] = "none"
+                    self.cog.tasks[gid] = asyncio.create_task(self.cog._player(guild, voice.channel))
+            else:
+                if gid in self.cog.skip_events:
+                    self.cog.skip_events[gid].set()
+                if voice and (voice.is_playing() or voice.is_paused()):
+                    voice.stop()
+
+            return True
+
         async def _search_and_play_youtube(self, guild, query: str, user_name: str, persona: str = None):
             """Search YouTube for query, speak confirmation, and begin immediate playback."""
             if not query:
@@ -1809,7 +1871,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if not persona:
                 persona = await get_guild_persona(self.cog, self.guild_id)
             wait_speech = get_persona_response("yt_search", persona, query=clean_q)
-            await play_beep_sound(guild, "understood")
 
             # Launch YouTube extraction concurrently in background while speaking confirmation!
             from .external_search_patch import _extract_search
@@ -1830,20 +1891,17 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                     if yt_track:
                         await add_learned_song_query(self.cog, self.guild_id, clean_q, yt_track)
-                        await play_beep_sound(guild, "understood")
                         await self._play_track_now(guild, yt_track)
                         title = yt_track.get("title") or clean_q
                         await self._notify(guild, f"🎥 **[Garmin]** Playing from YouTube: **{title}** 🎶")
                         return
 
                 fail_msg = get_persona_response("yt_not_found", persona, query=clean_q)
-                await play_beep_sound(guild, "error")
                 await speak_in_voice(guild, fail_msg, persona=persona)
                 await self._notify(guild, f"❌ **[Garmin]** {fail_msg}")
             except Exception as exc:
                 print(f"[Garmin YouTube] Error searching '{clean_q}': {exc}")
                 fail_msg = get_persona_response("yt_not_found", persona, query=clean_q)
-                await play_beep_sound(guild, "error")
                 await speak_in_voice(guild, fail_msg, persona=persona)
                 await self._notify(guild, f"❌ **[Garmin]** {fail_msg}")
             finally:
@@ -1938,7 +1996,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     self._unlock_session()
                     persona = await get_guild_persona(self.cog, self.guild_id)
                     cancel_speech = get_persona_response("search_cancelled", persona)
-                    await play_beep_sound(guild, "error")
                     await speak_in_voice(guild, cancel_speech, persona=persona)
                     await self._notify(guild, "🚫 **[Garmin]** Search cancelled.")
                     return
@@ -2080,14 +2137,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 hist = self.cog.history.get(self.guild_id, [])
                 if hist:
                     prev_t = hist.pop()
-                    await play_chime_and_proceed(guild)
                     speech = get_persona_response("previous", persona)
                     await speak_in_voice(guild, speech, persona=persona)
                     await self._play_track_now(guild, prev_t)
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Previous track! ⏮️")
                 else:
-                    await play_beep_sound(guild, "error")
                     no_prev_speech = get_persona_response("no_previous", persona)
                     await speak_in_voice(guild, no_prev_speech, persona=persona)
                     self._unlock_session()
@@ -2102,30 +2157,28 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             )
             if re.search(skip_pattern, clean_cmd, re.I) or any(w in clean_cmd for w in ("the escape", "escape", "they skip", "the scape")):
                 if any(w in clean_cmd for w in ("10", "ten")):
-                    await play_chime_and_proceed(guild)
                     speech = get_persona_response("skip_10", persona)
                     await speak_in_voice(guild, speech, persona=persona)
-                    await self.cog._request_skip(self.guild_id, 10)
+                    await self._execute_skip(guild, 10)
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped 10 tracks! ⏩")
                 else:
-                    await play_chime_and_proceed(guild)
                     speech = get_persona_response("skip", persona)
                     await speak_in_voice(guild, speech, persona=persona)
-                    await self.cog._request_skip(self.guild_id, 1)
+                    await self._execute_skip(guild, 1)
                     self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped track! ⏭️")
                 return
 
             # PRECEDENCE 3: RESTART / REPLAY
             if re.search(r'\b(?:restart|restart\s+song|replay|start\s+over|play\s+again|from\s+the\s+beginning|beginning)\b', clean_cmd, re.I):
+                speech = get_persona_response("restart", persona)
+                await speak_in_voice(guild, speech, persona=persona)
                 if hasattr(self.cog, "_request_seek"):
-                    await play_chime_and_proceed(guild, self.cog._request_seek(self.guild_id, target_position=0.0))
-                    self._unlock_session()
-                    speech = get_persona_response("restart", persona)
-                    await speak_in_voice(guild, speech, persona=persona)
-                    await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Restarting from beginning! ⏪")
-                    return
+                    await self.cog._request_seek(self.guild_id, target_position=0.0)
+                self._unlock_session()
+                await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Restarting from beginning! ⏪")
+                return
 
             # PRECEDENCE 4: SHUFFLE / RANDOM
             if re.search(r'\b(?:shuffle|random|mix|random\s+song|shuffle\s+queue|shuffle\s+playlist)\b', clean_cmd, re.I):
@@ -2151,10 +2204,9 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                     voice = guild.voice_client if guild else None
                     if voice and (voice.is_playing() or voice.is_paused()):
-                        await play_chime_and_proceed(guild)
                         speech = get_persona_response("shuffle", persona)
                         await speak_in_voice(guild, speech, persona=persona)
-                        await self.cog._request_skip(self.guild_id, 1)
+                        await self._execute_skip(guild, 1)
                     else:
                         if voice and voice.channel:
                             self.cog.stop_events[self.guild_id] = asyncio.Event()
@@ -2163,7 +2215,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                             self.cog.skip_counts[self.guild_id] = 0
                             self.cog.effects[self.guild_id] = "none"
                             self.cog.tasks[self.guild_id] = asyncio.create_task(self.cog._player(guild, voice.channel))
-                        await play_chime_and_proceed(guild)
                         speech = get_persona_response("queue_started", persona)
                         await speak_in_voice(guild, speech, persona=persona)
 
@@ -2202,7 +2253,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         self.cog.manual_queues[self.guild_id] = [t for t in manual if not t.get("_jv_repeat_copy")]
                         rep_msg = get_persona_response("loop_off", persona)
 
-                    await play_chime_and_proceed(guild)
                     await speak_in_voice(guild, rep_msg, persona=persona)
                     if hasattr(panel, "update_panel"):
                         asyncio.create_task(panel.update_panel(self.guild_id))
@@ -2247,7 +2297,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     if mixer and hasattr(mixer, "set_volume"):
                         mixer.set_volume(target_float)
 
-                await play_chime_and_proceed(guild)
                 vol_msg = get_persona_response("volume_muted", persona) if target_pct == 0 else get_persona_response("volume_set", persona, percent=target_pct)
                 await speak_in_voice(guild, vol_msg, persona=persona)
                 self._unlock_session()
@@ -2276,12 +2325,10 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     title = cur.get("title") or cur.get("name") or "Untitled Track"
                     artist = cur.get("artist") or "Juice WRLD"
                     np_speech = get_persona_response("now_playing", persona, title=title, artist=artist)
-                    await play_chime_and_proceed(guild)
                     await speak_in_voice(guild, np_speech, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, f"🎵 **[Garmin]** Currently playing: **{title}** — *{artist}* 🎶")
                 else:
-                    await play_beep_sound(guild, "error")
                     no_music_speech = get_persona_response("no_music", persona)
                     await speak_in_voice(guild, no_music_speech, persona=persona)
                     self._unlock_session()
@@ -2292,7 +2339,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if re.search(r'\b(?:pause|stop|shut\s+up|hold|freeze|quiet)\b', clean_cmd, re.I):
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_playing():
-                    await play_chime_and_proceed(guild)
                     pause_msg = get_persona_response("pause", persona)
                     await speak_in_voice(guild, pause_msg, persona=persona)
                     if hasattr(self.cog, "pause_playback"):
@@ -2309,14 +2355,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             if clean_cmd.strip() in {"play", "resume", "unpause"}:
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_paused():
-                    await play_chime_and_proceed(guild)
                     if hasattr(self.cog, "resume_playback"):
                         self.cog.resume_playback(self.guild_id)
                     else:
                         voice.resume()
-                    self._unlock_session()
                     resume_msg = get_persona_response("resume", persona)
                     await speak_in_voice(guild, resume_msg, persona=persona)
+                    self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Resumed playback! ▶️")
                     return
                 elif voice and not voice.is_playing() and (self.guild_id not in self.cog.tasks or self.cog.tasks[self.guild_id].done()):
@@ -2332,11 +2377,10 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         self.cog.seek_events[self.guild_id] = asyncio.Event()
                         self.cog.skip_counts[self.guild_id] = 0
                         self.cog.effects[self.guild_id] = "none"
-                        await play_chime_and_proceed(guild)
                         self.cog.tasks[self.guild_id] = asyncio.create_task(self.cog._player(guild, voice.channel))
-                        self._unlock_session()
                         start_msg = get_persona_response("queue_started", persona)
                         await speak_in_voice(guild, start_msg, persona=persona)
+                        self._unlock_session()
                         await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Started playback! ▶️")
                     else:
                         self._unlock_session()
@@ -2397,7 +2441,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                 if not user_list:
                     no_favs_speech = get_persona_response("fav_empty", persona)
-                    await play_beep_sound(guild, "error")
                     await speak_in_voice(guild, no_favs_speech, persona=persona)
                     await self._notify(guild, f"💔 **[Garmin]** {user_name}: You don't have any favorites. Say *„Garmin, save this song”* while listening to a track!")
                     self._unlock_session()
@@ -2409,7 +2452,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 artist_name = fav_track.get("artist") or "Juice WRLD"
 
                 play_speech = get_persona_response("fav_play", persona, title=track_name, artist=artist_name)
-                await play_beep_sound(guild, "understood")
                 await speak_in_voice(guild, play_speech, persona=persona)
                 await self._play_track_now(guild, dict(fav_track))
                 self._unlock_session()
@@ -2432,7 +2474,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 cur = self.cog.current.get(self.guild_id)
                 if not cur:
                     no_music_msg = get_persona_response("no_music", persona)
-                    await play_beep_sound(guild, "error")
                     await speak_in_voice(guild, no_music_msg, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
@@ -2466,13 +2507,11 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                         except Exception:
                             pass
                     rem_msg = get_persona_response("fav_removed", persona, title=track_title)
-                    await play_beep_sound(guild, "understood")
                     await speak_in_voice(guild, rem_msg, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, f"💔 **[Garmin]** {user_name}: *\"{text}\"* ➔ Removed **{track_title}** from your favorites! ({len(user_list)} remaining)")
                 else:
                     not_in_msg = get_persona_response("fav_not_in_list", persona, title=track_title)
-                    await play_beep_sound(guild, "error")
                     await speak_in_voice(guild, not_in_msg, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, f"ℹ️ **[Garmin]** {user_name}: *\"{text}\"* ➔ **{track_title}** is not in your favorites list!")
@@ -2498,7 +2537,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 cur = self.cog.current.get(self.guild_id)
                 if not cur:
                     no_music_msg = get_persona_response("no_music", persona)
-                    await play_beep_sound(guild, "error")
                     await speak_in_voice(guild, no_music_msg, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
@@ -2524,7 +2562,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 )
                 if existing_idx is not None:
                     already_msg = get_persona_response("fav_exists", persona, title=track_title)
-                    await play_beep_sound(guild, "understood")
                     await speak_in_voice(guild, already_msg, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, f"❤️ **[Garmin]** {user_name}: **{track_title}** is already in your favorites! ({len(user_list)} saved)")
@@ -2552,7 +2589,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                 count = len(user_list)
                 success_speech = get_persona_response("fav_saved", persona, title=track_title)
-                await play_beep_sound(guild, "understood")
                 await speak_in_voice(guild, success_speech, persona=persona)
                 self._unlock_session()
                 await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Saved **{track_title}** by {track_artist} to favorites! ({count} saved) ⭐")
@@ -2560,7 +2596,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
             # PRECEDENCE 12: LEAVE / DISCONNECT
             if re.search(r'\b(?:leave|disconnect|exit|go\s+away|bye|goodbye)\b', clean_cmd, re.I):
-                await play_chime_and_proceed(guild)
                 bye_speech = get_persona_response("bye", persona)
                 await speak_in_voice(guild, bye_speech, persona=persona)
                 await self.cog.config.guild(guild).enabled.set(False)
@@ -2581,7 +2616,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             )
             if is_help:
                 help_speech = get_persona_response("help", persona)
-                await play_chime_and_proceed(guild)
                 await speak_in_voice(guild, help_speech, persona=persona)
                 self._unlock_session()
                 await self._notify(
@@ -2687,7 +2721,6 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     log.warning(f"[Garmin Voice Search] Error searching: {e}")
 
             # Feedback when recognized speech was addressed to Garmin but didn't match known command
-            await play_beep_sound(guild, "error")
             unrec_speech = get_persona_response("unrecognized", persona)
             await speak_in_voice(guild, unrec_speech, persona=persona)
             self._unlock_session()

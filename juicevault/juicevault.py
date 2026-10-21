@@ -1372,14 +1372,16 @@ class JuiceVault(commands.Cog):
         guild = self.bot.get_guild(guild_id)
         voice = guild.voice_client if guild else None
         event = self.skip_events.get(guild_id)
-        if guild_id not in self.tasks or not event or not voice or not (voice.is_playing() or voice.is_paused()) or event.is_set():
+        task = self.tasks.get(guild_id)
+        if not task or task.done() or not event or not voice or event.is_set():
             return False
         self.skip_counts[guild_id] = max(1, min(int(count), 100))
         self.play_positions[guild_id] = 0.0
         if voice:
             voice._jv_started_at = None
         event.set()
-        voice.stop()
+        if voice.is_playing() or voice.is_paused():
+            voice.stop()
         return True
 
     async def _request_seek(self, guild_id, delta=0.0, target_position=None):
