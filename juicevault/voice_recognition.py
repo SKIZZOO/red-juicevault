@@ -1167,7 +1167,7 @@ def get_persona_response(action: str, persona: str = "anime", **kwargs) -> str:
 
 async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
     """Generate crystal-clear Azure Neural TTS using edge-tts.
-    - 'anime': Energetic anime VTuber streamer girl voice (Microsoft Jenny, pitch +6Hz, rate +4%)
+    - 'anime': Bubbly kawaii anime VTuber streamer girl voice (Microsoft Jenny, pitch +24Hz, rate +6%)
     - 'mommy': Sultry dommy mommy voice (Microsoft Sonia, pitch -2Hz, rate -4%)
     - 'rude': Sarcastic tsundere voice (Microsoft Aria, pitch +2Hz, rate +4%)
     - 'natural': Clean natural assistant voice (Microsoft Ava Multilingual)"""
@@ -1180,13 +1180,15 @@ async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
         "natural": "en-US-AvaMultilingualNeural"
     }
     voice = voice_map.get(persona, "en-US-JennyNeural")
-    pitch = "+6Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
-    rate = "+4%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
+    pitch = "+24Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
+    rate = "+6%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
 
     # For anime/VTuber persona, phonetically pronounce cute chat slang for natural voice delivery:
     spoken_text = clean_tts
     if persona == "anime":
         spoken_text = re.sub(r'\b[uU][wW][uU]\b', 'oo-woo', spoken_text)
+        spoken_text = re.sub(r'\b[oO][wW][oO]\b', 'oh-woh', spoken_text)
+        spoken_text = re.sub(r'\b[sS]enpai\b', 'sen-pai', spoken_text)
 
     try:
         comm = edge_tts.Communicate(spoken_text, voice, pitch=pitch, rate=rate)
@@ -1367,7 +1369,7 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
     clean_tts = re.sub(r'[*_~`#<>|]', '', text).strip()
     if not clean_tts:
         return
-    clean_tts = clean_tts[:150]
+    clean_tts = clean_tts[:350]
 
     if not persona:
         persona = _guild_persona_cache.get(guild.id, "anime")
@@ -1390,7 +1392,9 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
 
     # Helper function to play PCM bytes across playing, paused, and idle voice states
     async def _play_pcm(pcm_bytes: bytes) -> bool:
-        duration = len(pcm_bytes) / (48000 * 4) + 0.1
+        pcm_duration = len(pcm_bytes) / 192000.0
+        timeout = max(3.5, pcm_duration + 3.0)
+        start_t = time.monotonic()
         try:
             if voice.is_paused() and mixer is not None:
                 print(f"[JuiceVault Voice TTS] 🔊 Speaking over paused player in '{guild.name}': \"{clean_tts}\" ({persona})")
@@ -1399,10 +1403,10 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
                 mixer.current_volume = 0.0
                 mixer.set_overlay(MemoryPCMAudioSource(pcm_bytes))
                 voice.resume()
-                for _ in range(int(duration / 0.04)):
-                    if not mixer.is_overlay_playing():
-                        break
-                    await asyncio.sleep(0.04)
+                while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
+                    await asyncio.sleep(0.03)
+                # Allow trailing Opus frames in Discord voice queue to finish transmitting cleanly
+                await asyncio.sleep(0.28)
                 if voice.is_connected() and not voice.is_paused():
                     voice.pause()
                 mixer.target_volume = prev_target
@@ -1411,18 +1415,18 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
                 print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({persona})")
                 overlay = MemoryPCMAudioSource(pcm_bytes)
                 mixer.set_overlay(overlay)
-                for _ in range(int(duration / 0.04)):
-                    if not mixer.is_overlay_playing():
-                        break
-                    await asyncio.sleep(0.04)
+                while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
+                    await asyncio.sleep(0.03)
+                # Allow trailing Opus frames to clear before un-ducking music volume
+                await asyncio.sleep(0.28)
                 return True
             elif not voice.is_playing() and not voice.is_paused():
                 print(f"[JuiceVault Voice TTS] 🔊 RAM Instant Speaking in '{guild.name}': \"{clean_tts}\" ({persona})")
                 voice.play(MemoryPCMAudioSource(pcm_bytes))
-                for _ in range(int(duration / 0.04)):
-                    if not voice.is_playing():
-                        break
-                    await asyncio.sleep(0.04)
+                while voice.is_playing() and (time.monotonic() - start_t < timeout):
+                    await asyncio.sleep(0.03)
+                # Wait for Discord transmission pipeline to flush completely
+                await asyncio.sleep(0.28)
                 return True
         except Exception as exc:
             print(f"[JuiceVault Voice TTS] Memory PCM playback exception: {exc}")
@@ -1453,35 +1457,33 @@ async def speak_in_voice(guild, text: str, persona: str = None, lang: str = "en"
 
     try:
         exe = _get_ffmpeg_exe()
-        duration = max(1.2, min(8.0, len(clean_tts) * 0.085 + 0.4))
+        timeout = max(5.0, len(clean_tts) * 0.14 + 3.5)
+        start_t = time.monotonic()
         if voice.is_paused() and mixer is not None:
             prev_target = mixer.target_volume
             mixer.target_volume = 0.0
             mixer.current_volume = 0.0
             mixer.set_overlay(discord.FFmpegPCMAudio(path, executable=exe))
             voice.resume()
-            for _ in range(int(duration / 0.04)):
-                if not mixer.is_overlay_playing():
-                    break
-                await asyncio.sleep(0.04)
+            while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
+                await asyncio.sleep(0.03)
+            await asyncio.sleep(0.28)
             if voice.is_connected() and not voice.is_paused():
                 voice.pause()
             mixer.target_volume = prev_target
         elif voice.is_playing() and mixer is not None:
-            print(f"[JuiceVault Voice TTS] 🔊 Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({lang})")
+            print(f"[JuiceVault Voice TTS] 🔊 Speaking over ducked music (18%) in '{guild.name}': \"{clean_tts}\" ({persona})")
             overlay = discord.FFmpegPCMAudio(path, executable=exe)
             mixer.set_overlay(overlay)
-            for _ in range(int(duration / 0.04)):
-                if not mixer.is_overlay_playing():
-                    break
-                await asyncio.sleep(0.04)
+            while mixer.is_overlay_playing() and (time.monotonic() - start_t < timeout):
+                await asyncio.sleep(0.03)
+            await asyncio.sleep(0.28)
         elif not voice.is_playing() and not voice.is_paused():
-            print(f"[JuiceVault Voice TTS] 🔊 Speaking in '{guild.name}': \"{clean_tts}\" ({lang})")
+            print(f"[JuiceVault Voice TTS] 🔊 Speaking in '{guild.name}': \"{clean_tts}\" ({persona})")
             voice.play(discord.FFmpegPCMAudio(path, executable=exe))
-            for _ in range(int(duration / 0.04)):
-                if not voice.is_playing():
-                    break
-                await asyncio.sleep(0.04)
+            while voice.is_playing() and (time.monotonic() - start_t < timeout):
+                await asyncio.sleep(0.03)
+            await asyncio.sleep(0.28)
     except Exception as exc:
         print(f"[JuiceVault Voice TTS] Playback error: {exc}")
 
@@ -2092,16 +2094,16 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 if hist:
                     prev_t = hist.pop()
                     await play_chime_and_proceed(guild)
-                    await self._play_track_now(guild, prev_t)
-                    self._unlock_session()
                     speech = get_persona_response("previous", persona)
                     await speak_in_voice(guild, speech, persona=persona)
+                    await self._play_track_now(guild, prev_t)
+                    self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Previous track! ⏮️")
                 else:
                     await play_beep_sound(guild, "error")
-                    self._unlock_session()
                     no_prev_speech = get_persona_response("no_previous", persona)
                     await speak_in_voice(guild, no_prev_speech, persona=persona)
+                    self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: No previous track in history.")
                 return
 
@@ -2115,16 +2117,18 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             )
             if re.search(skip_pattern, clean_cmd, re.I) or any(w in clean_cmd for w in ("da-i skip", "dai skip", "da skip", "skip la piesa", "skip piesa", "urmatoarea piesa", "schimba piesa", "the escape", "escape", "they skip", "the scape")):
                 if any(w in clean_cmd for w in ("10", "ten", "zece")):
-                    await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 10))
-                    self._unlock_session()
+                    await play_chime_and_proceed(guild)
                     speech = get_persona_response("skip_10", persona)
                     await speak_in_voice(guild, speech, persona=persona)
+                    await self.cog._request_skip(self.guild_id, 10)
+                    self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped 10 tracks! ⏩")
                 else:
-                    await play_chime_and_proceed(guild, self.cog._request_skip(self.guild_id, 1))
-                    self._unlock_session()
+                    await play_chime_and_proceed(guild)
                     speech = get_persona_response("skip", persona)
                     await speak_in_voice(guild, speech, persona=persona)
+                    await self.cog._request_skip(self.guild_id, 1)
+                    self._unlock_session()
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Skipped track! ⏭️")
                 return
 
@@ -2289,13 +2293,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 voice = guild.voice_client if guild else None
                 if voice and voice.is_playing():
                     await play_chime_and_proceed(guild)
+                    pause_msg = get_persona_response("pause", persona)
+                    await speak_in_voice(guild, pause_msg, persona=persona)
                     if hasattr(self.cog, "pause_playback"):
                         self.cog.pause_playback(self.guild_id)
                     else:
                         voice.pause()
                     self._unlock_session()
-                    pause_msg = get_persona_response("pause", persona)
-                    await speak_in_voice(guild, pause_msg, persona=persona)
                     await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Paused! ⏸️")
                 else:
                     self._unlock_session()
@@ -2621,9 +2625,9 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
             # Feedback when recognized speech was addressed to Garmin but didn't match known command
             await play_beep_sound(guild, "error")
-            self._unlock_session()
             unrec_speech = get_persona_response("unrecognized", persona)
             await speak_in_voice(guild, unrec_speech, persona=persona)
+            self._unlock_session()
             await self._notify(guild, f"🎤 **[Garmin]** {user_name}: *\"{text}\"* ➔ Command not recognized. Say *„Garmin help”* for available commands.")
 
         def _downsample_to_16k_mono(self, pcm_bytes: bytes) -> bytes:
