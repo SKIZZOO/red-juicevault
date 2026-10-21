@@ -9,6 +9,7 @@ receiving packages are not installed on the host.
 import array
 import asyncio
 import concurrent.futures
+import functools
 import logging
 import io
 import math
@@ -94,16 +95,16 @@ def _resolve_command_phonetics(text: str) -> str:
     t = text
 
     # Wake word phonetics for "ok garmin" / "okay garmin":
-    t = re.sub(r'\b(?:oak|o\s*k|o\.k\.|okay|okey|okei|oh|hope|old|all|ok)\s*[,.:;!?-]?\s*(?:garmin|garmen|garmon|garmyn|carmin|carmen|garden|darmin|barmin|garment|armin|darling|government)\b', 'ok garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:oak|o\s*k|o\.k\.|okay|okey|okei|oh|hope|old|all|ok)\s*[,.:;!?-]?\s*(?:garmin|garmen|garmon|garmyn|carmin|carmen|garden|darmin|barmin|garment|armin|darling|government|german|germane|germain)\b', 'ok garmin', t, flags=re.I)
     # Wake word phonetics for "hey garmin":
-    t = re.sub(r'\b(?:hey|hay|hei|he|ay|hi|hello|yo)\s*[,.:;!?-]?\s*(?:garmin|garmen|garmon|garmyn|carmin|carmen|garden|darmin|barmin|garment|armin|darling|government)\b', 'hey garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:hey|hay|hei|he|ay|hi|hello|yo)\s*[,.:;!?-]?\s*(?:garmin|garmen|garmon|garmyn|carmin|carmen|garden|darmin|barmin|garment|armin|darling|government|german|germane|germain)\b', 'hey garmin', t, flags=re.I)
     t = re.sub(r'\b(?:hey\s*[,.:;!?-]?\s*)?(?:got\s+him\s+in|god\s+i\'?m\s+in|god\s+im\s+in|egger\s+man|eggar\s+man|edgar\s+man)\b', 'hey garmin', t, flags=re.I)
 
     # Wake word misrecognitions from Romanian "bă Garmin" / "Garmin":
     # "beggar man", "bag armin", "bad garmin", "by garmin", "big armin", "back garmin", "barman"
     t = re.sub(r'\b(?:beggar\s+man|bag\s+armin|bad\s+garmin|by\s+garmin|big\s+armin|back\s+garmin|barman)\b', 'ba garmin', t, flags=re.I)
-    t = re.sub(r'\b(?:garment|garments|garmon|garmend|garnet|government)\b', 'garmin', t, flags=re.I)
-    t = re.sub(r'\b(?:ba|bai)\s+(?:armin|armen|arman)\b', 'ba garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:garment|garments|garmon|garmend|garnet|government|german|germane|germain)\b', 'garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:ba|bai)\s+(?:armin|armen|arman|german|germane)\b', 'ba garmin', t, flags=re.I)
 
     # Romanian "dă skip" / "dă-i skip" phonetic English STT mappings:
     # "the escape" -> "da skip"
@@ -654,13 +655,17 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
     if not clean:
         return False, "", ""
 
+    def _clean_wake_cmd(c_str: str) -> str:
+        res = c_str.strip().strip(",.:;!?- ")
+        return re.sub(r'^(?:hey|hei|ok|okay|hi|hello|yo|ba|bai|alo|bre|ma|fa)\s+', '', res, flags=re.I).strip().strip(",.:;!?- ")
+
     # 1. Multi-word phonetic misrecognitions
     m = _MULTI_WORD_WAKE_REGEX.search(clean)
     if m:
         wake = m.group(0).strip()
         before = clean[:m.start()].strip().strip(",.:;!?- ")
         after = clean[m.end():].strip().strip(",.:;!?- ")
-        cmd = f"{before} {after}".strip().strip(",.:;!?- ")
+        cmd = _clean_wake_cmd(f"{before} {after}")
         return True, cmd, wake
 
     # 2. Single-word names with optional multi-prefix salutations ('bă Garmin', 'ok Garmin', etc.)
@@ -669,7 +674,7 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
         wake = m.group(0).strip()
         before = clean[:m.start()].strip().strip(",.:;!?- ")
         after = clean[m.end():].strip().strip(",.:;!?- ")
-        cmd = f"{before} {after}".strip().strip(",.:;!?- ")
+        cmd = _clean_wake_cmd(f"{before} {after}")
         return True, cmd, wake
 
     # 3. Custom learned wake words for this guild
@@ -682,7 +687,7 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
             if idx != -1:
                 before = clean[:idx].strip().strip(",.:;!?- ")
                 after = clean[idx + len(clean_lw):].strip().strip(",.:;!?- ")
-                cmd = f"{before} {after}".strip().strip(",.:;!?- ")
+                cmd = _clean_wake_cmd(f"{before} {after}")
                 return True, cmd, clean_lw
 
     # 4. Levenshtein fuzzy distance matching on leading words (distance <= 2 to 'garmin')
@@ -698,7 +703,7 @@ def _match_wake_word(text: str, custom_words: set = None) -> tuple:
             if 4 <= len(cand_clean) <= 8:
                 if _levenshtein(cand_clean, "garmin") <= 2 or _levenshtein(cand_clean, "carmen") <= 1:
                     cmd_tokens = tokens[cand_idx + 1:]
-                    return True, " ".join(cmd_tokens).strip().strip(",.:;!?- "), cand_clean
+                    return True, _clean_wake_cmd(" ".join(cmd_tokens)), cand_clean
 
     return False, "", ""
 
@@ -1210,7 +1215,11 @@ async def _fetch_tts_bytes(clean_tts: str, persona: str = "anime") -> bytes:
 
     data = None
     if HAVE_EDGE_TTS:
-        data = await _synthesize_edge_tts(clean_tts, persona=persona)
+        try:
+            data = await asyncio.wait_for(_synthesize_edge_tts(clean_tts, persona=persona), timeout=3.5)
+        except Exception as exc:
+            log.debug(f"[JuiceVault Voice] Edge-TTS fetch timeout or error: {exc}")
+            data = None
 
     if not data:
         # Fallback to Google Translate TTS
@@ -1670,6 +1679,20 @@ async def set_voice_commands_enabled_for_guild(cog, guild_id, enabled: bool):
 
 if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
+    def _safe_voice_dispatch(func):
+        @functools.wraps(func)
+        async def wrapper(self, user_id, pcm_bytes, *args, **kwargs):
+            if self._is_locked_to_other(user_id):
+                return
+            try:
+                return await func(self, user_id, pcm_bytes, *args, **kwargs)
+            except Exception as exc:
+                print(f"[JuiceVault Voice] Unhandled exception during voice dispatch: {exc}")
+                import traceback
+                traceback.print_exc()
+                self._unlock_session()
+        return wrapper
+
     class VoiceCommandAudioSink(voice_recv.AudioSink):
         """Audio sink capturing PCM voice packets from Discord users, buffering utterances,
         and transcribing speech to execute player actions (Skip, Next, Pause, Play, etc.)."""
@@ -1864,6 +1887,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 self._unlock_session()
 
 
+        @_safe_voice_dispatch
         async def _transcribe_and_dispatch(self, user_id, pcm_bytes):
             if self._is_locked_to_other(user_id):
                 return
@@ -2270,7 +2294,23 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 return
 
             # PRECEDENCE 7: NOW PLAYING / SONG INFO
-            if re.search(r'\b(?:what\s+song\s+is\s+this|what\'?s\s+playing|what\s+is\s+playing|current\s+song|current\s+track|song\s+info|now\s+playing)\b', clean_cmd, re.I):
+            now_playing_pattern = (
+                r'\b(?:'
+                r'what\s+song\s+is\s+this|what\s+track\s+is\s+this|what\s+is\s+this\s+song|what\s+is\s+this\s+track|'
+                r'what(?:\'?s|\s+is)\s+(?:the\s+)?name\s+of\s+(?:this|the)\s+(?:song|track)|'
+                r'name\s+of\s+(?:this|the)\s+(?:song|track)|'
+                r'what(?:\'?s|\s+is)\s+playing|what\s+song\s+(?:is\s+)?playing|what\s+track\s+(?:is\s+)?playing|'
+                r'what\s+are\s+we\s+listening\s+to|what(?:\'?s|\s+is)\s+this\s+music|'
+                r'current\s+song|current\s+track|song\s+info|track\s+info|now\s+playing|'
+                r'ce\s+piesa\s+(?:e\s+asta|se\s+aude|canta)|ce\s+melodie\s+(?:e\s+asta|se\s+aude|canta)|cum\s+se\s+numeste\s+piesa'
+                r')\b'
+            )
+            is_now_playing = bool(re.search(now_playing_pattern, clean_cmd, re.I)) or (
+                any(w in clean_cmd for w in ("what", "cum", "ce"))
+                and any(s in clean_cmd for s in ("song", "track", "piesa", "melodia", "melodie", "name", "playing"))
+                and not any(p in clean_cmd for p in ("play", "search", "cauta", "baga", "pune", "skip"))
+            )
+            if is_now_playing:
                 cur = self.cog.current.get(self.guild_id)
                 if cur:
                     title = cur.get("title") or cur.get("name") or "Untitled Track"
@@ -2421,23 +2461,26 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Playing favorite: **{track_name}** — *{artist_name}* 🎶")
                 return
 
-            # PRECEDENCE 11B: SAVE / FAVORITE CURRENT SONG
-            is_save_fav = bool(re.search(
-                r'\b(?:save\s+this\s+song|save\s+song|save\s+this|save\s+track|favorite\s+this\s+song|favorite\s+this|favorite\s+song|favorite\s+track|add\s+to\s+favorites|add\s+to\s+favorite|love\s+this\s+song|like\s+this\s+song|salveaza\s+piesa\s+asta|salveaza\s+piesa|salveaza\s+melodia|salveaz-o|adauga\s+la\s+favorite|pune\s+la\s+favorite|baga\s+la\s+favorite|adauga\s+la\s+preferate|pune\s+la\s+preferate|baga\s+la\s+preferate|favoriteaza|imi\s+place\s+piesa|imi\s+place\s+melodia)\b',
-                clean_cmd,
-                re.I
-            )) or (
-                any(f in clean_cmd for f in ("favorite", "fav", "favorit", "like", "salveaza", "save"))
-                and any(s in clean_cmd for s in ("song", "track", "this", "piesa", "melodia", "asta", "o"))
+            # PRECEDENCE 11B: REMOVE CURRENT SONG FROM FAVORITES
+            remove_fav_pattern = (
+                r'\b(?:'
+                r'(?:remove|delete|sterge|scoate|elimina|take\s+off|drop|unfavorite|un-favorite|disown)\s+(?:this\s+)?(?:song|track|piesa|melodia)?\s*(?:from|off|out\s+of|de\s+la|din)?\s*(?:my\s+)?(?:favorites?|preferate)|'
+                r'(?:remove|delete|sterge|scoate|elimina|unfavorite|un-favorite)\s+(?:this|this\s+song|this\s+track|piesa\s+asta|melodia\s+asta)|'
+                r'disowned?\s+(?:to|from)\s+(?:my\s+)?favorites?'
+                r')\b'
             )
-            if is_save_fav:
+            is_remove_fav = bool(re.search(remove_fav_pattern, clean_cmd, re.I)) or (
+                any(r in clean_cmd for r in ("remove", "delete", "sterge", "scoate", "elimina", "unfavorite", "disown", "disowned"))
+                and any(f in clean_cmd for f in ("favorite", "favorites", "fav", "preferate"))
+            )
+            if is_remove_fav:
                 cur = self.cog.current.get(self.guild_id)
                 if not cur:
                     no_music_msg = get_persona_response("no_music", persona)
                     await play_beep_sound(guild, "error")
                     await speak_in_voice(guild, no_music_msg, persona=persona)
-                    await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
                     self._unlock_session()
+                    await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
                     return
 
                 uid_str = str(user_id)
@@ -2452,16 +2495,88 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
 
                 existing_idx = next(
                     (i for i, t in enumerate(user_list)
-                     if (track_id and str(t.get("id")) == track_id)
-                     or (track_title and str(t.get("title", "")).lower() == track_title.lower())),
+                     if isinstance(t, dict) and (
+                         (track_id and str(t.get("id")) == track_id)
+                         or (track_title and str(t.get("title", "")).lower() == track_title.lower())
+                     )),
+                    None
+                )
+                if existing_idx is not None:
+                    user_list.pop(existing_idx)
+                    bot_favs[user_name.lower()] = user_list
+                    if hasattr(self.cog, "web_remote") and self.cog.web_remote:
+                        self.cog.web_remote._user_favorites = bot_favs
+                        try:
+                            await self.cog.web_remote.config.favorites.set(bot_favs)
+                        except Exception:
+                            pass
+                    rem_msg = get_persona_response("fav_removed", persona, title=track_title)
+                    await play_beep_sound(guild, "understood")
+                    await speak_in_voice(guild, rem_msg, persona=persona)
+                    self._unlock_session()
+                    await self._notify(guild, f"💔 **[Garmin]** {user_name}: *\"{text}\"* ➔ Removed **{track_title}** from your favorites! ({len(user_list)} remaining)")
+                else:
+                    not_in_msg = get_persona_response("fav_not_in_list", persona, title=track_title)
+                    await play_beep_sound(guild, "error")
+                    await speak_in_voice(guild, not_in_msg, persona=persona)
+                    self._unlock_session()
+                    await self._notify(guild, f"ℹ️ **[Garmin]** {user_name}: *\"{text}\"* ➔ **{track_title}** is not in your favorites list!")
+                return
+
+            # PRECEDENCE 11C: SAVE / FAVORITE CURRENT SONG
+            is_save_fav = bool(re.search(
+                r'\b(?:'
+                r'save\s+this\s+song|save\s+song|save\s+this|save\s+track|'
+                r'favorite\s+this\s+song|favorite\s+this|favorite\s+song|favorite\s+track|'
+                r'add\s+to\s+favorites|add\s+to\s+favorite|add\s+this\s+to\s+(?:my\s+)?favorites?|'
+                r'add\s+this\s+song\s+to\s+(?:my\s+)?favorites?|add\s+song\s+to\s+(?:my\s+)?favorites?|'
+                r'love\s+this\s+song|like\s+this\s+song|'
+                r'salveaza\s+piesa\s+asta|salveaza\s+piesa|salveaza\s+melodia|salveaz-o|'
+                r'adauga\s+la\s+favorite|pune\s+la\s+favorite|baga\s+la\s+favorite|'
+                r'adauga\s+la\s+preferate|pune\s+la\s+preferate|baga\s+la\s+preferate|favoriteaza|'
+                r'imi\s+place\s+piesa|imi\s+place\s+melodia'
+                r')\b',
+                clean_cmd,
+                re.I
+            )) or (
+                any(f in clean_cmd for f in ("favorite", "fav", "favorit", "like", "salveaza", "save"))
+                and any(s in clean_cmd for s in ("song", "track", "this", "piesa", "melodia", "asta", "o", "add"))
+                and not any(r in clean_cmd for r in ("remove", "delete", "sterge", "scoate", "elimina", "unfavorite", "disown"))
+            )
+            if is_save_fav:
+                cur = self.cog.current.get(self.guild_id)
+                if not cur:
+                    no_music_msg = get_persona_response("no_music", persona)
+                    await play_beep_sound(guild, "error")
+                    await speak_in_voice(guild, no_music_msg, persona=persona)
+                    self._unlock_session()
+                    await self._notify(guild, f"❌ **[Garmin]** {user_name}: {no_music_msg}")
+                    return
+
+                uid_str = str(user_id)
+                if not hasattr(self.bot, "_jv_data"):
+                    self.bot._jv_data = {}
+                bot_favs = self.bot._jv_data.setdefault("favorites", {})
+                user_list = bot_favs.setdefault(uid_str, [])
+
+                track_id = str(cur.get("id") or cur.get("songId") or "").strip()
+                track_title = str(cur.get("title") or cur.get("name") or "Untitled").strip()
+                track_artist = str(cur.get("artist") or "Juice WRLD").strip()
+
+                existing_idx = next(
+                    (i for i, t in enumerate(user_list)
+                     if isinstance(t, dict) and (
+                         (track_id and str(t.get("id")) == track_id)
+                         or (track_title and str(t.get("title", "")).lower() == track_title.lower())
+                     )),
                     None
                 )
                 if existing_idx is not None:
                     already_msg = get_persona_response("fav_exists", persona, title=track_title)
                     await play_beep_sound(guild, "understood")
                     await speak_in_voice(guild, already_msg, persona=persona)
-                    await self._notify(guild, f"❤️ **[Garmin]** {user_name}: **{track_title}** is already in your favorites! ({len(user_list)} saved)")
                     self._unlock_session()
+                    await self._notify(guild, f"❤️ **[Garmin]** {user_name}: **{track_title}** is already in your favorites! ({len(user_list)} saved)")
                     return
 
                 clean_fav = {
@@ -2488,8 +2603,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 success_speech = get_persona_response("fav_saved", persona, title=track_title)
                 await play_beep_sound(guild, "understood")
                 await speak_in_voice(guild, success_speech, persona=persona)
-                await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Saved **{track_title}** by {track_artist} to favorites! ({count} saved) ⭐")
                 self._unlock_session()
+                await self._notify(guild, f"❤️ **[Garmin]** {user_name}: *\"{text}\"* ➔ Saved **{track_title}** by {track_artist} to favorites! ({count} saved) ⭐")
                 return
 
             # PRECEDENCE 12: LEAVE / DISCONNECT
