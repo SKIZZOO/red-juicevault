@@ -13,6 +13,7 @@ import logging
 import io
 import math
 import os
+import random
 import re
 import struct
 import tempfile
@@ -93,14 +94,15 @@ def _resolve_command_phonetics(text: str) -> str:
     t = text
 
     # Wake word phonetics for "ok garmin" / "okay garmin":
-    t = re.sub(r'\b(?:oak|o\s*k|o\.k\.|okay|okey|okei|oh|hope|old|all|ok)\s+(?:garmin|garmen|garmon|garmyn|carmin|carmen|garden|darmin|barmin|garment|armin|darling)\b', 'ok garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:oak|o\s*k|o\.k\.|okay|okey|okei|oh|hope|old|all|ok)\s*[,.:;!?-]?\s*(?:garmin|garmen|garmon|garmyn|carmin|carmen|garden|darmin|barmin|garment|armin|darling|government)\b', 'ok garmin', t, flags=re.I)
     # Wake word phonetics for "hey garmin":
-    t = re.sub(r'\b(?:hey|hay|hei|he|ay|hi|hello|yo)\s+(?:garmin|garmen|garmon|garmyn|carmin|carmen|garden|darmin|barmin|garment|armin|darling)\b', 'hey garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:hey|hay|hei|he|ay|hi|hello|yo)\s*[,.:;!?-]?\s*(?:garmin|garmen|garmon|garmyn|carmin|carmen|garden|darmin|barmin|garment|armin|darling|government)\b', 'hey garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:hey\s*[,.:;!?-]?\s*)?(?:got\s+him\s+in|god\s+i\'?m\s+in|god\s+im\s+in|egger\s+man|eggar\s+man|edgar\s+man)\b', 'hey garmin', t, flags=re.I)
 
     # Wake word misrecognitions from Romanian "bă Garmin" / "Garmin":
     # "beggar man", "bag armin", "bad garmin", "by garmin", "big armin", "back garmin", "barman"
     t = re.sub(r'\b(?:beggar\s+man|bag\s+armin|bad\s+garmin|by\s+garmin|big\s+armin|back\s+garmin|barman)\b', 'ba garmin', t, flags=re.I)
-    t = re.sub(r'\b(?:garment|garments|garmon|garmend|garnet)\b', 'garmin', t, flags=re.I)
+    t = re.sub(r'\b(?:garment|garments|garmon|garmend|garnet|government)\b', 'garmin', t, flags=re.I)
     t = re.sub(r'\b(?:ba|bai)\s+(?:armin|armen|arman)\b', 'ba garmin', t, flags=re.I)
 
     # Romanian "dă skip" / "dă-i skip" phonetic English STT mappings:
@@ -374,7 +376,7 @@ _MULTI_WORD_WAKE_REGEX = re.compile(
 )
 
 _SINGLE_WORD_WAKE_REGEX = re.compile(
-    r'\b(?:(?:hey|ok|okay|hei|ba|bai|alo|yo|bre|ma|fa|auzi|zi|spune|hi|hello|e|a|the|de)\s+){0,3}(?:garmin|garmen|garmon|garmyn|garminn|garmy|garminu|garminul|garmini|carmin|carmen|carmina|carman|carme|carmyn|darmin|damin|darmon|barmin|karmin|karmen|jarmin|parmin|garden|gardon|gardi|gardin|gaming|germain|german|germane|elgar|edgar|eggar|egger|egr|eger|calmin|starmin|sharmin|barman|beggar|garment|garments|armin|darling)\b',
+    r'\b(?:(?:hey|ok|okay|hei|ba|bai|alo|yo|bre|ma|fa|auzi|zi|spune|hi|hello|e|a|the|de)\s+){0,3}(?:garmin|garmen|garmon|garmyn|garminn|garmy|garminu|garminul|garmini|carmin|carmen|carmina|carman|carme|carmyn|darmin|damin|darmon|barmin|karmin|karmen|jarmin|parmin|garden|gardon|gardi|gardin|gaming|germain|german|germane|elgar|edgar|eggar|egger|egr|eger|calmin|starmin|sharmin|barman|beggar|garment|garments|government|armin|darling)\b',
     re.IGNORECASE
 )
 
@@ -2576,7 +2578,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             print(f"[JuiceVault Voice Command] {user_name} -> Garmin command: '{clean_cmd}' (full: '{clean}') [persona={persona}]")
 
             # PRECEDENCE 0: SWITCH VOICE PERSONA
-            if re.search(r'\b(?:rude\s+voice|tsundere\s+voice|rude\s+mode|tsundere\s+mode|switch\s+to\s+rude|switch\s+to\s+tsundere|be\s+mean|toxic\s+voice|mean\s+voice|brat\s+voice)\b', clean_cmd, re.I):
+            if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:rude|tsundere|toxic|mean|brat)(?:\s+(?:voice|mode))?\b', clean_cmd, re.I) \
+               or re.search(r'\b(?:be\s+mean|rude\s+voice|tsundere\s+voice|rude\s+mode|tsundere\s+mode)\b', clean_cmd, re.I):
                 await set_guild_persona(self.cog, self.guild_id, "rude")
                 confirm = get_persona_response("persona_activated", "rude")
                 await speak_in_voice(guild, confirm, persona="rude")
@@ -2584,7 +2587,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 await self._notify(guild, f"💢 **[Garmin]** {user_name}: *\"{text}\"* ➔ **Rude / Tsundere** voice activated! 💥")
                 return
 
-            if re.search(r'\b(?:anime\s+voice|anime\s+girl|anime\s+mode|switch\s+to\s+anime|uwu\s+voice)\b', clean_cmd, re.I):
+            if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:anime|anima|anim|ani\s+me)(?:\s+(?:girl\s+)?(?:voice|mode))?\b', clean_cmd, re.I) \
+               or re.search(r'\b(?:anime\s+girl|anima\s+girl|i\s+need\s+my\s+girl\s+voice|girl\s+voice|uwu\s+voice|anime\s+voice|anima\s+voice)\b', clean_cmd, re.I):
                 await set_guild_persona(self.cog, self.guild_id, "anime")
                 confirm = get_persona_response("persona_activated", "anime")
                 await speak_in_voice(guild, confirm, persona="anime")
@@ -2592,7 +2596,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 await self._notify(guild, f"✨ **[Garmin]** {user_name}: *\"{text}\"* ➔ **Anime Girl (UwU)** voice activated! 🎀")
                 return
 
-            if re.search(r'\b(?:mommy\s+voice|dommy\s+mommy|mommy\s+mode|switch\s+to\s+mommy)\b', clean_cmd, re.I):
+            if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:mommy|dommy\s+mommy)(?:\s+(?:voice|mode))?\b', clean_cmd, re.I) \
+               or re.search(r'\b(?:mommy\s+voice|dommy\s+mommy|mommy\s+mode)\b', clean_cmd, re.I):
                 await set_guild_persona(self.cog, self.guild_id, "mommy")
                 confirm = get_persona_response("persona_activated", "mommy")
                 await speak_in_voice(guild, confirm, persona="mommy")
@@ -2600,7 +2605,8 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 await self._notify(guild, f"💋 **[Garmin]** {user_name}: *\"{text}\"* ➔ **Dommy Mommy** voice activated! 👠")
                 return
 
-            if re.search(r'\b(?:natural\s+voice|normal\s+voice|default\s+voice|switch\s+to\s+natural)\b', clean_cmd, re.I):
+            if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:natural|normal|default)(?:\s+(?:voice|mode|assistant))?\b', clean_cmd, re.I) \
+               or re.search(r'\b(?:natural\s+voice|normal\s+voice|default\s+voice)\b', clean_cmd, re.I):
                 await set_guild_persona(self.cog, self.guild_id, "natural")
                 confirm = get_persona_response("persona_activated", "natural")
                 await speak_in_voice(guild, confirm, persona="natural")
