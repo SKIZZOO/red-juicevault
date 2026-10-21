@@ -1917,7 +1917,7 @@ class JuiceVault(commands.Cog):
                     except Exception as exc:
                         print(f"[JuiceVault Voice] Reconnect on enable failed: {exc}")
                 attach_voice_command_sink(self, ctx.guild)
-            await ctx.send("🎤 **Voice Command Recognition: ENABLED in Discord voice channel!**\n🎙️ **Wake Word: \"Garmin\"**\nSay **'Garmin, skip'**, **'Garmin, următoarea'**, **'Garmin, pause'**, **'Garmin, play'**, or **'Garmin, shuffle'**!")
+            await ctx.send("🎤 **Voice Command Recognition: ENABLED in Discord voice channel!**\n🎙️ **Wake Word: \"Garmin\"**\nSay **'Garmin, skip'**, **'Garmin, pause'**, **'Garmin, play'**, or **'Garmin, shuffle'**!")
         elif mode is not None and mode.lower() in ("off", "disable", "false"):
             await set_voice_commands_enabled_for_guild(self, ctx.guild.id, False)
             await ctx.send("🔇 **Voice Command Recognition: DISABLED in Discord voice channel.**")
@@ -1931,28 +1931,32 @@ class JuiceVault(commands.Cog):
                 name="🔊 In-Discord Voice Channel Recognition",
                 value=(
                     f"Status: **{'🟢 ACTIVE' if (supported and is_enabled) else ('🟡 READY (Disabled)' if supported else '⚪ Missing Python Packages')}**\n"
-                    + (f"Installed & Ready!\nToggle with: `4jv vc on` or `4jv vc off`" if supported else f"Requires: `{reason}`\n💡 **Instalează automat tastând: `4jv installvc`**\n*(sau pe host: `pip install discord-ext-voice-recv SpeechRecognition`)*")
+                    + (f"Installed & Ready!\nToggle with: `[p]jv vc on` or `[p]jv vc off`" if supported else f"Requires: `{reason}`\n💡 **Install automatically with: `[p]jv installvc`**\n*(or on host: `pip install discord-ext-voice-recv SpeechRecognition`)*")
                 ),
                 inline=False
             )
             embed.add_field(
                 name="📱 Web Remote Voice Control",
-                value="Status: **🟢 100% READY & ACTIVE!**\nOpen your Web Remote (`4jv remote`) and tap the **🎤 Voice** button or enable Hands-Free Mode on your phone or PC!",
+                value="Status: **🟢 100% READY & ACTIVE!**\nOpen your Web Remote (`[p]jv remote`) and tap the **🎤 Voice** button or enable Hands-Free Mode on your phone or PC!",
                 inline=False
             )
             embed.add_field(
-                name="🗣️ Wake Word & Voice Commands (RO / EN)",
+                name="🗣️ Wake Word & Voice Commands",
                 value=(
-                    "🎙️ **Wake Word**: Say **`Garmin`** before any command!\n"
-                    "• **`Garmin, skip`** / **`Garmin, dă-i skip`** / **`Garmin, următoarea`** ➔ Skip current track\n"
-                    "• **`Garmin, bagă piesa robbery`** / **`Garmin, play fire`** ➔ Search & play track\n"
-                    "• **`Garmin, skip 10`** / **`Garmin, înainte 10`** ➔ Forward +10s / Skip 10 tracks\n"
-                    "• **`Garmin, back 10`** / **`Garmin, înapoi 10`** ➔ Rewind -10s\n"
+                    "🎙️ **Wake Word**: Say **`Garmin`** or **`Hey Garmin`** before any command!\n"
+                    "• **`Garmin, skip`** / **`Garmin, next`** ➔ Skip current track\n"
+                    "• **`Garmin, play robbery`** / **`Garmin, play Yeat`** ➔ Search & play track\n"
+                    "• **`Garmin, skip 10`** ➔ Skip 10 tracks\n"
+                    "• **`Garmin, back 10`** / **`Garmin, rewind`** ➔ Rewind -10s\n"
                     "• **`Garmin, previous`** ➔ Play previous track\n"
-                    "• **`Garmin, pause`** / **`Garmin, pauză`** ➔ Pause playback\n"
-                    "• **`Garmin, play`** / **`Garmin, continuă`** ➔ Resume playback\n"
-                    "• **`Garmin, shuffle`** / **`Garmin, amestecă`** ➔ Shuffle the queue\n"
-                    "• **`Garmin, favorite`** / **`Garmin, like`** ➔ Add to favorites"
+                    "• **`Garmin, pause`** / **`Garmin, stop`** ➔ Pause playback\n"
+                    "• **`Garmin, resume`** / **`Garmin, play`** ➔ Resume playback\n"
+                    "• **`Garmin, shuffle`** ➔ Shuffle the queue\n"
+                    "• **`Garmin, set volume to 80`** / **`Garmin, louder`** ➔ Adjust volume\n"
+                    "• **`Garmin, what's playing?`** ➔ Current track info\n"
+                    "• **`Garmin, save this song`** / **`Garmin, favorite`** ➔ Add to favorites\n"
+                    "• **`Garmin, play one of my favorite songs`** ➔ Play from favorites\n"
+                    "• **`Garmin, switch to anime voice`** / **`mommy voice`** / **`rude voice`** ➔ Switch persona"
                 ),
                 inline=False
             )
