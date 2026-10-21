@@ -1180,7 +1180,7 @@ async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
                 chunks.append(chunk["data"])
         return b''.join(chunks)
     except Exception as exc:
-        log.debug(f"[JuiceVault Edge-TTS] Voice synthesis error for '{clean_tts}': {exc}")
+        print(f"[JuiceVault Edge-TTS] Voice synthesis error for '{clean_tts}': {exc}")
         return b''
 
 
@@ -1195,7 +1195,7 @@ async def _fetch_tts_bytes(clean_tts: str, persona: str = "anime") -> bytes:
         try:
             data = await asyncio.wait_for(_synthesize_edge_tts(clean_tts, persona=persona), timeout=8.0)
         except Exception as exc:
-            log.debug(f"[JuiceVault Voice] Edge-TTS fetch timeout or error: {exc}")
+            print(f"[JuiceVault Voice] Edge-TTS fetch timeout or error: {exc}")
             data = None
 
     if not data:
@@ -1244,20 +1244,18 @@ async def _fetch_tts_bytes(clean_tts: str, persona: str = "anime") -> bytes:
 _PRIORITY_ACTIONS = (
     "greeting", "persona_activated", "pause", "resume", "skip", "skip_10",
     "volume_muted", "restart", "previous", "no_previous", "no_music",
-    "shuffle", "bye", "help", "what_to_play", "search_yt_prompt",
-    "search_cancelled", "fav_empty", "unrecognized", "loop_on", "loop_off",
-    "queue_started"
+    "shuffle", "bye", "help", "what_to_play", "fav_empty"
 )
-_COMMON_VOL_PERCENTAGES = (5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100)
+_COMMON_VOL_PERCENTAGES = (5, 10, 20, 50, 100)
 _COMMON_SYSTEM_PHRASES = []
 
 for _act in _PRIORITY_ACTIONS:
     for _p_name, _p_actions in _PERSONA_RESPONSES.items():
         _count = 0
         if _p_name == "anime":
-            _limit = 8 if _act in ("greeting", "skip", "pause", "resume", "help") else 4
+            _limit = 3 if _act in ("greeting", "skip", "pause", "resume", "help") else 2
         else:
-            _limit = 2 if _act in ("greeting", "skip", "pause", "resume") else 0
+            _limit = 1 if _act in ("greeting", "skip", "pause", "resume") else 0
         for _ph in _p_actions.get(_act, []):
             if "{" not in _ph:
                 _COMMON_SYSTEM_PHRASES.append((_ph, _p_name))
@@ -1268,7 +1266,7 @@ for _act in _PRIORITY_ACTIONS:
 # Pre-warm common volume percentages so volume adjustments respond instantly (0ms) from RAM PCM
 for _pct in _COMMON_VOL_PERCENTAGES:
     _anime_vol = _PERSONA_RESPONSES.get("anime", {}).get("volume_set", [])
-    for _ph in _anime_vol[:2]:
+    for _ph in _anime_vol[:1]:
         try:
             _COMMON_SYSTEM_PHRASES.append((_ph.format(percent=_pct), "anime"))
         except Exception:
@@ -1282,12 +1280,13 @@ def prewarm_voice_cache():
         for st in ("listening", "understood", "error"):
             _get_beep_pcm(st)
 
-        # 2. Pre-fetch and decode common phrases for all personas
+        # 2. Pre-fetch and decode common phrases for all personas with polite spacing
         loop = asyncio.new_event_loop()
         try:
             for text, persona in _COMMON_SYSTEM_PHRASES:
                 try:
                     loop.run_until_complete(_fetch_tts_bytes(text, persona=persona))
+                    time.sleep(0.06)
                 except Exception:
                     pass
         finally:
@@ -2003,7 +2002,7 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     try:
                         print(f"[JuiceVault Voice] Passive fallback to Groq Whisper Large v3 Turbo (RMS: {rms})...")
                         text, detected_lang = await asyncio.wait_for(
-                            self._recognize_speech_groq(mono_16k, groq_key, prompt="Ok Garmin, Hey Garmin, Garmin, skip, pause, play, next"),
+                            _recognize_speech_groq(mono_16k, groq_key, prompt="Ok Garmin, Hey Garmin, Garmin, skip, pause, play, next"),
                             timeout=4.5
                         )
                     except Exception as g_err:
@@ -2338,33 +2337,36 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             # PRECEDENCE 7: NOW PLAYING / SONG INFO
             now_playing_pattern = (
                 r'\b(?:'
-                r'what\s+song\s+is\s+this|what\s+track\s+is\s+this|what\s+is\s+this\s+song|what\s+is\s+this\s+track|'
-                r'what(?:\'?s|\s+is)\s+(?:the\s+)?name\s+of\s+(?:this|the)\s+(?:song|track)|'
+                r'(?:what(?:\'?s|\s+is|\s+was)?|was)\s+(?:the\s+)?name\s+of\s+(?:this|the)\s+(?:song|track)|'
+                r'(?:what(?:\'?s|\s+is|\s+was)?|was)\s+(?:this|the)\s+(?:song|track)|'
                 r'name\s+of\s+(?:this|the)\s+(?:song|track)|'
-                r'what(?:\'?s|\s+is)\s+playing|what\s+song\s+(?:is\s+)?playing|what\s+track\s+(?:is\s+)?playing|'
+                r'title\s+of\s+(?:this|the)\s+(?:song|track)|'
+                r'what\s+(?:song|track)\s+(?:is\s+this|is\s+playing)|'
+                r'what(?:\'?s|\s+is|\s+was)\s+playing|'
                 r'what\s+are\s+we\s+listening\s+to|what(?:\'?s|\s+is)\s+this\s+music|'
-                r'current\s+song|current\s+track|song\s+info|track\s+info|now\s+playing'
+                r'who\s+(?:is\s+singing|sings\s+this)|'
+                r'song\s+name|track\s+name|current\s+song|current\s+track|song\s+info|track\s+info|now\s+playing'
                 r')\b'
             )
             is_now_playing = bool(re.search(now_playing_pattern, clean_cmd, re.I)) or (
-                "what" in clean_cmd
-                and any(s in clean_cmd for s in ("song", "track", "name", "playing", "music"))
-                and not any(p in clean_cmd for p in ("play", "search", "skip"))
+                ('what' in clean_cmd or 'was' in clean_cmd or 'name' in clean_cmd)
+                and any(s in clean_cmd for s in ('song', 'track', 'name', 'playing', 'music', 'title', 'singing', 'sings'))
+                and not any(p in clean_cmd for p in ('play', 'search', 'skip', 'forward', 'rewind'))
             )
             if is_now_playing:
                 cur = self.cog.current.get(self.guild_id)
                 if cur:
                     title = cur.get("title") or cur.get("name") or "Untitled Track"
                     artist = cur.get("artist") or "Juice WRLD"
-                    np_speech = get_persona_response("now_playing", persona, title=title, artist=artist)
-                    await speak_in_voice(guild, np_speech, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, f"🎵 **[Garmin]** Currently playing: **{title}** — *{artist}* 🎶")
+                    np_speech = get_persona_response("now_playing", persona, title=title, artist=artist)
+                    await speak_in_voice(guild, np_speech, persona=persona)
                 else:
-                    no_music_speech = get_persona_response("no_music", persona)
-                    await speak_in_voice(guild, no_music_speech, persona=persona)
                     self._unlock_session()
                     await self._notify(guild, "ℹ️ **[Garmin]** No track is currently playing.")
+                    no_music_speech = get_persona_response("no_music", persona)
+                    await speak_in_voice(guild, no_music_speech, persona=persona)
                 return
 
             # PRECEDENCE 8: PAUSE / STOP
