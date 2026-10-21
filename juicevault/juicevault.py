@@ -50,6 +50,7 @@ class JuiceVault(commands.Cog):
     VIP_AUDIO_SLICED = os.path.join(tempfile.gettempdir(), "juicevault_vip_sliced_6s.wav")
     VIP_AUDIO_RAW = os.path.join(tempfile.gettempdir(), "juicevault_vip_raw.mp3")
     VIP_COOLDOWN_SECONDS = 20.0
+    VIP_VOLUME = 0.30  # 30% volume for VIP greeting and Skizzoo entrance intros
 
     SKIZZOO_VIDEO_URL = "https://www.youtube.com/watch?v=QeX0wYlnUt0"
     SKIZZOO_START_OFFSET = 1.0
@@ -1523,10 +1524,10 @@ class JuiceVault(commands.Cog):
 
         exe = self._ffmpeg_executable()
         before_opts = "-nostdin"
-        extra_opts = "-vn"
+        extra_opts = f"-vn -filter:a volume={self.VIP_VOLUME:.2f}"
         if not is_pre_sliced:
             before_opts = f"-nostdin -ss {self.SKIZZOO_START_OFFSET:.3f}"
-            extra_opts = f"-vn -t {self.SKIZZOO_PLAY_DURATION:.3f}"
+            extra_opts = f"-vn -t {self.SKIZZOO_PLAY_DURATION:.3f} -filter:a volume={self.VIP_VOLUME:.2f}"
 
         from .voice_recognition import DuckingAudioSource
         mixer = getattr(voice, "_jv_mixer", None)
@@ -1546,11 +1547,11 @@ class JuiceVault(commands.Cog):
         if voice.is_playing() and mixer is not None:
             entrance_source = discord.FFmpegPCMAudio(audio_path, executable=exe, before_options=before_opts, options=extra_opts)
             mixer.set_overlay(entrance_source)
-            print(f"[JuiceVault Entrance] 👑 Playing Skizzoo entrance theme (1s-6s) over ducked music (18%) in '{guild.name}'")
+            print(f"[JuiceVault Entrance] 👑 Playing Skizzoo entrance theme (1s-6s at 30% volume) over ducked music (18%) in '{guild.name}'")
         elif not voice.is_playing():
             entrance_source = discord.FFmpegPCMAudio(audio_path, executable=exe, before_options=before_opts, options=extra_opts)
             voice.play(entrance_source)
-            print(f"[JuiceVault Entrance] 👑 Playing Skizzoo entrance theme (1s-6s) directly in '{guild.name}'")
+            print(f"[JuiceVault Entrance] 👑 Playing Skizzoo entrance theme (1s-6s at 30% volume) directly in '{guild.name}'")
 
     def _is_vip(self, member) -> bool:
         if not member:
@@ -1655,10 +1656,10 @@ class JuiceVault(commands.Cog):
 
         exe = self._ffmpeg_executable()
         before_opts = "-nostdin"
-        extra_opts = "-vn"
+        extra_opts = f"-vn -filter:a volume={self.VIP_VOLUME:.2f}"
         if not is_pre_sliced:
             before_opts = f"-nostdin -ss {self.VIP_START_OFFSET:.3f}"
-            extra_opts = f"-vn -t {self.VIP_PLAY_DURATION:.3f}"
+            extra_opts = f"-vn -t {self.VIP_PLAY_DURATION:.3f} -filter:a volume={self.VIP_VOLUME:.2f}"
 
         from .voice_recognition import DuckingAudioSource
         mixer = getattr(voice, "_jv_mixer", None)
@@ -1678,11 +1679,11 @@ class JuiceVault(commands.Cog):
         if voice.is_playing() and mixer is not None:
             vip_source = discord.FFmpegPCMAudio(vip_audio, executable=exe, before_options=before_opts, options=extra_opts)
             mixer.set_overlay(vip_source)
-            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting (4s-10s) over ducked music (18%) in '{guild.name}'")
+            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting (4s-10s at 30% volume) over ducked music (18%) in '{guild.name}'")
         elif not voice.is_playing():
             vip_source = discord.FFmpegPCMAudio(vip_audio, executable=exe, before_options=before_opts, options=extra_opts)
             voice.play(vip_source)
-            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting (4s-10s) directly in '{guild.name}'")
+            print(f"[JuiceVault Entrance] ⭐ Playing VIP greeting (4s-10s at 30% volume) directly in '{guild.name}'")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -2656,7 +2657,7 @@ class JuiceVault(commands.Cog):
     async def set_voice_persona(self, ctx, persona: str = None):
         """Set or view the voice persona for Garmin (anime/vtuber, mommy, rude, natural)."""
         valid = {
-            "anime": "🎀 Anime / VTuber Girl (cute & energetic - Microsoft Ana)",
+            "anime": "🎀 Anime / VTuber Girl (cheerful & expressive - Microsoft Jenny)",
             "mommy": "👠 Dommy Mommy (sultry & dominant - Microsoft Sonia)",
             "rude": "💢 Rude / Tsundere (sarcastic & edgy - Microsoft Aria)",
             "natural": "🎧 Natural Assistant (standard & clear - Microsoft Ava)"
@@ -2675,7 +2676,7 @@ class JuiceVault(commands.Cog):
             await ctx.send(
                 f"🎙️ **Current Voice Persona:** {valid.get(current, current)}\n\n"
                 f"**Available personas:**\n"
-                f"• `{ctx.clean_prefix}4jv persona anime` (or `vtuber`) — Cute anime & VTuber girl voice (`en-US-AnaNeural`)\n"
+                f"• `{ctx.clean_prefix}4jv persona anime` (or `vtuber`) — Cheerful anime & VTuber streamer voice (`en-US-JennyNeural`)\n"
                 f"• `{ctx.clean_prefix}4jv persona mommy` — Sultry dommy mommy voice (`en-GB-SoniaNeural`)\n"
                 f"• `{ctx.clean_prefix}4jv persona rude` — Sarcastic tsundere voice (`en-US-AriaNeural`)\n"
                 f"• `{ctx.clean_prefix}4jv persona natural` — Clean natural assistant (`en-US-AvaMultilingualNeural`)\n\n"

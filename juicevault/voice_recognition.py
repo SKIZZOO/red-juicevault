@@ -1167,21 +1167,21 @@ def get_persona_response(action: str, persona: str = "anime", **kwargs) -> str:
 
 async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
     """Generate crystal-clear Azure Neural TTS using edge-tts.
-    - 'anime': Authentic bubbly anime VTuber girl voice (Microsoft Ana, pitch +4Hz, rate +3%)
+    - 'anime': Energetic anime VTuber streamer girl voice (Microsoft Jenny, pitch +6Hz, rate +4%)
     - 'mommy': Sultry dommy mommy voice (Microsoft Sonia, pitch -2Hz, rate -4%)
     - 'rude': Sarcastic tsundere voice (Microsoft Aria, pitch +2Hz, rate +4%)
     - 'natural': Clean natural assistant voice (Microsoft Ava Multilingual)"""
     if not HAVE_EDGE_TTS:
         return b''
     voice_map = {
-        "anime": "en-US-AnaNeural",
+        "anime": "en-US-JennyNeural",
         "mommy": "en-GB-SoniaNeural",
         "rude": "en-US-AriaNeural",
         "natural": "en-US-AvaMultilingualNeural"
     }
-    voice = voice_map.get(persona, "en-US-AnaNeural")
-    pitch = "+4Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
-    rate = "+3%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
+    voice = voice_map.get(persona, "en-US-JennyNeural")
+    pitch = "+6Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
+    rate = "+4%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
 
     # For anime/VTuber persona, phonetically pronounce cute chat slang for natural voice delivery:
     spoken_text = clean_tts
