@@ -1296,7 +1296,9 @@ _PERSONA_RESPONSES = {
             "Command not recognized, master! Say Garmin help! Tee-hee~"
         ],
         "persona_activated": [
-            "Anime girl voice activated! Yes master, nya~ uwu!"
+            "Yay! Anime VTuber voice activated! Hai hai master, nya~ uwu!",
+            "Kon-kon! VTuber mode is live! Ready for your commands, master! UwU~",
+            "Anime girl voice online! What should we listen to today, master? Tee-hee~"
         ]
     },
     "mommy": {
@@ -1696,23 +1698,29 @@ def get_persona_response(action: str, persona: str = "anime", **kwargs) -> str:
 
 async def _synthesize_edge_tts(clean_tts: str, persona: str = "anime") -> bytes:
     """Generate crystal-clear Azure Neural TTS using edge-tts.
-    - 'anime': Adorable anime girl voice (Microsoft Emma Multilingual, pitch +6Hz, rate +3%)
+    - 'anime': Authentic bubbly anime VTuber girl voice (Microsoft Ana, pitch +4Hz, rate +3%)
     - 'mommy': Sultry dommy mommy voice (Microsoft Sonia, pitch -2Hz, rate -4%)
     - 'rude': Sarcastic tsundere voice (Microsoft Aria, pitch +2Hz, rate +4%)
     - 'natural': Clean natural assistant voice (Microsoft Ava Multilingual)"""
     if not HAVE_EDGE_TTS:
         return b''
     voice_map = {
-        "anime": "en-US-EmmaMultilingualNeural",
+        "anime": "en-US-AnaNeural",
         "mommy": "en-GB-SoniaNeural",
         "rude": "en-US-AriaNeural",
         "natural": "en-US-AvaMultilingualNeural"
     }
-    voice = voice_map.get(persona, "en-US-EmmaMultilingualNeural")
-    pitch = "+6Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
+    voice = voice_map.get(persona, "en-US-AnaNeural")
+    pitch = "+4Hz" if persona == "anime" else ("-2Hz" if persona == "mommy" else ("+2Hz" if persona == "rude" else "+0Hz"))
     rate = "+3%" if persona == "anime" else ("-4%" if persona == "mommy" else ("+4%" if persona == "rude" else "+0%"))
+
+    # For anime/VTuber persona, phonetically pronounce cute chat slang for natural voice delivery:
+    spoken_text = clean_tts
+    if persona == "anime":
+        spoken_text = re.sub(r'\b[uU][wW][uU]\b', 'oo-woo', spoken_text)
+
     try:
-        comm = edge_tts.Communicate(clean_tts, voice, pitch=pitch, rate=rate)
+        comm = edge_tts.Communicate(spoken_text, voice, pitch=pitch, rate=rate)
         chunks = []
         async for chunk in comm.stream():
             if chunk.get("type") == "audio" and chunk.get("data"):
@@ -2587,13 +2595,13 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                 await self._notify(guild, f"💢 **[Garmin]** {user_name}: *\"{text}\"* ➔ **Rude / Tsundere** voice activated! 💥")
                 return
 
-            if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:anime|anima|anim|ani\s+me)(?:\s+(?:girl\s+)?(?:voice|mode))?\b', clean_cmd, re.I) \
-               or re.search(r'\b(?:anime\s+girl|anima\s+girl|i\s+need\s+my\s+girl\s+voice|girl\s+voice|uwu\s+voice|anime\s+voice|anima\s+voice)\b', clean_cmd, re.I):
+            if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:anime|anima|anim|ani\s+me|vtuber|v-tuber|v\s+tuber)(?:\s+(?:girl\s+)?(?:voice|mode))?\b', clean_cmd, re.I) \
+               or re.search(r'\b(?:anime\s+girl|anima\s+girl|i\s+need\s+my\s+girl\s+voice|girl\s+voice|uwu\s+voice|anime\s+voice|anima\s+voice|vtuber\s+voice|vtuber\s+mode|v-tuber\s+voice)\b', clean_cmd, re.I):
                 await set_guild_persona(self.cog, self.guild_id, "anime")
                 confirm = get_persona_response("persona_activated", "anime")
                 await speak_in_voice(guild, confirm, persona="anime")
                 self._unlock_session()
-                await self._notify(guild, f"✨ **[Garmin]** {user_name}: *\"{text}\"* ➔ **Anime Girl (UwU)** voice activated! 🎀")
+                await self._notify(guild, f"✨ **[Garmin]** {user_name}: *\"{text}\"* ➔ **Anime & VTuber Girl** voice activated! 🎀")
                 return
 
             if re.search(r'\b(?:(?:switch\s+to|change\s+to|changed\s+to|set|use|activate)\s+)?(?:mommy|dommy\s+mommy)(?:\s+(?:voice|mode))?\b', clean_cmd, re.I) \
