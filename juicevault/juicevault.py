@@ -151,6 +151,8 @@ class JuiceVault(commands.Cog):
                 asyncio.create_task(self.config.guild(guild).volume.set(int(vol * 100)))
             except Exception:
                 pass
+        if hasattr(self, "web_remote") and self.web_remote:
+            asyncio.create_task(self.web_remote.broadcast_state(guild_id))
 
     async def cog_load(self):
         await self._ensure_session()
@@ -1353,6 +1355,8 @@ class JuiceVault(commands.Cog):
         if voice.is_playing():
             self.play_positions[guild_id] = self.get_position(guild_id)
             voice.pause()
+            if hasattr(self, "web_remote") and self.web_remote:
+                asyncio.create_task(self.web_remote.broadcast_state(guild_id))
             return True
         return False
 
@@ -1365,6 +1369,8 @@ class JuiceVault(commands.Cog):
         if voice.is_paused():
             voice._jv_started_at = time.monotonic()
             voice.resume()
+            if hasattr(self, "web_remote") and self.web_remote:
+                asyncio.create_task(self.web_remote.broadcast_state(guild_id))
             return True
         return False
 

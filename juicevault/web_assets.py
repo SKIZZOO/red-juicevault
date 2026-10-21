@@ -195,6 +195,32 @@ HTML_INDEX = """<!DOCTYPE html>
       border: 1px solid var(--border);
       color: var(--text-muted);
     }
+    .resync-btn {
+      cursor: pointer;
+      background: rgba(168, 85, 247, 0.12);
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      color: var(--accent);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+    .resync-btn:hover {
+      background: rgba(168, 85, 247, 0.22);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .resync-btn:active {
+      transform: scale(0.94);
+    }
+    .resync-spinning {
+      animation: spinResync 0.75s linear infinite;
+    }
+    @keyframes spinResync {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
     .status-dot {
       width: 6px;
       height: 6px;
@@ -3374,6 +3400,14 @@ HTML_INDEX = """<!DOCTYPE html>
         <span class="status-dot" id="connDot"></span>
         <span id="connLabel" style="font-family:'JetBrains Mono',monospace;">Live</span>
       </div>
+      <button class="status-badge resync-btn" id="btnResync" onclick="triggerManualResync()" title="Resync Live State with Bot">
+        <svg class="icon-svg resync-icon" id="resyncIcon" style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        <span>Resync</span>
+      </button>
     </div>
   </header>
 
@@ -4968,7 +5002,7 @@ HTML_INDEX = """<!DOCTYPE html>
         <span class="voice-pulse-dot" id="voicePulseDot"></span>
         <span class="voice-hud-title">Voice Control</span>
         <span class="voice-wake-badge" id="voiceWakeBadge" style="font-size:0.62rem; font-weight:800; background:rgba(56,189,248,0.18); border:1px solid rgba(56,189,248,0.4); color:#38bdf8; border-radius:999px; padding:2px 7px; font-family:'JetBrains Mono',monospace;">Wake: "Garmin"</span>
-        <span class="voice-lang-badge" id="voiceLangBadge">RO / EN</span>
+        <span class="voice-lang-badge" id="voiceLangBadge">VOICE AI</span>
       </div>
       <div class="voice-hud-header-actions">
         <button class="voice-icon-btn" id="voiceHandsFreeBtn" onclick="toggleVoiceHandsFree()" title="Toggle Continuous Hands-Free Listening">
@@ -4980,15 +5014,16 @@ HTML_INDEX = """<!DOCTYPE html>
       </div>
     </div>
     <div class="voice-hud-body">
-      <div class="voice-hud-transcript" id="voiceTranscript">Say "Garmin" + command (e.g. "Garmin, skip" or "Garmin, pause")</div>
+      <div class="voice-hud-transcript" id="voiceTranscript">Say "Garmin" + command (e.g. "Garmin, skip" or "Garmin, volume 80")</div>
       <div class="voice-hud-feedback" id="voiceFeedback">Listening for wake word "Garmin"...</div>
     </div>
     <div class="voice-hud-hints">
       <span class="voice-hint-pill" onclick="triggerVoiceHint('skip')">"Garmin Skip"</span>
-      <span class="voice-hint-pill" onclick="triggerVoiceHint('urmatoarea')">"Garmin Următoarea"</span>
       <span class="voice-hint-pill" onclick="triggerVoiceHint('skip 10')">"Garmin +10s"</span>
       <span class="voice-hint-pill" onclick="triggerVoiceHint('pause')">"Garmin Pause"</span>
       <span class="voice-hint-pill" onclick="triggerVoiceHint('play')">"Garmin Play"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('volume 80')">"Garmin Vol 80"</span>
+      <span class="voice-hint-pill" onclick="triggerVoiceHint('resync')">"Garmin Resync"</span>
       <span class="voice-hint-pill" onclick="triggerVoiceHint('shuffle')">"Garmin Shuffle"</span>
     </div>
   </div>
@@ -6140,20 +6175,21 @@ HTML_INDEX = """<!DOCTYPE html>
       }
     }
 
+    let lastStateReceivedTime = Date.now();
+
     function applyState(state) {
       if (!state) return;
       currentState = state;
+      lastStateReceivedTime = Date.now();
       try {
         localStorage.setItem('jv_state_cache', JSON.stringify(state));
       } catch (e) {}
       document.getElementById('connDot').classList.remove('offline');
       document.getElementById('connLabel').innerText = 'Live';
 
-      if (state.guild) {
-        if (!currentGuildId && state.guild.id) {
-          currentGuildId = String(state.guild.id);
-          localStorage.setItem('jv_guild_id', currentGuildId);
-        }
+      if (state.guild && state.guild.id) {
+        currentGuildId = String(state.guild.id);
+        localStorage.setItem('jv_guild_id', currentGuildId);
         const bName = document.getElementById('guildBadgeName');
         if (bName) bName.innerText = state.guild.name || state.guild.id;
         document.getElementById('guildName').innerText = state.guild.name || state.guild.id;
@@ -6406,6 +6442,62 @@ HTML_INDEX = """<!DOCTYPE html>
         }
       } catch (e) {
         console.error('Fetch status error:', e);
+      }
+    }
+
+    // Automatic periodic watchdog: if WebSocket is disconnected or state hasn't updated in 4s, poll fetchStatus
+    setInterval(() => {
+      const isWsClosed = !ws || ws.readyState !== WebSocket.OPEN;
+      const isStale = (Date.now() - lastStateReceivedTime) > 4000;
+      if (isWsClosed || isStale) {
+        fetchStatus().catch(() => {});
+      }
+    }, 3500);
+
+    // Resync button handler
+    async function triggerManualResync() {
+      const btn = document.getElementById('btnResync');
+      const icon = document.getElementById('resyncIcon');
+      if (icon) icon.classList.add('resync-spinning');
+      if (btn) btn.style.pointerEvents = 'none';
+
+      try {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          connectWS();
+        } else {
+          try {
+            ws.send(JSON.stringify({ action: 'resync', guild_id: currentGuildId }));
+          } catch (_) {}
+        }
+
+        const res = await fetch(`/api/playback/resync?guild_id=${encodeURIComponent(currentGuildId || '')}&_t=${Date.now()}&${apiQuery()}`, {
+          headers: apiHeaders()
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.state) {
+            applyState(data.state);
+            if (data.guild_id) {
+              currentGuildId = String(data.guild_id);
+              localStorage.setItem('jv_guild_id', currentGuildId);
+            }
+          }
+        } else {
+          await fetchStatus();
+        }
+
+        if (typeof loadQueue === 'function') loadQueue();
+        if (typeof fetchFavorites === 'function') fetchFavorites();
+        showToast('Resynced live state with bot!');
+      } catch (err) {
+        console.warn('Manual resync error:', err);
+        try { await fetchStatus(); } catch (_) {}
+        showToast('Resynced with bot');
+      } finally {
+        setTimeout(() => {
+          if (icon) icon.classList.remove('resync-spinning');
+          if (btn) btn.style.pointerEvents = 'auto';
+        }, 600);
       }
     }
 
@@ -6744,6 +6836,25 @@ HTML_INDEX = """<!DOCTYPE html>
     function addSearchResultByIndex(idx, playNow = false) {
       const item = currentSearchResults[idx];
       if (item) addToQueue(item, playNow);
+    }
+
+    async function performSearch(query, autoPlay = true, mode = null) {
+      if (!query) return;
+      if (typeof switchTab === 'function') switchTab('search');
+      if (typeof switchMobileNav === 'function') switchMobileNav('search');
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) searchInput.value = query;
+      if (mode) {
+        setSearchMode(mode);
+      } else {
+        const isUrl = query.startsWith('http://') || query.startsWith('https://') || query.startsWith('www.') || query.includes('youtube.com') || query.includes('youtu.be') || query.includes('soundcloud.com') || query.includes('bandcamp.com');
+        if (isUrl) setSearchMode('external');
+      }
+      await executeSearch();
+      if (autoPlay && currentSearchResults && currentSearchResults.length > 0) {
+        addSearchResultByIndex(0, true);
+        showToast(`Playing: ${currentSearchResults[0].title || query}`);
+      }
     }
 
     async function addToQueue(item, playNow = false) {
@@ -10184,13 +10295,16 @@ HTML_INDEX = """<!DOCTYPE html>
 
       rec.onend = function() {
         voiceIsListening = false;
-        if (voiceHandsFreeMode) {
+        const hud = document.getElementById('voiceCmdHud');
+        const isHudVisible = hud && hud.style.display !== 'none';
+        if (voiceHandsFreeMode || isHudVisible) {
           clearTimeout(voiceRestartTimer);
           voiceRestartTimer = setTimeout(() => {
-            if (voiceHandsFreeMode) {
+            const h = document.getElementById('voiceCmdHud');
+            if (voiceHandsFreeMode || (h && h.style.display !== 'none')) {
               startVoiceListening();
             }
-          }, 350);
+          }, 250);
         } else {
           updateVoiceUIState(false, 'Voice recognition paused');
         }
@@ -10291,8 +10405,8 @@ HTML_INDEX = """<!DOCTYPE html>
       const fb = document.getElementById('voiceFeedback');
       const now = Date.now();
 
-      // Check for wake word "garmin" (or common speech recognition variants)
-      const wakeRegex = /\\b(?:hey\\s+|ok\\s+|hei\\s+|ba\\s+|bai\\s+|alo\\s+|yo\\s+)?(?:garmin|garmen|garmon|garmyn|carmin)\\b/i;
+      // Check for wake word "garmin" (and English phonetics, salutations, and whisper fallbacks)
+      const wakeRegex = /\\b(?:(?:hey|ok|okay|hei|alo|yo|hi|hello)\\s+)?(?:garmin|garmen|garmon|carmen|carmin|darmin|karmin|german|germane|germain|garment|edgar|elgar|egger|gaming|darling|god\\s+i'?m\\s+in|egger\\s+man|got\\s+him\\s+in|a\\s+garden|call\\s+man)\\b/i;
       const wakeMatch = clean.match(wakeRegex);
 
       let commandPart = '';
@@ -10302,16 +10416,17 @@ HTML_INDEX = """<!DOCTYPE html>
         commandPart = clean.substring(afterWakeIndex).trim().replace(/^[,.:;!?-]+/, '').trim();
 
         if (!commandPart) {
-          // User only said "Garmin!" -> open 7-second wake listening window
-          voiceWakeActiveUntil = now + 7000;
+          // User only said "Hey Garmin!" -> open 12-second wake listening window
+          voiceWakeActiveUntil = now + 12000;
+          playSiriChime();
           updateVoiceUIState(true, 'Yes? Garmin is listening... 🟢', true);
           showToast('Garmin is listening... Say your command!');
           return;
         }
-        // User provided inline command: "Garmin skip", "Garmin pause", etc.
+        // User provided inline command: "Garmin skip", "Garmin volume 80", etc.
         voiceWakeActiveUntil = 0;
       } else {
-        // No wake word in this sentence: check if within active wake window
+        // No wake word in this sentence: check if within active 12-second conversational window
         if (now < voiceWakeActiveUntil) {
           commandPart = clean;
           voiceWakeActiveUntil = 0;
@@ -10359,10 +10474,83 @@ HTML_INDEX = """<!DOCTYPE html>
       const fb = document.getElementById('voiceFeedback');
       const setFeedback = (msg) => { if (fb) fb.innerText = msg; };
 
-      const clean = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+      const clean = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
       if (!clean) {
         setFeedback('Garmin is listening... Say your command!');
         playSiriChime();
+        return;
+      }
+
+      // Resync / Reconnect / Refresh state
+      if (clean === 'resync' || clean === 'sync' || clean === 'refresh' || clean === 'reconnect' || clean.includes('resync') || clean.includes('sync state')) {
+        playSiriChime();
+        setFeedback('Garmin: Resyncing State...');
+        triggerManualResync();
+        return;
+      }
+
+      // Persona: Anime & VTuber
+      if (clean.includes('anime') || clean.includes('vtuber') || clean.includes('v-tuber') || clean.includes('uwu') || clean.includes('girl voice')) {
+        playSiriChime();
+        setFeedback('Garmin: Anime Persona');
+        action('persona', { persona: 'anime' });
+        showToast('Garmin: Switched to Anime persona ✨');
+        return;
+      }
+
+      // Persona: Dommy Mommy
+      if (clean.includes('mommy') || clean.includes('dommy')) {
+        playSiriChime();
+        setFeedback('Garmin: Mommy Persona');
+        action('persona', { persona: 'mommy' });
+        showToast('Garmin: Switched to Dommy Mommy persona 💋');
+        return;
+      }
+
+      // Persona: Rude & Tsundere
+      if (clean.includes('rude') || clean.includes('tsundere') || clean.includes('mean') || clean.includes('toxic') || clean.includes('brat')) {
+        playSiriChime();
+        setFeedback('Garmin: Rude Persona');
+        action('persona', { persona: 'rude' });
+        showToast('Garmin: Switched to Rude / Tsundere persona 💢');
+        return;
+      }
+
+      // Persona: Natural Assistant
+      if (clean.includes('natural') || clean.includes('normal') || clean.includes('default assistant') || clean.includes('default voice')) {
+        playSiriChime();
+        setFeedback('Garmin: Natural Persona');
+        action('persona', { persona: 'natural' });
+        showToast('Garmin: Switched to Natural persona 🎙️');
+        return;
+      }
+
+      // Play Favorite: e.g. "play favorite", "play favorites", "play fav 1", "play favorite 2"
+      const playFavMatch = clean.match(/(?:play\\s+(?:my\\s+)?favorite(?:s)?|play\\s+fav(?:s)?)\\s*(.*)/i);
+      if (playFavMatch) {
+        playSiriChime();
+        const favTarget = playFavMatch[1] ? playFavMatch[1].trim() : '1';
+        setFeedback(`Garmin: Playing Favorite ${favTarget || '1'}`);
+        action('playfav', { item: favTarget || '1', play_now: true });
+        return;
+      }
+
+      // Favorite / Like Toggle
+      if (clean.includes('favorite') || clean.includes('like') || clean.includes('love this song') || clean.includes('save this song') || clean.includes('add to favorites') || clean.includes('star this song')) {
+        playSiriChime();
+        setFeedback('Garmin: Toggle Favorite');
+        if (typeof toggleCurrentSongFavorite === 'function') {
+          toggleCurrentSongFavorite();
+        }
+        return;
+      }
+
+      // What is this song / Title query
+      if (clean.includes('what song') || clean.includes('what is this song') || clean.includes("what's this song") || clean.includes("what's the name") || clean.includes('song name') || clean.includes('track name')) {
+        playSiriChime();
+        const currentTitle = currentState && currentState.track ? currentState.track.title : 'No track playing';
+        setFeedback(`Now Playing: ${currentTitle}`);
+        showToast(`Now Playing: ${currentTitle}`);
         return;
       }
 
@@ -10382,11 +10570,12 @@ HTML_INDEX = """<!DOCTYPE html>
         return;
       }
 
-      // Skip / Next track
+      // Skip 1 Track
       if (
         clean === 'skip' || clean.startsWith('skip') ||
         clean === 'next' || clean.includes('next song') || clean.includes('next track') ||
-        clean.includes('skip this song') || clean.includes('skip song') || clean.includes('skip track')
+        clean.includes('skip this song') || clean.includes('skip song') || clean.includes('skip track') ||
+        clean.includes('the escape') || clean.includes('the scape') || clean.includes('they skip') || clean.includes('the skip') || clean.includes('day skip')
       ) {
         playSiriChime();
         setFeedback('Garmin: Skip Track');
@@ -10397,8 +10586,9 @@ HTML_INDEX = """<!DOCTYPE html>
       // Previous track
       if (
         clean === 'prev' || clean === 'previous' || clean.includes('previous song') ||
-        clean.includes('previous track') || clean.includes('go back') || clean.includes('last song')
+        clean.includes('previous track') || clean.includes('go back') || clean.includes('last song') || clean.includes('replay')
       ) {
+        playSiriChime();
         setFeedback('Garmin: Previous Track');
         action('previous');
         return;
@@ -10407,18 +10597,20 @@ HTML_INDEX = """<!DOCTYPE html>
       // Pause
       if (
         clean === 'pause' || clean === 'stop' || clean.includes('pause playback') ||
-        clean.includes('pause music') || clean.includes('stop playing') || clean.includes('shut up') || clean.includes('hold on')
+        clean.includes('pause music') || clean.includes('stop playing') || clean.includes('shut up') || clean.includes('hold on') || clean === 'wait'
       ) {
+        playSiriChime();
         setFeedback('Garmin: Pause');
         action('pause');
         return;
       }
 
-      // Play / Resume
+      // Pure Play / Resume (not play <song>)
       if (
-        clean === 'play' || clean === 'start' || clean === 'resume' ||
+        clean === 'play' || clean === 'start' || clean === 'resume' || clean === 'play music' ||
         clean.includes('unpause') || clean.includes('continue') || clean.includes('resume playback') || clean.includes('resume music')
       ) {
+        playSiriChime();
         setFeedback('Garmin: Play');
         action('play');
         return;
@@ -10426,6 +10618,7 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // Shuffle
       if (clean.includes('shuffle') || clean.includes('mix')) {
+        playSiriChime();
         setFeedback('Garmin: Shuffle Queue');
         action('shuffle');
         return;
@@ -10433,27 +10626,49 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // Repeat / Loop
       if (clean.includes('repeat') || clean.includes('loop')) {
+        playSiriChime();
         setFeedback('Garmin: Repeat');
         action('repeat');
         return;
       }
 
-      // Volume control (e.g. "volume 80", "set volume to 50")
-      const volMatch = clean.match(/(?:volume|vol|set volume to|sound to)\\s*(\\d{1,3})/);
-      if (volMatch) {
-        const val = Math.max(0, Math.min(100, parseInt(volMatch[1], 10)));
-        setFeedback(`Garmin: Volume ${val}%`);
-        action('volume', { volume: val });
+      // Relative Volume: up / down / mute / max
+      if (clean.includes('volume up') || clean.includes('louder') || clean.includes('turn it up')) {
+        playSiriChime();
+        const curVol = (currentState && typeof currentState.volume === 'number') ? currentState.volume : 100;
+        const newVol = Math.min(100, curVol + 15);
+        setFeedback(`Garmin: Volume ${newVol}%`);
+        action('volume', { volume: newVol });
+        return;
+      }
+      if (clean.includes('volume down') || clean.includes('quieter') || clean.includes('turn it down') || clean.includes('lower')) {
+        playSiriChime();
+        const curVol = (currentState && typeof currentState.volume === 'number') ? currentState.volume : 100;
+        const newVol = Math.max(0, curVol - 15);
+        setFeedback(`Garmin: Volume ${newVol}%`);
+        action('volume', { volume: newVol });
+        return;
+      }
+      if (clean === 'mute' || clean.includes('mute volume') || clean === 'silence') {
+        playSiriChime();
+        setFeedback('Garmin: Muted (0%)');
+        action('volume', { volume: 0 });
+        return;
+      }
+      if (clean.includes('max volume') || clean.includes('maximum volume') || clean.includes('full volume')) {
+        playSiriChime();
+        setFeedback('Garmin: Volume 100%');
+        action('volume', { volume: 100 });
         return;
       }
 
-      // Like / Favorite
-      if (clean.includes('favorite') || clean.includes('like') || clean.includes('love this song') || clean.includes('save this song') || clean.includes('add to favorites')) {
+      // Explicit Volume (e.g. "volume 80", "set volume to 50", "set of volume to 10%", "vol 60")
+      const volMatch = clean.match(/(?:(?:set\\s+(?:the|of)?\\s*)?volume|vol|sound)\\s*(?:to\\s*)?(\\d{1,3})/i);
+      if (volMatch) {
         playSiriChime();
-        setFeedback('Garmin: Toggle Favorite');
-        if (typeof toggleCurrentSongFavorite === 'function') {
-          toggleCurrentSongFavorite();
-        }
+        const val = Math.max(0, Math.min(100, parseInt(volMatch[1], 10)));
+        setFeedback(`Garmin: Volume ${val}%`);
+        action('volume', { volume: val });
         return;
       }
 
@@ -10465,29 +10680,19 @@ HTML_INDEX = """<!DOCTYPE html>
           playSiriChime();
           setFeedback(`Garmin YouTube: "${ytQ}"...`);
           showToast(`Garmin YouTube: "${ytQ}"`);
-          if (typeof switchTab === 'function') switchTab('search');
-          const searchInput = document.getElementById('searchInput');
-          if (searchInput) {
-            searchInput.value = ytQ;
-            if (typeof performSearch === 'function') performSearch(ytQ);
-          }
+          performSearch(ytQ, true, 'external');
           return;
         }
       }
 
-      // Search & Play query ("play Lucid Dreams", "search Drake", "listen to Robbery")
+      // Search & Play query ("play Lucid Dreams", "search Drake", "listen to Robbery", "put on Bandit")
       const playMatch = clean.match(/^(?:play|listen to|search|find|stream|put on)\\s+(?:track|song)?\\s*(?:by)?\\s*(.+)$/i);
       if (playMatch && playMatch[1]) {
         playSiriChime();
         const query = playMatch[1].trim();
         setFeedback(`Garmin Searching: "${query}"...`);
         showToast(`Garmin Search: "${query}"`);
-        if (typeof switchTab === 'function') switchTab('search');
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) {
-          searchInput.value = query;
-          if (typeof performSearch === 'function') performSearch(query);
-        }
+        performSearch(query, true);
         return;
       }
 

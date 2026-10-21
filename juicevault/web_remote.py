@@ -321,6 +321,11 @@ class JuiceVaultWebRemote:
                 add_route("/api/playback/repeat", self._api_repeat)
                 add_route("/api/playback/eq", self._api_eq)
                 add_route("/api/playback/set_eq", self._api_eq)
+                add_route("/api/playback/resync", self._api_resync)
+                add_route("/api/playback/sync", self._api_resync)
+                add_route("/api/playback/volume", self._api_volume)
+                add_route("/api/playback/playfav", self._api_playfav)
+                add_route("/api/playback/persona", self._api_persona)
 
             app.router.add_post("/api/category", self._api_category)
             app.router.add_get("/api/category/tracks", self._api_category_tracks)
@@ -997,12 +1002,12 @@ class JuiceVaultWebRemote:
         return False
 
     def _resolve_guild(self, request=None, target_id=None):
-        """Find the target Discord guild for player operations."""
+        """Find the target Discord guild for player operations, prioritizing active playback."""
         main = self._get_main_cog()
         if not main:
             return None
 
-        # 1. Explicit target_id argument
+        # 1. Explicit target_id argument (e.g. user selected specific server in UI)
         if target_id is not None:
             try:
                 guild = self.bot.get_guild(int(target_id))
@@ -1011,29 +1016,50 @@ class JuiceVaultWebRemote:
             except (ValueError, TypeError):
                 pass
 
+        # Check for actively playing guild across voice clients or running player tasks
+        active_playing_guild = None
+        for vc in getattr(self.bot, "voice_clients", []):
+            if vc.guild and (vc.is_playing() or vc.is_paused() or (main and vc.guild.id in getattr(main, "tasks", {}))):
+                active_playing_guild = vc.guild
+                break
+        if not active_playing_guild and main and getattr(main, "tasks", None):
+            for gid, task in main.tasks.items():
+                if task and not task.done():
+                    g = self.bot.get_guild(gid)
+                    if g:
+                        active_playing_guild = g
+                        break
+
         if request is not None:
-            # 2. Check query string
+            # 2. Check query string or headers
+            req_gid = None
             try:
-                query_gid = request.query.get("guild_id")
-                if query_gid:
-                    guild = self.bot.get_guild(int(query_gid))
-                    if guild:
-                        return guild
+                req_gid = request.query.get("guild_id") or request.headers.get("X-Guild-ID")
             except (ValueError, TypeError, AttributeError):
                 pass
 
-            # 3. Check X-Guild-ID header
-            try:
-                hdr_gid = request.headers.get("X-Guild-ID")
-                if hdr_gid:
-                    guild = self.bot.get_guild(int(hdr_gid))
+            if req_gid:
+                try:
+                    guild = self.bot.get_guild(int(req_gid))
                     if guild:
+                        # If the requested guild is active OR no other guild is active, stick to requested guild
+                        if (active_playing_guild is None or
+                            guild.id == active_playing_guild.id or
+                            (guild.voice_client and (guild.voice_client.is_playing() or guild.voice_client.is_paused()))):
+                            return guild
+                        # If requested guild is idle but another guild is actively playing, auto-latch to active guild
+                        if active_playing_guild:
+                            return active_playing_guild
                         return guild
-            except (ValueError, TypeError, AttributeError):
-                pass
+                except (ValueError, TypeError):
+                    pass
 
-        # 4. Return first guild currently running playback
-        for gid in main.tasks:
+        # 3. Fallback: Return actively playing guild if available
+        if active_playing_guild:
+            return active_playing_guild
+
+        # 4. Return first guild currently running playback task
+        for gid in getattr(main, "tasks", {}):
             g = self.bot.get_guild(gid)
             if g:
                 return g
@@ -1141,15 +1167,19 @@ class JuiceVaultWebRemote:
         if not self.ws_clients:
             return
 
-        if guild_id:
-            guild = self.bot.get_guild(guild_id)
+        if guild_id is not None:
+            try:
+                target_gid = int(guild_id)
+            except (ValueError, TypeError):
+                target_gid = guild_id
+            guild = self.bot.get_guild(target_gid) if isinstance(target_gid, int) else None
             if not guild:
                 return
             state = await self._get_player_state(guild)
             message = json.dumps({"type": "state_update", "data": state})
             for ws in list(self.ws_clients):
                 client_gid = getattr(ws, "_guild_id", None)
-                if client_gid is None or client_gid == guild_id:
+                if client_gid is None or str(client_gid) == str(target_gid) or len(self.bot.guilds) <= 1:
                     try:
                         await ws.send_str(message)
                     except Exception:
@@ -1157,13 +1187,14 @@ class JuiceVaultWebRemote:
         else:
             for ws in list(self.ws_clients):
                 client_gid = getattr(ws, "_guild_id", None)
-                target_g = self.bot.get_guild(client_gid) if client_gid else None
+                target_g = None
+                if client_gid:
+                    try:
+                        target_g = self.bot.get_guild(int(client_gid))
+                    except (ValueError, TypeError):
+                        pass
                 if not target_g:
-                    main = self._get_main_cog()
-                    if main and main.tasks:
-                        target_g = self.bot.get_guild(next(iter(main.tasks)))
-                    elif self.bot.guilds:
-                        target_g = self.bot.guilds[0]
+                    target_g = self._resolve_guild()
                 if target_g:
                     try:
                         st = await self._get_player_state(target_g)
@@ -1273,7 +1304,17 @@ class JuiceVaultWebRemote:
         self.record_action(action_name, guild_id=gid)
         voice = guild.voice_client
 
-        if action_name == "toggle":
+        if action_name in ("resync", "sync"):
+            state = await self._get_player_state(guild)
+            if ws:
+                try:
+                    await ws.send_str(json.dumps({"type": "state_update", "data": state}))
+                    await ws.send_str(json.dumps({"type": "toast", "message": "Synced live player state"}))
+                except Exception:
+                    pass
+            await self.broadcast_state(gid)
+            return
+        elif action_name == "toggle":
             if voice and voice.is_playing():
                 if hasattr(main, "pause_playback"):
                     main.pause_playback(gid)
@@ -1438,12 +1479,55 @@ class JuiceVaultWebRemote:
             vol = max(0, min(150, int(payload.get("volume", 100))))
             if hasattr(main, "set_guild_volume"):
                 main.set_guild_volume(gid, vol / 100.0)
+        elif action_name == "skip10":
+            await main._request_seek(gid, delta=10.0)
+        elif action_name == "rewind10":
+            await main._request_seek(gid, delta=-10.0)
+        elif action_name in ("persona", "set_persona"):
+            p_val = str(payload.get("persona") or payload.get("value") or "").strip().lower()
+            if p_val in ("anime", "mommy", "rude", "natural"):
+                if not hasattr(main, "garmin_voice_persona"):
+                    main.garmin_voice_persona = {}
+                main.garmin_voice_persona[gid] = p_val
+                if ws:
+                    try:
+                        await ws.send_str(json.dumps({"type": "toast", "message": f"Garmin persona set to {p_val}"}))
+                    except Exception:
+                        pass
+        elif action_name == "playfav":
+            target = payload.get("item") or payload.get("track")
+            username = str(payload.get("username", "default")).strip().lower()
+            bot_favs = getattr(self.bot, "_jv_data", {}).get("favorites", {})
+            user_list = bot_favs.get(username) or bot_favs.get("default", [])
+            if user_list:
+                selected = None
+                if target and str(target).isdigit():
+                    idx = int(target) - 1
+                    if 0 <= idx < len(user_list):
+                        selected = user_list[idx]
+                elif target:
+                    q = str(target).lower()
+                    for t in user_list:
+                        if q in str(t.get("title", "")).lower():
+                            selected = t
+                            break
+                else:
+                    selected = user_list[0]
+                if selected:
+                    main.manual_queues.setdefault(gid, []).insert(0, dict(selected))
+                    if payload.get("play_now", True):
+                        await main._request_skip(gid, 1)
+                    if ws:
+                        try:
+                            await ws.send_str(json.dumps({"type": "toast", "message": f"Playing favorite: {selected.get('title')}"}))
+                        except Exception:
+                            pass
 
         await self.broadcast_state(gid)
         if ui:
             asyncio.create_task(ui.update_panel(gid))
 
-        if action_name in ("skip", "previous", "play_category", "set_eq", "toggle"):
+        if action_name in ("skip", "previous", "play_category", "set_eq", "toggle", "playfav", "skip10", "rewind10"):
             async def delayed_broadcast():
                 await asyncio.sleep(0.35)
                 await self.broadcast_state(gid)
@@ -1627,6 +1711,117 @@ class JuiceVaultWebRemote:
         effect = effect or "none"
         await self._dispatch_ws_action(None, guild, "set_eq", {"effect": effect})
         return web.json_response({"success": True, "effect": effect})
+
+    async def _api_resync(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
+        state = await self._get_player_state(guild)
+        await self.broadcast_state(guild.id)
+        return web.json_response({"success": True, "state": state, "guild_id": str(guild.id), "guild_name": guild.name})
+
+    async def _api_volume(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
+        main = self._get_main_cog()
+        vol_str = request.query.get("volume")
+        if not vol_str and request.can_read_body:
+            try:
+                data = await request.json()
+                vol_str = data.get("volume") or data.get("level")
+            except Exception:
+                pass
+        try:
+            vol = max(0, min(150, int(float(vol_str or 100))))
+        except (ValueError, TypeError):
+            vol = 100
+        if main and hasattr(main, "set_guild_volume"):
+            main.set_guild_volume(guild.id, vol / 100.0)
+        await self.broadcast_state(guild.id)
+        return web.json_response({"success": True, "volume": vol})
+
+    async def _api_playfav(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
+        main = self._get_main_cog()
+        if not main or guild.id not in main.tasks:
+            return web.json_response({"error": "JuiceVault is not running in this guild"}, status=400)
+
+        target = request.query.get("item") or request.query.get("track")
+        username = request.query.get("username", "default").strip().lower()
+        play_now = request.query.get("play_now") == "1"
+        if request.can_read_body:
+            try:
+                data = await request.json()
+                target = data.get("item") or data.get("track") or target
+                username = str(data.get("username") or username).strip().lower()
+                if "play_now" in data:
+                    play_now = bool(data.get("play_now"))
+            except Exception:
+                pass
+
+        bot_favs = getattr(self.bot, "_jv_data", {}).get("favorites", {})
+        user_list = bot_favs.get(username) or bot_favs.get("default", [])
+        if not user_list:
+            return web.json_response({"error": "No favorites found"}, status=404)
+
+        selected = None
+        if target and str(target).isdigit():
+            idx = int(target) - 1
+            if 0 <= idx < len(user_list):
+                selected = user_list[idx]
+        elif target and str(target).lower() == "all":
+            main.manual_queues.setdefault(guild.id, []).extend(list(user_list))
+            await self.broadcast_state(guild.id)
+            return web.json_response({"success": True, "message": f"Queued {len(user_list)} favorites"})
+        elif target:
+            q = str(target).lower()
+            for t in user_list:
+                if q in str(t.get("title", "")).lower():
+                    selected = t
+                    break
+        else:
+            selected = user_list[0]
+
+        if not selected:
+            return web.json_response({"error": "Favorite track not found"}, status=404)
+
+        main.manual_queues.setdefault(guild.id, []).insert(0, dict(selected))
+        if play_now:
+            await main._request_skip(guild.id, 1)
+        await self.broadcast_state(guild.id)
+        return web.json_response({"success": True, "track": selected})
+
+    async def _api_persona(self, request):
+        if not await self._authenticate(request):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        guild = self._resolve_guild(request)
+        if not guild:
+            return web.json_response({"error": "No guild found"}, status=404)
+        main = self._get_main_cog()
+        persona = request.query.get("persona") or request.query.get("mode")
+        if not persona and request.can_read_body:
+            try:
+                data = await request.json()
+                persona = data.get("persona") or data.get("mode")
+            except Exception:
+                pass
+        persona = str(persona or "").strip().lower()
+        if persona in ("anime", "mommy", "rude", "natural"):
+            if not hasattr(main, "garmin_voice_persona"):
+                main.garmin_voice_persona = {}
+            main.garmin_voice_persona[guild.id] = persona
+            await self.broadcast_state(guild.id)
+            return web.json_response({"success": True, "persona": persona})
+        return web.json_response({"error": "Invalid persona. Valid: anime, mommy, rude, natural"}, status=400)
 
     async def _api_category(self, request):
         if not await self._authenticate(request):
