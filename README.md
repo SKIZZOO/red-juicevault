@@ -1,256 +1,292 @@
-# Red JuiceVault 🧃
+# Red JuiceVault
 
-[![Red-DiscordBot](https://img.shields.io/badge/Red--DiscordBot-V3-red.svg)](https://github.com/Cog-Creators/Red-DiscordBot)
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Creator](https://img.shields.io/badge/Made%20by-SKIZZOO-purple.svg)](https://sosocial.lol/ski)
-[![Domain](https://img.shields.io/badge/Domain%20by-Spinti-38bdf8.svg)](https://sosocial.lol/spinti)
+<p align="center">
+  <img src="docs/icon-192.png" alt="JuiceVault Logo" width="96" height="96" />
+</p>
 
-A high-performance, polished 24/7 JuiceVault music player and companion Mobile Web Remote for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot).
+<p align="center">
+  <strong>High-Performance 24/7 Music Streaming Engine, Garmin Voice AI Assistant, and Progressive Web Remote for Red-DiscordBot</strong>
+</p>
 
-Featuring the **Garmin Live Voice AI Assistant**, a **mobile-first PWA controller**, **1:1 phase-locked audio streaming ("Listen Together")**, an interactive **50 Meme Soundboard**, **live audio EQ presets (8D, Bass Boost, Nightcore)**, **personal user favorites**, **VIP entrance themes**, and **automated Cloudflare Tunnel HTTPS**.
-
----
-
-## 📸 Showcase & Preview
-
-![JuiceVault Desktop Web Remote & Queue](docs/remote-showcase.png)
-
-![Listen Together Phase-Locked Audio Streaming & Mobile Remote](docs/mobile-listen-together.png)
-
-![JuiceVault Discord Control Panel](docs/ui-preview.png)
+<p align="center">
+  <a href="https://github.com/Cog-Creators/Red-DiscordBot"><img src="https://img.shields.io/badge/Red--DiscordBot-V3-crimson.svg?style=flat-square" alt="Red-DiscordBot"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.9+-3776AB.svg?style=flat-square&logo=python&logoColor=white" alt="Python 3.9+"></a>
+  <a href="https://discordpy.readthedocs.io/"><img src="https://img.shields.io/badge/discord.py-2.0+-5865F2.svg?style=flat-square&logo=discord&logoColor=white" alt="discord.py"></a>
+  <a href="https://www.cloudflare.com/"><img src="https://img.shields.io/badge/Cloudflare-Zero--Trust-F38020.svg?style=flat-square&logo=cloudflare&logoColor=white" alt="Cloudflare Tunnel"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e.svg?style=flat-square" alt="License: MIT"></a>
+  <a href="https://sosocial.lol/ski"><img src="https://img.shields.io/badge/Author-SKIZZOO-a855f7.svg?style=flat-square" alt="Author: SKIZZOO"></a>
+  <a href="https://sosocial.lol/spinti"><img src="https://img.shields.io/badge/Domain-Spinti-38bdf8.svg?style=flat-square" alt="Domain: Spinti"></a>
+</p>
 
 ---
 
-## ✨ Key Features
+## Overview
 
-### 🎙️ Garmin Voice AI (Hands-Free In-Discord Voice Control)
-- **Wake Word Recognition ("Garmin" / "Hey Garmin")**: Talk directly to the bot inside your Discord voice channel without touching a keyboard or phone.
-- **Siri-Style Acoustic Chimes**: Crystalline synthesized harmonic cues give instant feedback without talking over you:
-  - *Listening Chime* (D5 $\to$ A5): Plays on wake activation.
-  - *Understood Chime* (G5 $\to$ C6): Plays on command execution.
-  - *Error Chime* (A4 $\to$ E4): Plays on unrecognized speech or errors.
-- **Generous Natural Pause & 15s Wake Window**: A 1.15s silence detection threshold lets you pause naturally without being cut off. Saying *"Hey Garmin"* plays the chime and opens a 15-second wake window where you can give your command in peace.
-- **4 Distinct Voice Personas (Neural TTS & RAM PCM Cache)**:
-  - **Anime & VTuber Girl (`anime`)**: Energetic, bubbly streamer personality (Microsoft Ava / Bree Dragon HD profile).
-  - **Dommy Mommy (`mommy`)**: Sultry, teasing British neural voice (Microsoft Sonia).
-  - **Rude & Tsundere (`rude`)**: Feisty, sarcastic tsundere assistant (Microsoft Aria).
-  - **Natural Assistant (`natural`)**: Clean, crisp, professional AI assistant (Microsoft Jenny).
-- **Dynamic 18% Music Ducking & FIFO Queue**: Music ducks smoothly to 18% volume while voice lines or soundboard clips play, with a lossless FIFO queue that guarantees chimes and speech never stomp or cancel each other.
-- **Smart Multi-Tier STT Pipeline**:
-  - *Tier 1*: Local `faster-whisper` running offline on CPU/RAM with zero API costs or quota usage.
-  - *Tier 2*: Free Google STT engine for passive listening.
-  - *Tier 3*: Groq Cloud Whisper Large v3 Turbo for ultra-high-speed active command recognition.
-- **Adaptive Accent Learning**: Automatically learns your voice, accent variations, and custom wake words over time.
+Red JuiceVault is an enterprise-grade music streaming cog and ecosystem built for **Red-DiscordBot (V3)**. Designed for lossless 24/7 archive playback, interactive voice channel entertainment, and seamless remote management, JuiceVault integrates continuous speech recognition, real-time digital signal processing (DSP), zero-latency local caching, and an installable Progressive Web App (PWA) remote controller.
 
-### ❤️ Personal Favorites System
-- **One-Command Bookmarking**: Save any currently playing vault or YouTube song to your personal profile using `[p]jv favorite` or voice: *"Garmin, save this song"*.
-- **Instant Favorites Playback**: Play random tracks from your favorites collection using `[p]jv playfav` or voice: *"Garmin, play one of my favorite songs"*.
-- **Syncs Across Discord & Web Remote**: Favorites are saved per-user and accessible from both Discord chat and the Web Remote interface.
-
-### 👑 VIP Entrance Audio Themes
-- **Automated Entrance Detection**: When designated VIP users join the voice channel, the bot ducks the music and plays their personalized 5-second entrance theme.
-- **Unified VIP Audio Pipeline**: VIP entrances share an optimized pre-sliced audio cache and play seamlessly at 30% volume over 18% ducked music with automatic volume restore.
-
-### 🎧 "Listen Together" (1:1 Discord Phase-Locked Audio Sync)
-- **1:1 Real-Time Audio Streaming**: Listen to the exact song playing in Discord directly on your phone or computer browser.
-- **Phase-Locked Loop (PLL) Engine**: Sub-30ms clock synchronization ensures your browser audio plays in lockstep with Discord voice channel members with zero echo.
-- **Live Hardware Volume Slider & Micro-Steering**: Smooth dynamic pitch and rate adjustments keep audio perfectly aligned without stuttering.
-- **Lock Screen Media Player**: Full integration with the iOS / Android `MediaSession` API allows play, pause, skip, and scrubbing directly from your lock screen, notification center, or Apple Dynamic Island.
-
-### 🌌 10-Preset Audio-Reactive Visualizer Engine
-- **Dynamic Cover Art Aura**: Reactive coronal glow, vinyl aura, and radiant frequency pulses pulsating directly behind the rotating album cover.
-- **Ambient Background Visualizer**: Full-screen canvas modes including *Ambient Aurora Waves*, *Quantum Starfield*, *Retro Synthwave Grid*, and *Hyperdrive Warp Tunnel*.
-- **Hardware DSP Analysis**: Built-in Web Audio API FFT frequency analyzer (Cyber Neon Bars, Phosphor Oscilloscope, dual ballistic Analog VU Meters) with harmonic rhythm synthesis.
-- **Custom Sensitivity & Opacity**: In-app slider adjustments with persistent local configuration.
-
-### ⌨️ Hardware Media Controls & Gaming Mouse Support
-- **Keyboard Media Keys**: Native OS media key capture (`MediaPlayPause`, `MediaTrackNext`, `MediaTrackPrevious`, `MediaStop`), including keyboard shortcuts like `Fn + F11`, `F10`, `F12`, and `Spacebar`.
-- **Gaming Mouse Media Buttons**: Direct support for gaming mice side buttons (e.g. Razer Viper V3 Hyperspeed buttons 4 & 5 / auxiliary clicks) mapped to play/pause and queue skipping.
-- **Bluetooth & Lock Screen Integration**: Continuous playback control from Bluetooth headphones, AirPods, and steering wheel media buttons.
-
-### 📊 24/7 Global Telemetry & Streaming Analytics
-- **24/7 Background Tracking**: Playback time, hourly listening activity curves, and songs completed are tracked persistently round-the-clock directly from Discord voice, ensuring metrics match and accumulate even when the website is closed.
-- **Sleek Broadcasting Telemetry Sheet**: Real-time traffic counter (total views, daily visits, unique visitors, active WebSocket sessions) paired with 24-hour hourly distribution and all-time statistics.
-
-### 🔊 50 Meme Soundboard
-- **50 Curated Viral Sounds**: Instant soundboard pads (Airhorn, OOF, Bruh, Yeet, Sad Trombone, Wow, etc.) from MyInstants.
-- **Smart Music Ducking / Auto-Pause**: When any soundboard pad is triggered, current music playback pauses or ducks instantly, plays the sound effect into the voice channel, and seamlessly resumes.
-- **Audio Previews**: Optional local audio preview checkbox lets you audition sounds directly on your device.
-
-### 📱 Mobile Web Remote PWA
-- **Compact & Modern Layout**: Streamlined, ultra-responsive dark glassmorphic UI optimized to fit cleanly on mobile screens without horizontal overflow or excessive scrolling.
-- **1-Tap Pairing**: Instant QR Code pairing generated from Discord with secure auth tokens.
-- **Installable PWA**: Tap *Add to Home Screen* in Safari (iOS) or Chrome (Android) for a standalone fullscreen mobile app with custom app icons.
-- **Live WebSocket Sync**: Real-time 60fps playback scrubber, live soundwave visualizer, and dynamic status badges.
-- **Full Queue Management**: Tap any track to play immediately, move next, or remove from queue.
-
-### 🌐 Cloudflare Tunnel & Custom Domains
-- **Named Tunnel Support**: Connect your own custom domain (e.g. `https://remote.juicevault.space`) with automated background service recovery.
-- **1-Click Quick Tunnel**: Instant temporary `https://*.trycloudflare.com` URL with zero router configuration or port forwarding needed.
-- **Direct HTTPS**: Optional built-in 2048-bit self-signed SSL generator for open port deployments.
-
-### 🎚️ Dynamic Audio EQ & Effects
-- **Real-Time Audio Presets**: Flat, Bass Boost, 8D Audio (orbital panning), Nightcore (1.22x pitch/tempo), Slowed (0.86x reverb), Echo, Wide Stereo, and Virtual Sub-Bass.
-- **Web Remote EQ Processing**: Built-in Web Audio API filter graph applies audio effects to both Discord voice and your phone stream simultaneously.
-
-### 🎵 Music Engine & Search
-- **24/7 Continuous Playback**: Endless archive playback from JuiceVault collections (All Music, Instrumentals, Remasters, Stems, Released, Cut Files).
-- **YouTube Playlists & Search**: Search any online song or paste full YouTube playlists to queue all tracks automatically via `yt-dlp`.
-- **Requested Queue Priority**: User requests always play ahead of the background archive stream.
-- **Offline Disk Cache Resilience**: Automatic atomic disk caching prevents downtime during upstream archive API outages.
+Whether streaming from the 3,720+ track unreleased Juice WRLD catalog, queuing YouTube playlists, triggering viral soundboard pads over active playback, or commanding the bot hands-free via Discord voice, JuiceVault delivers studio-grade acoustics and edge-protected network stability.
 
 ---
 
-## 🗣️ Garmin Voice Commands Cheat Sheet
+## Architectural Showcase
 
-Say **„Hey Garmin”** or **„Garmin”** followed by:
+### Desktop Web Remote Interface
+A glassmorphic, kinetic dark dashboard with real-time WebSocket state synchronization, queue management, visualizer engine, and hardware controls.
 
-| Category | Voice Commands |
+<p align="center">
+  <img src="docs/remote-showcase.png" alt="JuiceVault Desktop Web Remote Dashboard" width="100%">
+</p>
+
+### Listen Together & Mobile Progressive Web App
+Sub-30ms phase-locked audio streaming directly to browser clients with lockscreen media session integration and low-latency hardware volume adjustment.
+
+<p align="center">
+  <img src="docs/mobile-listen-together.png" alt="JuiceVault Mobile PWA and Listen Together" width="460">
+</p>
+
+### Garmin AI Voice Assistant & 4 Neural Personas
+Hands-free voice recognition in Discord channels powered by Whisper STT, Siri harmonic acoustic cues, 0ms RAM PCM playback cache, and 4 distinct Azure Neural personalities.
+
+<p align="center">
+  <img src="docs/voice-assistant-showcase.png" alt="Garmin Voice AI Engine and Neural Personas" width="100%">
+</p>
+
+### Hardware DSP Equalizer & Audio Engine
+Real-time 8-preset audio filtering graph applying 8D orbital spatial panning, dynamic Bass Boost, Nightcore acceleration, Slowed lo-fi decay, and Sub-Bass rumble simultaneously across Discord and browser streams.
+
+<p align="center">
+  <img src="docs/dsp-equalizer-showcase.png" alt="DSP Audio Engine and Equalizer Presets" width="100%">
+</p>
+
+### 50 Meme Soundboard with Dynamic Music Ducking
+Instantaneous soundboard execution with automatic 18% background music ducking and private local auditioning.
+
+<p align="center">
+  <img src="docs/soundboard-showcase.png" alt="50 Meme Soundboard Grid" width="100%">
+</p>
+
+### System Architecture & Security Pipeline
+End-to-end integration diagram illustrating Cloudflare Zero-Trust tunneling, anti-scanner WAF protection, local faster-whisper speech recognition, and Red-DiscordBot audio streaming.
+
+<p align="center">
+  <img src="docs/architecture-overview.png" alt="System Architecture and Network Security Pipeline" width="100%">
+</p>
+
+---
+
+## Key Features
+
+### [VOICE AI] Garmin Hands-Free Voice Control
+- **Wake Word Detection ("Garmin" / "Hey Garmin")**: Speak naturally inside any Discord voice channel without touching a keyboard or device.
+- **Siri-Style Acoustic Feedback**: Crystalline synthesized harmonic cues confirm assistant state without cutting across spoken audio:
+  - *Listening Chime* (D5 -> A5): Confirms wake word detection.
+  - *Understood Chime* (G5 -> C6): Confirms successful command parse.
+  - *Error Chime* (A4 -> E4): Notifies unrecognized speech or system error.
+- **15-Second Wake Window & 1.15s Silence Gate**: Generous natural pauses allow fluid command formulation without premature cutoff.
+- **4 Distinct Azure Neural Personas**:
+  - `anime`: Energetic, youthful streamer tone (Microsoft Ava Neural, +24Hz pitch, +6% rate).
+  - `mommy`: Confident, melodic British cadence (Microsoft Sonia Neural, -6Hz pitch, -2% rate).
+  - `rude`: Sarcastic, sharp tsundere assistant (Microsoft Aria Neural, +8Hz pitch, +4% rate).
+  - `natural`: Neutral, clean studio voice for professional broadcast (Microsoft Jenny Neural, 0Hz, 0%).
+- **0ms RAM PCM Pre-Warming**: Over 105 core system phrases, volume levels, and error states are pre-synthesized into raw 48kHz 16-bit stereo PCM in memory at startup, eliminating TTS generation delays.
+- **Dynamic 18% Music Ducking & Lossless FIFO Queue**: Background music ducks smoothly to 18% during assistant speech and soundboard triggers, restored automatically via a non-blocking queue.
+- **Multi-Tier Speech Recognition**:
+  - *Tier 1*: Offline local `faster-whisper` running on CPU/RAM with zero API costs.
+  - *Tier 2*: Free Google STT engine for passive chatter filtering.
+  - *Tier 3*: Cloud Groq Whisper Large v3 Turbo for ultra-low latency command execution.
+- **Accent Adaptation**: Built-in pronunciation alias registry adapts to dialect variations and custom wake triggers.
+
+### [REMOTE] Mobile PWA & Real-Time Web Gateway
+- **OriginKit & Kinetics UI Design**: Pure SVG iconography, zero emojis, dark zinc/obsidian surfaces, and physics-based tactile transitions.
+- **Sub-30ms Listen Together Audio Sync**: Phase-Locked Loop (PLL) engine streams active Discord voice audio directly to web browsers in synchronized lockstep.
+- **Mobile Lock Screen Integration**: Complete `MediaSession` API support allows track scrubbing, play, pause, and skips directly from the iOS Dynamic Island, Android notification shade, or Bluetooth accessories.
+- **Interactive Queue Controller**: Reorder, jump, prioritize, or purge items from active playback and user-submitted requests.
+- **Audio-Reactive Visualizer Engine**: Canvas-driven visualizer featuring Aurora Waves, Quantum Starfield, Retro Synthwave Grid, and Analog Dual VU ballistic meters.
+- **Telemetry & Round-the-Clock Metrics**: Persistent tracking of total listening hours, daily unique visits, active WebSocket sessions, and song completions.
+
+### [SECURITY] Cloudflare Edge Protection & Network Isolation
+- **Cloudflare Zero-Trust Named Tunnels**: Map custom domains (such as `remote.juicevault.space`) to the local Web Remote without exposing public IP addresses or port forwarding.
+- **Automated 1-Click Quick Tunnels**: Spin up ephemeral `*.trycloudflare.com` endpoints instantly for remote testing.
+- **Anti-Scanner Middleware**: Proactively identifies and drops unauthorized scanners (`.env`, `phpinfo`, `wp-admin`, `service_account.json`, `robots.txt`) with zero socket allocation or log spam.
+- **Local Fallback HTTPS**: Integrated 2048-bit self-signed SSL certificate generator for direct port deployments.
+
+### [AUDIO CORE] DSP Equalizer & Soundboard
+- **8 Hardware Equalizer Presets**: Web Audio API BiquadFilter graph processing Flat, Bass Boost (+11dB), 8D Audio orbital spatializer, Nightcore (+22% rate/pitch), Slowed & Reverb (-14% lo-fi), Sub-Bass (+16dB below 80Hz), Stereo Wide, and Echo/Reverb.
+- **50 Curated Viral Soundboard Pads**: Rapid-fire execution of viral audio memes directly into Discord voice with private local earphone auditioning.
+- **Personal Favorites**: Instant bookmarking of archive tracks and YouTube sources (`[p]jv favorite`, `[p]jv playfav`).
+- **VIP Entrance Audio Themes**: Automated greeting audio with ducked music when designated server VIPs connect to voice.
+
+---
+
+## Voice Commands Reference
+
+Activate Garmin by speaking **"Hey Garmin"** or **"Garmin"**, followed immediately or within 15 seconds by any command:
+
+| Functional Category | Spoken Voice Commands |
 | :--- | :--- |
-| **Playback** | *„skip”*, *„next”*, *„skip this song”*, *„skip 10”*, *„previous”*, *„restart”*, *„pause”*, *„resume”*, *„stop”* |
-| **Seek** | *„forward 10”*, *„skip 10s”*, *„back 10”*, *„rewind 10”* |
-| **Volume** | *„volume 80”*, *„set volume to 50%”*, *„louder”*, *„quieter”*, *„mute”*, *„unmute”* |
-| **Queue** | *„shuffle”*, *„random”*, *„loop”*, *„repeat”*, *„toggle loop”* |
-| **Info** | *„what's playing?”*, *„what is this song?”*, *„who sings this?”*, *„song info”* |
-| **Favorites** | *„save this song”*, *„add to favorites”*, *„play one of my favorite songs”*, *„remove from favorites”* |
-| **Search & Play** | *„play robbery”*, *„play Yeat”*, *„play Carti”*, *„search YouTube for <song>”* |
-| **Personas** | *„switch to anime voice”*, *„switch to mommy voice”*, *„switch to rude voice”*, *„switch to natural voice”* |
-| **Help & Leave** | *„help”*, *„what can you do?”*, *„leave”*, *„disconnect”*, *„bye”* |
+| **Playback Control** | *"skip"*, *"next"*, *"skip this song"*, *"skip 10"*, *"previous"*, *"restart"*, *"pause"*, *"resume"*, *"stop"* |
+| **Seeking & Scrubbing** | *"forward 10"*, *"skip 10s"*, *"back 10"*, *"rewind 10"* |
+| **Volume Adjustment** | *"volume 80"*, *"set volume to 50%"*, *"louder"*, *"quieter"*, *"mute"*, *"unmute"* |
+| **Queue & Mode** | *"shuffle"*, *"random"*, *"loop"*, *"repeat"*, *"toggle loop"* |
+| **Track Information** | *"what's playing?"*, *"what is this song?"*, *"who sings this?"*, *"song info"* |
+| **Personal Favorites** | *"save this song"*, *"add to favorites"*, *"play one of my favorite songs"*, *"remove from favorites"* |
+| **Catalog & Search** | *"play robbery"*, *"play Yeat"*, *"play Carti"*, *"search YouTube for \<query\>"* |
+| **Persona Selection** | *"switch to anime voice"*, *"switch to mommy voice"*, *"switch to rude voice"*, *"switch to natural voice"* |
+| **Session Control** | *"help"*, *"what can you do?"*, *"leave"*, *"disconnect"*, *"bye"* |
 
 ---
 
-## 🕹️ Discord Commands
+## Discord Command Reference
 
-Prefix: `[p]` (e.g. `4jv` or `!jv`)
+Default command prefix: `[p]` (e.g. `!jv` or `4jv`)
 
-### Player & Playback
+### Playback & Queue Management
 ```text
-[p]jv start                       # Start 24/7 archive playback in your voice channel
-[p]jv stop                        # Stop playback and leave voice
-[p]jv play <query | URL>          # Play vault track, external song, or full YouTube playlist
-[p]jv skip                        # Skip current track (alias: next)
-[p]jv skip10                      # Skip 10 tracks ahead in queue
-[p]jv previous                    # Play previous track from history
-[p]jv rewind10                    # Jump backward 10 seconds
-[p]jv shuffle                     # Shuffle current queue
-[p]jv volume <0-150>              # Set music playback volume (alias: vol)
-[p]jv status                      # Display current player status & stream stats
-[p]jv lyrics                      # Display lyrics for the active track
+[p]jv start                       Start 24/7 archive playback in your voice channel
+[p]jv stop                        Stop playback, clear queue, and leave voice
+[p]jv play <query | URL>          Stream specific vault track, YouTube video, or full playlist
+[p]jv skip                        Skip the currently playing track (alias: next)
+[p]jv skip10                      Advance queue by 10 tracks
+[p]jv previous                    Return to the previously played track
+[p]jv rewind10                    Jump backward 10 seconds in current track
+[p]jv shuffle                     Randomize remaining tracks in active queue
+[p]jv volume <0-150>              Set music output volume (alias: vol)
+[p]jv status                      Display active stream statistics and DSP status
+[p]jv lyrics                      Retrieve and display synchronized lyrics
 ```
 
-### Favorites System
+### Personal Favorites System
 ```text
-[p]jv favorite                    # Save currently playing track to your personal favorites (alias: fav, like)
-[p]jv favorites                   # List all your saved favorite tracks (alias: favs, likes)
-[p]jv playfav                     # Play a random track from your favorites (alias: pf)
+[p]jv favorite                    Save currently playing track to personal profile (alias: fav, like)
+[p]jv favorites                   List all saved personal favorites (alias: favs, likes)
+[p]jv playfav                     Queue and play a random track from personal favorites (alias: pf)
 ```
 
-### Garmin Voice AI & Personas
+### Garmin Voice AI Configuration
 ```text
-[p]jv vc <on|off>                 # Enable or disable live in-Discord voice recognition
-[p]jv persona <anime|mommy|rude|natural>  # Set Garmin's spoken voice persona
-[p]jv vclearn <phrase>            # Add a custom wake word alias for your pronunciation
-[p]jv vclearned                   # List all custom learned wake words and song mappings
-[p]jv groq <api_key>              # (Owner) Set Groq Whisper API key for ultra-fast STT
-[p]jv installvc                   # (Owner) Automatically install voice recognition packages
+[p]jv vc <on|off>                 Toggle live in-Discord voice recognition
+[p]jv persona <anime|mommy|rude|natural>  Set active voice persona
+[p]jv vclearn <phrase>            Map an accent or custom pronunciation to wake word
+[p]jv vclearned                   List all learned accent mappings
+[p]jv groq <api_key>              (Owner) Configure Groq Whisper API key for low-latency STT
+[p]jv installvc                   (Owner) Install optional voice recognition dependencies
 ```
 
-### Mobile Web Remote & Tunnel
+### Web Remote & Network Tunneling
 ```text
-[p]jv remote                             # Display remote link, token, and scannable QR Code
-[p]jv remote url <https://your.domain>   # Bind a custom domain (e.g. https://remote.juicevault.space)
-[p]jv remote tunnel token <token>        # Start persistent Cloudflare Named Tunnel with token
-[p]jv remote tunnel                      # Start free 1-click Cloudflare Quick Tunnel (*.trycloudflare.com)
-[p]jv remote tunnel stop                 # Stop active Cloudflare tunnel
-[p]jv remote tunnel clear                # Remove saved tunnel token and stop tunnel
-[p]jv remote https [on|off]              # Toggle self-signed direct HTTPS on your port
-[p]jv remote port <port>                 # Change web server port (default: 8088 or 2556)
-[p]jv remote token [new_token]           # View or regenerate secret auth token
-[p]jv remote restart                     # Restart web remote server
+[p]jv remote                             Display remote URL, authentication token, and QR code
+[p]jv remote url <https://domain>        Bind custom domain address (e.g. https://remote.juicevault.space)
+[p]jv remote tunnel token <token>        Start persistent Cloudflare Named Tunnel via token
+[p]jv remote tunnel                      Spin up free 1-click Cloudflare Quick Tunnel (*.trycloudflare.com)
+[p]jv remote tunnel stop                 Terminate active Cloudflare tunnel process
+[p]jv remote tunnel clear                Purge saved tunnel token and stop service
+[p]jv remote https [on|off]              Toggle self-signed SSL encryption on direct port
+[p]jv remote port <port>                 Configure web server listening port (default: 8088 / 2556)
+[p]jv remote token [new_token]           Inspect or regenerate secret remote authentication token
+[p]jv remote restart                     Restart internal aiohttp server and WebSocket gateway
 ```
 
-### Library & Collections
+### Catalog & Archives
 ```text
-[p]jv categories                  # List available archive categories
-[p]jv category <name>             # Switch active collection (e.g. Released, Instrumentals)
-[p]jv search <query>              # Search JuiceVault archive and queue track
-[p]jv refresh                     # Clear cache and refresh track catalog from API
+[p]jv categories                  List available catalog categories
+[p]jv category <name>             Switch active collection (Released, Instrumentals, Remasters, etc.)
+[p]jv search <query>              Search JuiceVault archive and append match to queue
+[p]jv refresh                     Purge local cache and sync catalog from upstream API
 ```
 
 ---
 
-## 🚀 Installation & Updating
+## Installation & Setup
 
-### 1. Requirements
-- Python 3.9+
-- [Red-DiscordBot V3](https://github.com/Cog-Creators/Red-DiscordBot)
-- [FFmpeg](https://ffmpeg.org/download.html) installed and in your system `PATH`.
+### 1. Prerequisites
+- Python 3.9 or higher
+- [Red-DiscordBot V3](https://github.com/Cog-Creators/Red-DiscordBot) instance
+- [FFmpeg](https://ffmpeg.org/) installed and available in the operating system `PATH`
+- Cloudflared binary (optional, managed automatically for Cloudflare tunnels)
 
-### 2. Add and Load Cog
+### 2. Cog Installation
+Run the following commands in your Discord server:
+
 ```text
 [p]repo add juicevault https://github.com/SKIZZOO/red-juicevault
 [p]cog install juicevault juicevault
 [p]load juicevault
 ```
 
-### 3. Updating the Cog
-To update to the latest version with new voice features and fixes:
+### 3. Voice Dependencies Installation
+For full Garmin Voice AI support (local speech recognition, audio capture, and neural voice synthesis):
 
-**From Discord:**
+```text
+[p]jv installvc
+```
+
+Alternatively, install required packages manually in your Red-DiscordBot virtual environment:
+```bash
+pip install discord-ext-voice-recv SpeechRecognition edge-tts faster-whisper
+```
+
+### 4. Activating Garmin Voice Assistant
+Connect to a voice channel and execute:
+```text
+[p]jv start
+[p]jv vc on
+```
+
+Say **"Hey Garmin"** to hear the listening chime, then speak your desired command.
+
+---
+
+## Updating
+
+### Via Discord
 ```text
 [p]repo update juicevault
 [p]cog update juicevault
 [p]reload juicevault
 ```
 
-**Or via Git Terminal:**
+### Via Terminal
+Navigate to your Red-DiscordBot cog directory:
 ```bash
-cd "<path-to-cog-directory>"
 git pull origin main
 ```
-Then in Discord:
+Then reload within Discord:
 ```text
 [p]reload juicevault
 ```
 
-### 4. Enable Voice Commands (Garmin)
-Run the following in Discord to enable hands-free voice control:
-```text
-[p]jv vc on
-```
-*(If missing optional dependencies, run `[p]jv installvc` or `pip install discord-ext-voice-recv SpeechRecognition edge-tts faster-whisper`)*
+---
+
+## Technical Stack
+
+| Component | Technology | Role |
+| :--- | :--- | :--- |
+| **Bot Core** | Red-DiscordBot V3 | Asynchronous modular Discord bot architecture |
+| **Discord API** | discord.py 2.0+ | Voice channel management, client gateway, and component views |
+| **Voice Ingestion** | discord-ext-voice-recv | Raw RTP packet capture and voice stream assembly |
+| **Speech-To-Text** | faster-whisper / Groq Cloud | Offline CPU inference and accelerated cloud Whisper Large v3 |
+| **Voice Synthesis** | edge-tts | Microsoft Azure Neural text-to-speech engine |
+| **Audio Processing** | FFmpeg | Audio transcoding, volume normalization, and real-time ducking |
+| **Web Server** | aiohttp | Asynchronous HTTP server and WebSocket state broadcasting |
+| **Audio Sync** | Web Audio API | Phase-Locked Loop (PLL) micro-steering for browser streaming |
+| **Network Security** | Cloudflare Tunnel / WAF | Hidden-origin HTTPS tunneling and anti-scanner edge filtering |
+| **Media Resolution** | yt-dlp | YouTube playlist extraction and remote audio stream resolution |
 
 ---
 
-## 🛠️ Tech Stack & Dependencies
+## Contributors & Credits
 
-- **[Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot)** — modular Discord bot framework.
-- **[discord.py](https://github.com/Rapptz/discord.py)** — Discord voice & client integration.
-- **[discord-ext-voice-recv](https://github.com/imayhaveanothercookie/discord-ext-voice-recv)** — real-time Discord voice packet reception.
-- **[faster-whisper](https://github.com/SYSTRAN/faster-whisper)** & **[Groq Whisper API](https://groq.com/)** — high-speed speech-to-text recognition.
-- **[edge-tts](https://github.com/rany2/edge-tts)** — high-fidelity Azure Neural speech synthesis.
-- **[aiohttp](https://github.com/aio-libs/aiohttp)** — asynchronous Web Remote HTTP server & WebSocket gateway.
-- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — YouTube playlist & external audio resolution.
-- **[cloudflared](https://github.com/cloudflare/cloudflared)** — zero-config Cloudflare Quick & Named Tunnel connector.
-- **[FFmpeg](https://ffmpeg.org/)** — audio decoding, filtering, and real-time DSP effects.
-- **[OriginKit & Kinetics CSS]** — responsive, physics-based glassmorphic web interface.
-
----
-
-## 👤 Credits & Contributors
-
-- **Bot Developer**: **SKIZZOO**
+- **Core Engineering & Architecture**: **SKIZZOO**
   - Website: [sosocial.lol/ski](https://sosocial.lol/ski)
   - GitHub: [@SKIZZOO](https://github.com/SKIZZOO)
-- **Domain & Infrastructure**: **Spinti**
+- **Domain & Infrastructure Sponsor**: **Spinti**
   - Website: [sosocial.lol/spinti](https://sosocial.lol/spinti)
-  - Generously provided the `juicevault.space` custom domain and network hosting.
+  - Infrastructure: Provision of `juicevault.space` domain and edge routing
 
-Special thanks to the **JuiceVault** team, **Red-DiscordBot** contributors, and the **discord.py** community.
+Special acknowledgment to the **JuiceVault** archive curation team, the **Red-DiscordBot** development community, and the **discord.py** maintainers.
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [MIT License](LICENSE).
