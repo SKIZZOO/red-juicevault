@@ -2008,6 +2008,74 @@ class JuiceVault(commands.Cog):
         except Exception as exc:
             await msg.edit(content=f"❌ **Error:** `{exc}`")
 
+    @jv.command(name="cookies", aliases=["cookie", "ytcookies", "setcookies"])
+    @commands.is_owner()
+    async def cookies_cmd(self, ctx, *, action: str = None):
+        """Manage YouTube authentication cookies to bypass 'Sign in to confirm you're not a bot'."""
+        cookie_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
+
+        # 1. Attachment upload
+        if ctx.message.attachments:
+            att = ctx.message.attachments[0]
+            try:
+                data = await att.read()
+                text = data.decode("utf-8", errors="ignore")
+                with open(cookie_path, "wb") as f:
+                    f.write(data)
+                count = len([l for l in text.splitlines() if l.strip() and not l.startswith("#") and "youtube.com" in l])
+                await ctx.send(
+                    f"✅ **YouTube cookies saved successfully!**\n"
+                    f"Saved `{count}` YouTube cookies to `{cookie_path}`.\n"
+                    f"YouTube bot detection has been bypassed for all external play commands."
+                )
+                return
+            except Exception as exc:
+                await ctx.send(f"❌ Failed to save cookies file: `{exc}`")
+                return
+
+        # 2. Clear / Remove
+        if action and action.strip().lower() in ("clear", "remove", "delete"):
+            if os.path.isfile(cookie_path):
+                try:
+                    os.remove(cookie_path)
+                    await ctx.send("🗑️ YouTube `cookies.txt` has been removed.")
+                except Exception as exc:
+                    await ctx.send(f"❌ Error deleting cookies file: `{exc}`")
+            else:
+                await ctx.send("ℹ️ No active `cookies.txt` found.")
+            return
+
+        # 3. Check status
+        from .external_search_patch import _find_youtube_cookiefile
+        active_cookie = _find_youtube_cookiefile()
+
+        if active_cookie and os.path.isfile(active_cookie):
+            size = os.path.getsize(active_cookie)
+            try:
+                with open(active_cookie, "r", encoding="utf-8", errors="ignore") as f:
+                    count = len([l for l in f if l.strip() and not l.startswith("#") and "youtube.com" in l])
+            except Exception:
+                count = "Active"
+            await ctx.send(
+                f"🟢 **YouTube Cookies Active**\n"
+                f"• Location: `{active_cookie}`\n"
+                f"• Size: `{size:,} bytes`\n"
+                f"• YouTube Cookies: `{count}`\n\n"
+                f"To update, send `[p]jv cookies` with an attached `cookies.txt`.\n"
+                f"To remove, use `[p]jv cookies clear`."
+            )
+        else:
+            await ctx.send(
+                f"🟡 **No YouTube Cookies Configured**\n\n"
+                f"YouTube frequently flags datacenter bot IPs with *'Sign in to confirm you’re not a bot'*.\n\n"
+                f"**How to configure YouTube cookies:**\n"
+                f"1. Open Chrome/Firefox and log into YouTube.\n"
+                f"2. Install the **'Get cookies.txt locally'** extension.\n"
+                f"3. Export YouTube cookies as `cookies.txt`.\n"
+                f"4. Type `[p]jv cookies` and attach the `cookies.txt` file!\n\n"
+                f"*Alternatively, place `cookies.txt` directly inside the `juicevault` folder.*"
+            )
+
     @jv.command(name="vclearn", aliases=["voicelearn", "garminlearn"])
     @commands.guild_only()
     async def vc_learn_cmd(self, ctx, *, word_or_phrase: str):

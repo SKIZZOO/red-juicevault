@@ -1,9 +1,11 @@
 import asyncio
+import json
 import os
 import re
 import shutil
 import tempfile
 import urllib.parse
+import urllib.request
 
 import discord
 
@@ -14,6 +16,78 @@ try:
     import yt_dlp
 except ImportError:
     yt_dlp = None
+
+
+class _SilentYTDLPLogger:
+    def debug(self, msg): pass
+    def info(self, msg): pass
+    def warning(self, msg): pass
+    def error(self, msg): pass
+
+
+def _find_youtube_cookiefile():
+    """Look for an available cookies.txt file in common locations."""
+    env_path = os.environ.get("YOUTUBE_COOKIES_PATH") or os.environ.get("YTDLP_COOKIES_PATH")
+    if env_path and os.path.isfile(env_path) and os.path.getsize(env_path) > 10:
+        return env_path
+
+    candidates = ("cookies.txt", "youtube_cookies.txt", "yt_cookies.txt", "youtube.com_cookies.txt")
+    dirs = [
+        os.path.dirname(__file__),
+        os.path.abspath("."),
+        os.path.expanduser("~"),
+    ]
+    for d in dirs:
+        for fname in candidates:
+            p = os.path.join(d, fname)
+            if os.path.isfile(p) and os.path.getsize(p) > 10:
+                return p
+    return None
+
+
+def _get_available_cookie_browsers():
+    """Identify installed browsers that can safely export cookies without DPAPI crashes or missing db logs."""
+    available = []
+    appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+
+    # Firefox: Plain SQLite without DPAPI App-Bound encryption
+    if appdata and os.path.isdir(os.path.join(appdata, "Mozilla", "Firefox", "Profiles")):
+        available.append("firefox")
+    elif os.path.isdir(os.path.expanduser("~/.mozilla/firefox")):
+        available.append("firefox")
+
+    # Brave: If profile directory exists
+    if localappdata and os.path.isdir(os.path.join(localappdata, "BraveSoftware", "Brave-Browser", "User Data")):
+        available.append("brave")
+    elif os.path.isdir(os.path.expanduser("~/.config/BraveSoftware")):
+        available.append("brave")
+
+    if os.name != "nt":
+        if os.path.isdir(os.path.expanduser("~/.config/google-chrome")):
+            available.append("chrome")
+        if os.path.isdir(os.path.expanduser("~/.config/chromium")):
+            available.append("chromium")
+
+    return available
+
+
+def _resolve_youtube_title_oembed(url):
+    """Resolve video title and artist via YouTube oEmbed API without bot checks or cookies."""
+    try:
+        req = urllib.request.Request(
+            f"https://www.youtube.com/oembed?url={urllib.parse.quote(url, safe=':/?=')}&format=json",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            title = data.get("title", "")
+            author = data.get("author_name", "")
+            if author and author.lower() not in title.lower():
+                return f"{author} - {title}"
+            return title or ""
+    except Exception:
+        return ""
 
 
 SOURCE_SEARCHES = (
@@ -146,6 +220,7 @@ def _extract_search(query, skip_sources=(), max_playlist_items=250):
         for token in ("list=", "/playlist", "/sets/", "/album/", "/albums/")
     )
 
+    cookiefile = _find_youtube_cookiefile()
     opts = {
         "quiet": True,
         "no_warnings": True,
@@ -157,7 +232,7 @@ def _extract_search(query, skip_sources=(), max_playlist_items=250):
         "playlistend": max_playlist_items if is_playlist_candidate else 5,
         "extractor_args": {
             "youtube": {
-                "player_client": ["tv_embedded", "web_embedded", "android", "ios", "mweb", "web"],
+                "player_client": ["android_music", "android", "ios", "mweb"],
                 "player_skip": ["webpage", "configs"],
             }
         },
@@ -166,6 +241,8 @@ def _extract_search(query, skip_sources=(), max_playlist_items=250):
             "Accept-Language": "en-US,en;q=0.9",
         },
     }
+    if cookiefile:
+        opts["cookiefile"] = cookiefile
     skipped = {str(item).casefold() for item in skip_sources}
 
     if is_url:
@@ -294,26 +371,87 @@ def _download_with_ytdlp(url, tempdir):
         },
     }
 
-    # Order of attempts:
-    # 1. tv_embedded and web_embedded clients bypass YouTube age-gates without sign-in
-    # 2. mobile and standard web clients
-    # 3. local browser cookies (chrome, edge, firefox, etc.) if available on the system
-    attempts = [
-        {**base, "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web_embedded", "android", "ios"]}}},
-        {**base, "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web_creator", "mweb"]}}},
-        {**base, "extractor_args": {"youtube": {"player_client": ["web_embedded", "android"]}}},
-        {**base, "extractor_args": {"youtube": {"player_client": ["android", "ios", "mweb", "web"]}}},
-        {**base, "extractor_args": {"youtube": {"player_client": ["ios", "android"]}}},
-        {**base, "extractor_args": {"youtube": {"player_client": ["web_safari", "web"]}}},
-        base,
-    ]
+    attempts = []
+    cookiefile = _find_youtube_cookiefile()
 
-    for browser in ("chrome", "edge", "firefox", "brave", "opera"):
+    # 1. Cookie file has highest priority (official Netscape cookies format)
+    if cookiefile:
         attempts.append({
             **base,
-            "cookiesfrombrowser": (browser, None, None, None),
-            "extractor_args": {"youtube": {"player_client": ["web", "mweb"]}},
+            "cookiefile": cookiefile,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["web", "mweb", "android_music", "ios"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
         })
+        attempts.append({
+            **base,
+            "cookiefile": cookiefile,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["ios", "android_music"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
+        })
+
+    # 2. Modern mobile streaming clients that bypass YouTube desktop bot checks without sign-in
+    attempts.extend([
+        {
+            **base,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android_music", "android", "ios", "mweb"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
+        },
+        {
+            **base,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["ios", "android_music"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
+        },
+        {
+            **base,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["mweb", "web_safari"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
+        },
+        {
+            **base,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "ios"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
+        },
+    ])
+
+    # 3. Available browser cookies with silent logger to prevent missing db and DPAPI error spam
+    for browser in _get_available_cookie_browsers():
+        attempts.append({
+            **base,
+            "logger": _SilentYTDLPLogger(),
+            "cookiesfrombrowser": (browser, None, None, None),
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["web", "mweb", "ios"],
+                    "player_skip": ["webpage", "configs"],
+                }
+            },
+        })
+
+    attempts.append(base)
 
     last_error = None
     for opts in attempts:
@@ -351,33 +489,38 @@ def _download_external(info):
             clean_query = _clean_track_query(info)
             is_youtube = ("youtube" in source or "youtu.be" in url or "youtube.com" in url)
 
-            if clean_query and is_youtube:
-                # 1. Try YouTube official audio/topic track (never age-restricted)
-                try:
-                    topic_query = f"{clean_query} audio"
-                    topic_info = _extract_search(topic_query)
-                    topic_url = topic_info.get("webpage_url") or topic_info.get("original_url") or topic_info.get("url")
-                    if topic_url and topic_url != url:
-                        path = _download_with_ytdlp(topic_url, tempdir)
-                        info["_source"] = "YouTube (Audio)"
-                        info["_webpage_url"] = topic_url
-                        info["url"] = topic_url
-                        return path
-                except Exception as topic_err:
-                    print(f"[JuiceVault External] YouTube audio fallback notice: {topic_err}")
+            if is_youtube:
+                if not clean_query or clean_query.startswith("http"):
+                    clean_query = _resolve_youtube_title_oembed(url) or clean_query
+
+                # 1. Try YouTube official audio/topic track (never age-restricted or bot-checked)
+                if clean_query:
+                    try:
+                        topic_query = f"{clean_query} audio"
+                        topic_info = _extract_search(topic_query)
+                        topic_url = topic_info.get("webpage_url") or topic_info.get("original_url") or topic_info.get("url")
+                        if topic_url and topic_url != url:
+                            path = _download_with_ytdlp(topic_url, tempdir)
+                            info["_source"] = "YouTube (Audio)"
+                            info["_webpage_url"] = topic_url
+                            info["url"] = topic_url
+                            return path
+                    except Exception as topic_err:
+                        pass
 
                 # 2. Try SoundCloud / Bandcamp fallback with clean search terms (never pass YouTube URL!)
-                try:
-                    fallback = _extract_search(clean_query, skip_sources=("YouTube",))
-                    fallback_url = fallback.get("webpage_url") or fallback.get("original_url") or fallback.get("url")
-                    if fallback_url:
-                        path = _download_with_ytdlp(fallback_url, tempdir)
-                        info["_source"] = _source_name(fallback, "Web")
-                        info["_webpage_url"] = fallback_url
-                        info["url"] = fallback_url
-                        return path
-                except Exception as sc_err:
-                    print(f"[JuiceVault External] SoundCloud fallback notice: {sc_err}")
+                if clean_query:
+                    try:
+                        fallback = _extract_search(clean_query, skip_sources=("YouTube",))
+                        fallback_url = fallback.get("webpage_url") or fallback.get("original_url") or fallback.get("url")
+                        if fallback_url:
+                            path = _download_with_ytdlp(fallback_url, tempdir)
+                            info["_source"] = _source_name(fallback, "Web")
+                            info["_webpage_url"] = fallback_url
+                            info["url"] = fallback_url
+                            return path
+                    except Exception as sc_err:
+                        pass
 
             raise first_error
     except Exception:

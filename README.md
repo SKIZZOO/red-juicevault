@@ -170,6 +170,7 @@ Default command prefix: `[p]` (e.g. `!jv` or `4jv`)
 [p]jv vclearned                   List all learned accent mappings
 [p]jv groq <api_key>              (Owner) Configure Groq Whisper API key for low-latency STT
 [p]jv installvc                   (Owner) Install optional voice recognition dependencies
+[p]jv cookies [clear]             (Owner) Upload or manage YouTube cookies.txt to bypass bot verification
 ```
 
 ### Web Remote & Network Tunneling
