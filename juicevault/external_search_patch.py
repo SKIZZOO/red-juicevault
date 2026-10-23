@@ -224,6 +224,7 @@ def _extract_search(query, skip_sources=(), max_playlist_items=250):
     opts = {
         "quiet": True,
         "no_warnings": True,
+        "logger": _SilentYTDLPLogger(),
         "skip_download": True,
         "noplaylist": not is_playlist_candidate,
         "extract_flat": True,
@@ -360,6 +361,7 @@ def _download_with_ytdlp(url, tempdir):
     base = {
         "quiet": True,
         "no_warnings": True,
+        "logger": _SilentYTDLPLogger(),
         "noplaylist": True,
         "format": "bestaudio/best",
         "outtmpl": outtmpl,

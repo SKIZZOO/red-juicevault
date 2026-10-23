@@ -2188,17 +2188,15 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
                     return
 
                 # User said "Garmin" + command in one single breath!
-                # If it's a song request and Groq / local AI is available, refine transcription with AI for 100% accuracy:
+                # If it's a song request and Groq Cloud Whisper Large is configured, refine transcription with cloud AI:
                 is_song_request = bool(re.search(r'\b(?:play|search|listen|put\s+on|stream|find)\b', cmd_part, re.I) or _KNOWN_EXTERNAL_ARTISTS_REGEX.search(cmd_part))
-                if is_song_request and (groq_key or _get_local_whisper_model()):
+                if is_song_request and groq_key:
                     ai_text, _ = await self._recognize_speech_ai(mono_16k, groq_key=groq_key)
                     if ai_text:
                         clean_ai = _normalize_speech(ai_text)
                         m_wake, r_cmd, _ = _match_wake_word(clean_ai, custom_words)
                         if m_wake and r_cmd:
                             cmd_part = r_cmd
-                        elif not m_wake and clean_ai:
-                            cmd_part = clean_ai
 
                 clean_cmd = cmd_part.strip().strip(",.:;!?- ")
                 with self._lock:
@@ -2778,6 +2776,12 @@ if VOICE_RECV_AVAILABLE and SPEECH_RECOGNITION_AVAILABLE:
             # PRECEDENCE 14: DIRECT YOUTUBE SEARCH & PLAY
             if "youtube" in clean_cmd or " yt" in clean_cmd or clean_cmd.startswith("yt "):
                 yt_q = _clean_music_query(clean_cmd)
+                if yt_q in ("it", "this", "that", "the song", "current song", "this song"):
+                    current = self.cog.current_tracks.get(self.guild_id)
+                    if current:
+                        yt_q = self.cog._track_text(current)
+                    else:
+                        yt_q = ""
                 if not yt_q:
                     self._lock_session(user_id, duration=25.0)
                     with self._lock:
