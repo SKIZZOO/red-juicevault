@@ -988,6 +988,8 @@ class JuiceVault(commands.Cog):
                 voice = guild.voice_client
                 if voice.is_playing() or voice.is_paused():
                     voice.stop()
+        if hasattr(self, "web_remote") and self.web_remote:
+            asyncio.create_task(self.web_remote.broadcast_state(guild_id))
 
     async def _player(self, guild, channel):
         gid = guild.id
@@ -1089,6 +1091,8 @@ class JuiceVault(commands.Cog):
                 ):
                     self.history_pos[gid] = None
                 self.current[gid] = track
+                if hasattr(self, "web_remote") and self.web_remote:
+                    asyncio.create_task(self.web_remote.broadcast_state(gid))
                 if track.get("_resume_position") is not None:
                     start_offset = max(0.0, float(track.pop("_resume_position")))
                     if not track.pop("_resume_was_playing", True):
@@ -1326,6 +1330,8 @@ class JuiceVault(commands.Cog):
             if self.tasks.get(gid) is task:
                 await self._disconnect(guild)
                 self.current.pop(gid, None)
+                if hasattr(self, "web_remote") and self.web_remote:
+                    asyncio.create_task(self.web_remote.broadcast_state(gid))
 
     def get_position(self, guild_id: int) -> float:
         """Returns the current playback position in seconds, monotonically accurate across pause/resume."""

@@ -1004,10 +1004,11 @@ class JuiceVaultWebRemote:
         else:
             response = await handler(request)
         response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-JuiceVault-Token"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-JuiceVault-Token, X-Guild-ID, Range, Cache-Control, Pragma, Accept"
+        response.headers["Access-Control-Expose-Headers"] = "Content-Range, Content-Length, Accept-Ranges, Content-Type, X-Guild-ID"
+        response.headers["Access-Control-Max-Age"] = "86400"
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Server"] = "JuiceVault-Edge"
         return response

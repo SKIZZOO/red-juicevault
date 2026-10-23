@@ -233,7 +233,7 @@ def _extract_search(query, skip_sources=(), max_playlist_items=250):
         "playlistend": max_playlist_items if is_playlist_candidate else 5,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android_music", "android", "ios", "mweb"],
+                "player_client": ["web", "mweb", "android_music", "ios"] if cookiefile else ["android_music", "android", "ios", "mweb"],
                 "player_skip": ["webpage", "configs"],
             }
         },
