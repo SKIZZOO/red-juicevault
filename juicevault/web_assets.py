@@ -20,7 +20,7 @@ HTML_INDEX = """<!DOCTYPE html>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="JuiceVault">
   <meta name="theme-color" content="#09090d">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22discGrad%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23c084fc%22%2F%3E%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%23a855f7%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%236b21a8%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url(%23discGrad)%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2222%22%20fill%3D%22none%22%20stroke%3D%22rgba(255%2C255%2C255%2C0.3)%22%20stroke-width%3D%221.6%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2216%22%20fill%3D%22none%22%20stroke%3D%22rgba(255%2C255%2C255%2C0.22)%22%20stroke-width%3D%221.2%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2210%22%20fill%3D%22%2309090d%22%20stroke%3D%22%23a855f7%22%20stroke-width%3D%221.8%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%223.5%22%20fill%3D%22%23c084fc%22%2F%3E%3C%2Fsvg%3E">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png">
   <link rel="manifest" href="/manifest.json">
@@ -150,15 +150,19 @@ HTML_INDEX = """<!DOCTYPE html>
       gap: 12px;
     }
     .brand-logo-disc {
-      width: 30px;
-      height: 30px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #a855f7, #6b21a8);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 12px var(--accent-glow);
-      color: #fff;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.4));
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      cursor: pointer;
+    }
+    .brand-logo-disc:hover {
+      transform: scale(1.08) rotate(15deg);
     }
     .brand-title {
       font-size: 0.95rem;
@@ -3330,7 +3334,7 @@ HTML_INDEX = """<!DOCTYPE html>
   <header class="app-header">
     <div class="header-brand">
       <div class="brand-logo-disc">
-        <svg class="icon-svg fill-current" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="#09090d"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%"><defs><radialGradient id="vaultBase" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#1e1738"/><stop offset="55%" stop-color="#0f0c1c"/><stop offset="85%" stop-color="#07060d"/><stop offset="100%" stop-color="#020204"/></radialGradient><radialGradient id="hubDepth" cx="50%" cy="45%" r="55%"><stop offset="0%" stop-color="#281e4a"/><stop offset="70%" stop-color="#130e26"/><stop offset="100%" stop-color="#090712"/></radialGradient><linearGradient id="neonRim" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="30%" stop-color="#c084fc"/><stop offset="70%" stop-color="#a855f7"/><stop offset="100%" stop-color="#ec4899"/></linearGradient><linearGradient id="sheen1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#c084fc" stop-opacity="0.32"/><stop offset="50%" stop-color="#38bdf8" stop-opacity="0.06"/><stop offset="100%" stop-color="transparent"/></linearGradient><linearGradient id="sheen2" x1="100%" y1="100%" x2="0%" y2="0%"><stop offset="0%" stop-color="#a855f7" stop-opacity="0.32"/><stop offset="50%" stop-color="#ec4899" stop-opacity="0.06"/><stop offset="100%" stop-color="transparent"/></linearGradient><linearGradient id="waveBarGrad" x1="0%" y1="100%" x2="0%" y2="0%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="45%" stop-color="#a855f7"/><stop offset="80%" stop-color="#c084fc"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient><linearGradient id="spindleRim" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="50%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#c084fc"/></linearGradient><filter id="coreGlow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="8" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="bloomGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="16" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><circle cx="256" cy="256" r="246" fill="url(#vaultBase)"/><g fill="url(#neonRim)" opacity="0.9"><rect x="249" y="8" width="14" height="20" rx="3"/><rect x="249" y="484" width="14" height="20" rx="3"/><rect x="8" y="249" width="20" height="14" rx="3"/><rect x="484" y="249" width="20" height="14" rx="3"/><rect x="76" y="76" width="15" height="15" rx="3" transform="rotate(45 83.5 83.5)"/><rect x="421" y="76" width="15" height="15" rx="3" transform="rotate(45 428.5 83.5)"/><rect x="76" y="421" width="15" height="15" rx="3" transform="rotate(45 83.5 428.5)"/><rect x="421" y="421" width="15" height="15" rx="3" transform="rotate(45 428.5 428.5)"/><circle cx="363" cy="55" r="4.5"/><circle cx="149" cy="55" r="4.5"/><circle cx="363" cy="457" r="4.5"/><circle cx="149" cy="457" r="4.5"/><circle cx="55" cy="363" r="4.5"/><circle cx="55" cy="149" r="4.5"/><circle cx="457" cy="363" r="4.5"/><circle cx="457" cy="149" r="4.5"/></g><circle cx="256" cy="256" r="236" fill="none" stroke="url(#neonRim)" stroke-width="3.5" filter="url(#coreGlow)"/><g fill="none" stroke="rgba(255, 255, 255, 0.06)" stroke-width="1.3"><circle cx="256" cy="256" r="222"/><circle cx="256" cy="256" r="210"/><circle cx="256" cy="256" r="198" stroke="rgba(192, 132, 252, 0.16)" stroke-width="1.8"/><circle cx="256" cy="256" r="186"/><circle cx="256" cy="256" r="174"/><circle cx="256" cy="256" r="162" stroke="rgba(56, 189, 248, 0.14)" stroke-width="1.8"/><circle cx="256" cy="256" r="150"/></g><path d="M 256 256 L 115 65 A 225 225 0 0 1 200 38 Z" fill="url(#sheen1)"/><path d="M 256 256 L 397 447 A 225 225 0 0 1 312 474 Z" fill="url(#sheen2)"/><circle cx="256" cy="256" r="132" fill="url(#hubDepth)"/><circle cx="256" cy="256" r="132" fill="none" stroke="url(#neonRim)" stroke-width="3" filter="url(#coreGlow)"/><circle cx="256" cy="256" r="122" fill="none" stroke="rgba(255, 255, 255, 0.08)" stroke-width="1.2" stroke-dasharray="6 4"/><circle cx="256" cy="256" r="75" fill="#a855f7" opacity="0.22" filter="url(#bloomGlow)"/><g filter="url(#bloomGlow)"><rect x="174" y="214" width="18" height="84" rx="9" fill="url(#waveBarGrad)"/><rect x="208" y="174" width="18" height="164" rx="9" fill="url(#waveBarGrad)"/><rect x="247" y="136" width="18" height="240" rx="9" fill="url(#waveBarGrad)"/><rect x="286" y="174" width="18" height="164" rx="9" fill="url(#waveBarGrad)"/><rect x="320" y="214" width="18" height="84" rx="9" fill="url(#waveBarGrad)"/></g><circle cx="256" cy="256" r="24" fill="#080610" stroke="url(#spindleRim)" stroke-width="2.5" filter="url(#coreGlow)"/><circle cx="256" cy="256" r="10" fill="#38bdf8"/><circle cx="256" cy="256" r="4" fill="#ffffff"/></svg>
       </div>
       <div>
         <div class="brand-title">JuiceVault</div>
@@ -10764,19 +10768,142 @@ self.addEventListener('fetch', (event) => {
 });
 """
 
-FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
   <defs>
-    <linearGradient id="discGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#c084fc"/>
-      <stop offset="50%" stop-color="#a855f7"/>
-      <stop offset="100%" stop-color="#6b21a8"/>
+    <!-- Background Vault Depth -->
+    <radialGradient id="vaultBase" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e1738"/>
+      <stop offset="55%" stop-color="#0f0c1c"/>
+      <stop offset="85%" stop-color="#07060d"/>
+      <stop offset="100%" stop-color="#020204"/>
+    </radialGradient>
+
+    <!-- Center Vault Hub Depth -->
+    <radialGradient id="hubDepth" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#281e4a"/>
+      <stop offset="70%" stop-color="#130e26"/>
+      <stop offset="100%" stop-color="#090712"/>
+    </radialGradient>
+
+    <!-- Neon Rim Gradient -->
+    <linearGradient id="neonRim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="30%" stop-color="#c084fc"/>
+      <stop offset="70%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#ec4899"/>
     </linearGradient>
+
+    <!-- Specular Sheen for Vinyl Texture -->
+    <linearGradient id="sheen1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" stop-opacity="0.32"/>
+      <stop offset="50%" stop-color="#38bdf8" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </linearGradient>
+    <linearGradient id="sheen2" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.32"/>
+      <stop offset="50%" stop-color="#ec4899" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </linearGradient>
+
+    <!-- Equalizer Harmonic Gradient -->
+    <linearGradient id="waveBarGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="45%" stop-color="#a855f7"/>
+      <stop offset="80%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+
+    <!-- Center Spindle Core Gradient -->
+    <linearGradient id="spindleRim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#c084fc"/>
+    </linearGradient>
+
+    <!-- Glow Filters -->
+    <filter id="coreGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="bloomGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
-  <circle cx="32" cy="32" r="30" fill="url(#discGrad)"/>
-  <circle cx="32" cy="32" r="22" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.6"/>
-  <circle cx="32" cy="32" r="16" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.2"/>
-  <circle cx="32" cy="32" r="10" fill="#09090d" stroke="#a855f7" stroke-width="1.8"/>
-  <circle cx="32" cy="32" r="3.5" fill="#c084fc"/>
+
+  <!-- Base Obsidian Disc -->
+  <circle cx="256" cy="256" r="246" fill="url(#vaultBase)"/>
+
+  <!-- 16 Precision Vault Dial Notches / Lock Teeth -->
+  <g fill="url(#neonRim)" opacity="0.9">
+    <!-- North / South / East / West -->
+    <rect x="249" y="8" width="14" height="20" rx="3"/>
+    <rect x="249" y="484" width="14" height="20" rx="3"/>
+    <rect x="8" y="249" width="20" height="14" rx="3"/>
+    <rect x="484" y="249" width="20" height="14" rx="3"/>
+
+    <!-- 45 Degree Diagonals -->
+    <rect x="76" y="76" width="15" height="15" rx="3" transform="rotate(45 83.5 83.5)"/>
+    <rect x="421" y="76" width="15" height="15" rx="3" transform="rotate(45 428.5 83.5)"/>
+    <rect x="76" y="421" width="15" height="15" rx="3" transform="rotate(45 83.5 428.5)"/>
+    <rect x="421" y="421" width="15" height="15" rx="3" transform="rotate(45 428.5 428.5)"/>
+
+    <!-- Intermediate Dial Indices -->
+    <circle cx="363" cy="55" r="4.5"/>
+    <circle cx="149" cy="55" r="4.5"/>
+    <circle cx="363" cy="457" r="4.5"/>
+    <circle cx="149" cy="457" r="4.5"/>
+    <circle cx="55" cy="363" r="4.5"/>
+    <circle cx="55" cy="149" r="4.5"/>
+    <circle cx="457" cy="363" r="4.5"/>
+    <circle cx="457" cy="149" r="4.5"/>
+  </g>
+
+  <!-- Glowing Outer Neon Bevel Ring -->
+  <circle cx="256" cy="256" r="236" fill="none" stroke="url(#neonRim)" stroke-width="3.5" filter="url(#coreGlow)"/>
+
+  <!-- Concentric Vinyl Sound Grooves -->
+  <g fill="none" stroke="rgba(255, 255, 255, 0.06)" stroke-width="1.3">
+    <circle cx="256" cy="256" r="222"/>
+    <circle cx="256" cy="256" r="210"/>
+    <circle cx="256" cy="256" r="198" stroke="rgba(192, 132, 252, 0.16)" stroke-width="1.8"/>
+    <circle cx="256" cy="256" r="186"/>
+    <circle cx="256" cy="256" r="174"/>
+    <circle cx="256" cy="256" r="162" stroke="rgba(56, 189, 248, 0.14)" stroke-width="1.8"/>
+    <circle cx="256" cy="256" r="150"/>
+  </g>
+
+  <!-- Specular Reflection Wedges -->
+  <path d="M 256 256 L 115 65 A 225 225 0 0 1 200 38 Z" fill="url(#sheen1)"/>
+  <path d="M 256 256 L 397 447 A 225 225 0 0 1 312 474 Z" fill="url(#sheen2)"/>
+
+  <!-- Inner Vault Chamber / Turntable Hub -->
+  <circle cx="256" cy="256" r="132" fill="url(#hubDepth)"/>
+  <circle cx="256" cy="256" r="132" fill="none" stroke="url(#neonRim)" stroke-width="3" filter="url(#coreGlow)"/>
+  <circle cx="256" cy="256" r="122" fill="none" stroke="rgba(255, 255, 255, 0.08)" stroke-width="1.2" stroke-dasharray="6 4"/>
+
+  <!-- Radiant Core Backlight -->
+  <circle cx="256" cy="256" r="75" fill="#a855f7" opacity="0.22" filter="url(#bloomGlow)"/>
+
+  <!-- Centered Harmonic Soundwave Blades (JuiceVault Equalizer Core) -->
+  <g filter="url(#bloomGlow)">
+    <rect x="174" y="214" width="18" height="84" rx="9" fill="url(#waveBarGrad)"/>
+    <rect x="208" y="174" width="18" height="164" rx="9" fill="url(#waveBarGrad)"/>
+    <rect x="247" y="136" width="18" height="240" rx="9" fill="url(#waveBarGrad)"/>
+    <rect x="286" y="174" width="18" height="164" rx="9" fill="url(#waveBarGrad)"/>
+    <rect x="320" y="214" width="18" height="84" rx="9" fill="url(#waveBarGrad)"/>
+  </g>
+
+  <!-- Center Vault Turntable Spindle Lock -->
+  <circle cx="256" cy="256" r="24" fill="#080610" stroke="url(#spindleRim)" stroke-width="2.5" filter="url(#coreGlow)"/>
+  <circle cx="256" cy="256" r="10" fill="#38bdf8"/>
+  <circle cx="256" cy="256" r="4" fill="#ffffff"/>
 </svg>"""
 
 import os
