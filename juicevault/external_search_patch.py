@@ -31,13 +31,30 @@ def _find_youtube_cookiefile():
     if env_path and os.path.isfile(env_path) and os.path.getsize(env_path) > 10:
         return env_path
 
-    candidates = ("cookies.txt", "youtube_cookies.txt", "yt_cookies.txt", "youtube.com_cookies.txt")
+    candidates = (
+        "cookies.txt",
+        "youtube_cookies.txt",
+        "yt_cookies.txt",
+        "youtube.com_cookies.txt",
+        "cookies.txt.txt",
+    )
     dirs = [
         os.path.dirname(__file__),
         os.path.abspath("."),
         os.path.expanduser("~"),
+        os.path.join(os.path.dirname(__file__), ".."),
     ]
+    try:
+        from redbot.core.data_manager import cog_data_path
+        data_dir = str(cog_data_path(raw_name="JuiceVault"))
+        if data_dir and data_dir not in dirs:
+            dirs.insert(0, data_dir)
+    except Exception:
+        pass
+
     for d in dirs:
+        if not d or not os.path.isdir(d):
+            continue
         for fname in candidates:
             p = os.path.join(d, fname)
             if os.path.isfile(p) and os.path.getsize(p) > 10:
@@ -230,15 +247,14 @@ def _extract_search(query, skip_sources=(), max_playlist_items=250):
         "extract_flat": True,
         "ignoreerrors": True,
         "default_search": "auto",
-        "playlistend": max_playlist_items if is_playlist_candidate else 5,
         "extractor_args": {
             "youtube": {
-                "player_client": ["web", "mweb", "android_music", "ios"] if cookiefile else ["android_music", "android", "ios", "mweb"],
-                "player_skip": ["webpage", "configs"],
+                "player_client": ["web", "mweb", "ios", "android_music"],
+            } if cookiefile else {
+                "player_client": ["android_music", "android", "ios", "mweb"],
             }
         },
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
     }
@@ -368,7 +384,6 @@ def _download_with_ytdlp(url, tempdir):
         "restrictfilenames": True,
         "overwrites": True,
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
     }
@@ -383,8 +398,7 @@ def _download_with_ytdlp(url, tempdir):
             "cookiefile": cookiefile,
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["web", "mweb", "android_music", "ios"],
-                    "player_skip": ["webpage", "configs"],
+                    "player_client": ["web", "mweb"],
                 }
             },
         })
@@ -393,10 +407,13 @@ def _download_with_ytdlp(url, tempdir):
             "cookiefile": cookiefile,
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["ios", "android_music"],
-                    "player_skip": ["webpage", "configs"],
+                    "player_client": ["android_music", "web"],
                 }
             },
+        })
+        attempts.append({
+            **base,
+            "cookiefile": cookiefile,
         })
 
     # 2. Modern mobile streaming clients that bypass YouTube desktop bot checks without sign-in
@@ -406,7 +423,6 @@ def _download_with_ytdlp(url, tempdir):
             "extractor_args": {
                 "youtube": {
                     "player_client": ["android_music", "android", "ios", "mweb"],
-                    "player_skip": ["webpage", "configs"],
                 }
             },
         },
@@ -415,7 +431,6 @@ def _download_with_ytdlp(url, tempdir):
             "extractor_args": {
                 "youtube": {
                     "player_client": ["ios", "android_music"],
-                    "player_skip": ["webpage", "configs"],
                 }
             },
         },
@@ -424,7 +439,6 @@ def _download_with_ytdlp(url, tempdir):
             "extractor_args": {
                 "youtube": {
                     "player_client": ["mweb", "web_safari"],
-                    "player_skip": ["webpage", "configs"],
                 }
             },
         },
@@ -433,7 +447,6 @@ def _download_with_ytdlp(url, tempdir):
             "extractor_args": {
                 "youtube": {
                     "player_client": ["android", "ios"],
-                    "player_skip": ["webpage", "configs"],
                 }
             },
         },
@@ -448,7 +461,6 @@ def _download_with_ytdlp(url, tempdir):
             "extractor_args": {
                 "youtube": {
                     "player_client": ["web", "mweb", "ios"],
-                    "player_skip": ["webpage", "configs"],
                 }
             },
         })

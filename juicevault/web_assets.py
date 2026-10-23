@@ -135,7 +135,7 @@ HTML_INDEX = """<!DOCTYPE html>
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 20px;
+      padding: 12px 18px;
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
@@ -143,11 +143,18 @@ HTML_INDEX = """<!DOCTYPE html>
       top: 0;
       z-index: 50;
       background: rgba(9, 9, 13, 0.85);
+      width: 100%;
+      max-width: 100vw;
+      box-sizing: border-box;
+      overflow-x: clip;
+      gap: 10px;
     }
     .header-brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+      flex-shrink: 0;
+      min-width: 0;
     }
     .brand-logo-disc {
       width: 32px;
@@ -181,11 +188,15 @@ HTML_INDEX = """<!DOCTYPE html>
     }
     .header-nav-wrap {
       display: none;
+      flex-shrink: 1;
+      min-width: 0;
     }
     .header-meta {
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-shrink: 0;
+      min-width: 0;
     }
     .status-badge {
       display: inline-flex;
@@ -351,12 +362,65 @@ HTML_INDEX = """<!DOCTYPE html>
         display: block !important;
       }
     }
+    @media (min-width: 860px) and (max-width: 1400px) {
+      .brand-sub {
+        display: none !important;
+      }
+      .brand-tag {
+        display: none !important;
+      }
+      .header-visualizer-wave {
+        display: none !important;
+      }
+      #voiceBadge {
+        display: none !important;
+      }
+      .header-pill-sub {
+        display: none !important;
+      }
+    }
+    @media (min-width: 860px) and (max-width: 1180px) {
+      .header-nav-wrap {
+        max-width: 360px;
+        margin: 0 6px;
+      }
+      .header-nav-wrap .segment-btn span {
+        display: none !important;
+      }
+      .header-nav-wrap .segment-btn {
+        padding: 6px 9px !important;
+      }
+      #headerViewsBadge {
+        display: none !important;
+      }
+    }
+    @media (min-width: 860px) and (max-width: 980px) {
+      #guildBadge {
+        display: none !important;
+      }
+      #connLabel {
+        display: none !important;
+      }
+    }
     @media (max-width: 859px) {
       header.app-header {
-        height: 50px;
-        min-height: 50px;
-        padding: 0 12px !important;
+        height: 52px;
+        min-height: 52px;
+        padding: 0 10px !important;
         gap: 6px;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100vw;
+        overflow: hidden;
+      }
+      .brand-sub {
+        display: none !important;
+      }
+      .brand-tag {
+        display: none !important;
+      }
+      .header-visualizer-wave {
+        display: none !important;
       }
       .header-meta {
         gap: 5px !important;
@@ -366,6 +430,12 @@ HTML_INDEX = """<!DOCTYPE html>
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+      #voiceBadge {
+        display: none !important;
+      }
+      #headerViewsBadge {
+        display: none !important;
       }
       .btn-lt-action {
         padding: 5px 9px !important;
@@ -379,14 +449,20 @@ HTML_INDEX = """<!DOCTYPE html>
       .header-pill-sub {
         display: none !important;
       }
-      .brand-tag {
-        display: none !important;
-      }
       #connLabel {
         display: none !important;
       }
       #guildBadge {
         display: none !important;
+      }
+      .resync-btn span {
+        display: none !important;
+      }
+      .resync-btn {
+        padding: 6px !important;
+      }
+      #headerUserName {
+        max-width: 70px !important;
       }
       .controls-sub .btn-flat {
         padding: 5px 4px !important;
@@ -463,6 +539,14 @@ HTML_INDEX = """<!DOCTYPE html>
         padding: 8px 10px !important;
         margin-top: 8px !important;
         gap: 8px !important;
+      }
+    }
+    @media (max-width: 420px) {
+      #headerUserBadge span {
+        display: none !important;
+      }
+      .header-brand {
+        gap: 6px !important;
       }
     }
     /* Tab Content Switcher */
@@ -3353,27 +3437,27 @@ HTML_INDEX = """<!DOCTYPE html>
     <!-- Desktop Navigation Pill Bar (Combined Pic 2 & Pic 3 in Header) -->
     <div class="header-nav-wrap">
       <div class="segment-bar desktop-segment">
-        <button class="segment-btn active" onclick="switchTab('queue')">
+        <button class="segment-btn active" onclick="switchTab('queue')" title="Queue">
           <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           <span>Queue</span>
         </button>
-        <button class="segment-btn" onclick="switchTab('search')">
+        <button class="segment-btn" onclick="switchTab('search')" title="Search">
           <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <span>Search</span>
         </button>
-        <button class="segment-btn" onclick="switchTab('categories')">
+        <button class="segment-btn" onclick="switchTab('categories')" title="Library">
           <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
           <span>Library</span>
         </button>
-        <button class="segment-btn" onclick="switchTab('soundboard')">
+        <button class="segment-btn" onclick="switchTab('soundboard')" title="Sounds">
           <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
           <span>Sounds</span>
         </button>
-        <button class="segment-btn" onclick="switchTab('shortcuts')">
+        <button class="segment-btn" onclick="switchTab('shortcuts')" title="Shortcuts">
           <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           <span>Shortcuts</span>
         </button>
-        <button class="segment-btn" onclick="switchTab('settings')">
+        <button class="segment-btn" onclick="switchTab('settings')" title="Settings">
           <svg class="icon-svg" style="width:14px;height:14px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span>Settings</span>
         </button>
@@ -5574,12 +5658,10 @@ HTML_INDEX = """<!DOCTYPE html>
 
       initWebAudio();
 
-      // Disable pitch preservation time-stretching during standard playback:
-      // Browser WSOLA time-stretch engines chop audio into grains and create metallic white noise dots & popping
-      // whenever clock-sync speed adjustments happen. Direct sample-rate resampling is pure and click-free.
-      audio.preservesPitch = false;
-      if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = false;
-      if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = false;
+      // Preserve musical pitch so clock-sync micro-adjustments never warp song pitch or create chipmunk sounds
+      audio.preservesPitch = true;
+      if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = true;
+      if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = true;
 
       const isNight = eff.includes('night');
       const isSlow = eff.includes('slow');
@@ -5893,9 +5975,9 @@ HTML_INDEX = """<!DOCTYPE html>
         const streamUrl = `/api/stream?token=${encodeURIComponent(token)}&guild_id=${encodeURIComponent(gid)}&t=${encodeURIComponent(trackKey)}&_cb=${Date.now()}`;
         
         audio.crossOrigin = 'anonymous';
-        audio.preservesPitch = false;
-        if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = false;
-        if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = false;
+        audio.preservesPitch = true;
+        if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = true;
+        if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = true;
         audio.src = streamUrl;
         audio.load();
 
@@ -6022,7 +6104,14 @@ HTML_INDEX = """<!DOCTYPE html>
 
       // High-precision 1:1 Phase-Locked Loop (PLL) clock sync with Discord
       if (!audio.paused && audio.duration > 0 && audio.readyState >= 2) {
-        const drift = audio.currentTime - currentElapsed;
+        const nowMs = performance.now();
+        const nowSec = Date.now() / 1000;
+        const serverPos = (currentState.track && typeof currentState.track.position_seconds === 'number') ? currentState.track.position_seconds : 0;
+        const serverTime = currentState.server_timestamp || nowSec;
+        const elapsedSinceServer = Math.max(0, nowSec - serverTime);
+        const liveDiscordPos = serverPos + elapsedSinceServer * speed;
+
+        const drift = audio.currentTime - liveDiscordPos;
         const driftMs = Math.round(drift * 1000);
         const absDriftMs = Math.abs(driftMs);
         const driftLabel = document.getElementById('syncDriftLabel');
@@ -6030,12 +6119,9 @@ HTML_INDEX = """<!DOCTYPE html>
           driftLabel.innerText = (driftMs >= 0 ? `+${driftMs}ms` : `${driftMs}ms`);
         }
 
-        const deadband = 0.08; // 80ms deadband for 1:1 phase-lock
-        const hardSeekThreshold = 3.0; // 3.0s: ONLY hard seek on massive desync
-
         const statusText = document.getElementById('ltStatusText');
 
-        if (absDriftMs <= 80) {
+        if (absDriftMs <= 450) {
           if (statusText) statusText.innerText = 'Phase-Locked';
           if (statusInd) statusInd.className = 'lt-status-indicator locked';
           if (badge) {
@@ -6043,7 +6129,11 @@ HTML_INDEX = """<!DOCTYPE html>
             badge.className = 'lt-sync-badge live';
           }
           aligningStuckStartTime = null;
-        } else if (absDriftMs <= 3000) {
+          // In sync: lock strictly onto nominal playback speed. Zero warping!
+          if (Math.abs(audio.playbackRate - speed) > 0.002) {
+            audio.playbackRate = speed;
+          }
+        } else if (absDriftMs <= 2000) {
           if (statusText) statusText.innerText = (driftMs < 0 ? `Behind ${Math.abs(driftMs)}ms` : `Ahead +${driftMs}ms`);
           if (statusInd) statusInd.className = 'lt-status-indicator locked';
           if (badge) {
@@ -6051,6 +6141,22 @@ HTML_INDEX = """<!DOCTYPE html>
             badge.className = 'lt-sync-badge live';
           }
           aligningStuckStartTime = null;
+
+          // Background tab / alt-tab protection: never steer rate while hidden to prevent pitch warps
+          if (document.hidden) {
+            if (Math.abs(audio.playbackRate - speed) > 0.002) {
+              audio.playbackRate = speed;
+            }
+          } else {
+            // Ultra-gentle inaudible micro-nudge (max 1.0% rate shift) with preservesPitch = true
+            if (nowMs - lastRateSteerTime > 400) {
+              const targetRate = (drift < 0) ? (speed * 1.01) : (speed * 0.99);
+              if (Math.abs(audio.playbackRate - targetRate) > 0.002) {
+                audio.playbackRate = targetRate;
+                lastRateSteerTime = nowMs;
+              }
+            }
+          }
         } else {
           if (statusText) statusText.innerText = 'Resyncing...';
           if (statusInd) statusInd.className = 'lt-status-indicator buffering';
@@ -6059,37 +6165,15 @@ HTML_INDEX = """<!DOCTYPE html>
             badge.className = 'lt-sync-badge connecting';
           }
           if (!aligningStuckStartTime) aligningStuckStartTime = Date.now();
-        }
 
-        const nowMs = performance.now();
-        if (Math.abs(drift) > hardSeekThreshold) {
-          // Genuine large desync (> 3.0s) -> Single throttled hard seek
-          if (!audio.seeking && (Date.now() - lastAudioSeekTime >= 3500)) {
-            const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 1.0) ? Math.max(0, audio.duration - 0.5) : currentElapsed;
-            const targetSeek = Math.max(0, Math.min(currentElapsed, maxSeek));
+          // Genuine large desync (> 2.0s) -> Single instant clean seek directly to Discord's live position
+          if (!audio.seeking && (Date.now() - lastAudioSeekTime >= 2000)) {
+            const maxSeek = (audio.duration && !isNaN(audio.duration) && audio.duration > 1.0) ? Math.max(0, audio.duration - 0.5) : liveDiscordPos;
+            const targetSeek = Math.max(0, Math.min(liveDiscordPos, maxSeek));
             lastAudioSeekTime = Date.now();
             try { 
               audio.currentTime = targetSeek; 
             } catch (e) {}
-            if (Math.abs(audio.playbackRate - speed) > 0.003) {
-              audio.playbackRate = speed;
-            }
-            lastRateSteerTime = nowMs;
-          }
-        } else if (Math.abs(drift) > deadband) {
-          // Smooth Proportional Rate Steering (80ms to 3000ms):
-          // NEVER seeks, never restarts the song! Silently glides into lock within seconds.
-          if (nowMs - lastRateSteerTime > 350) {
-            const steer = Math.min(0.08, Math.max(0.015, Math.abs(drift) * 0.04));
-            const targetRate = (drift < 0) ? (speed * (1 + steer)) : (speed * (1 - steer));
-            if (Math.abs(audio.playbackRate - targetRate) > 0.003) {
-              audio.playbackRate = targetRate;
-              lastRateSteerTime = nowMs;
-            }
-          }
-        } else {
-          // Within 80ms deadband: lock onto nominal speed
-          if (Math.abs(audio.playbackRate - speed) > 0.003) {
             audio.playbackRate = speed;
             lastRateSteerTime = nowMs;
           }
@@ -6104,6 +6188,13 @@ HTML_INDEX = """<!DOCTYPE html>
         }
       }
     }
+
+    // Instant lock on tab re-focus: evaluate live position immediately without rate oscillation
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && liveStreamActive) {
+        syncLiveAudio(false);
+      }
+    });
 
     function setupMediaSession() {
       if (!('mediaSession' in navigator) || mediaSessionConfigured) return;
@@ -6356,15 +6447,23 @@ HTML_INDEX = """<!DOCTYPE html>
     // High-precision 60fps liquid smooth progress ticker matching live playback
     function progressLoop() {
       const now = performance.now();
-      const dt = (now - lastTickTime) / 1000;
       lastTickTime = now;
 
       if (!isScrubbing && currentState && currentState.is_playing && durationSeconds > 0) {
-        // Tab background sleep cap: prevent wild leaps when tab wakes from background/blur
-        const effectiveDt = Math.min(dt, 0.2);
+        const nowSec = Date.now() / 1000;
+        const serverPos = (currentState.track && typeof currentState.track.position_seconds === 'number') ? currentState.track.position_seconds : 0;
+        const serverTime = currentState.server_timestamp || nowSec;
+        const elapsedSinceServer = Math.max(0, nowSec - serverTime);
         const eff = String(currentState.effect || '').toLowerCase();
         const speed = (currentState.track && currentState.track.effect_speed) || (eff.includes('night') ? 1.22 : (eff.includes('slow') ? 0.86 : 1.0));
-        currentElapsed = Math.min(durationSeconds, currentElapsed + effectiveDt * speed);
+        const liveDiscordPos = serverPos + elapsedSinceServer * speed;
+
+        const audio = document.getElementById('liveAudio');
+        if (liveStreamActive && audio && !audio.paused && audio.duration > 0 && Math.abs(audio.currentTime - liveDiscordPos) < 1.0) {
+          currentElapsed = audio.currentTime;
+        } else {
+          currentElapsed = Math.min(durationSeconds, Math.max(0, liveDiscordPos));
+        }
         updateScrubberUI();
       }
       requestAnimationFrame(progressLoop);

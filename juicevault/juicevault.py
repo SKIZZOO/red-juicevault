@@ -2018,7 +2018,14 @@ class JuiceVault(commands.Cog):
     @commands.is_owner()
     async def cookies_cmd(self, ctx, *, action: str = None):
         """Manage YouTube authentication cookies to bypass 'Sign in to confirm you're not a bot'."""
-        cookie_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
+        cookie_paths = [os.path.join(os.path.dirname(__file__), "cookies.txt")]
+        try:
+            from redbot.core.data_manager import cog_data_path
+            data_dir = str(cog_data_path(raw_name="JuiceVault"))
+            os.makedirs(data_dir, exist_ok=True)
+            cookie_paths.append(os.path.join(data_dir, "cookies.txt"))
+        except Exception:
+            pass
 
         # 1. Attachment upload
         if ctx.message.attachments:
@@ -2026,29 +2033,34 @@ class JuiceVault(commands.Cog):
             try:
                 data = await att.read()
                 text = data.decode("utf-8", errors="ignore")
-                with open(cookie_path, "wb") as f:
-                    f.write(data)
+                for cp in cookie_paths:
+                    with open(cp, "wb") as f:
+                        f.write(data)
                 count = len([l for l in text.splitlines() if l.strip() and not l.startswith("#") and "youtube.com" in l])
                 await ctx.send(
-                    f"✅ **YouTube cookies saved successfully!**\n"
-                    f"Saved `{count}` YouTube cookies to `{cookie_path}`.\n"
-                    f"YouTube bot detection has been bypassed for all external play commands."
+                    f"**YouTube cookies saved successfully.**\n"
+                    f"Saved `{count}` YouTube cookies across cog and data directories.\n"
+                    f"YouTube bot authentication is now active for all external search and play commands."
                 )
                 return
             except Exception as exc:
-                await ctx.send(f"❌ Failed to save cookies file: `{exc}`")
+                await ctx.send(f"Failed to save cookies file: `{exc}`")
                 return
 
         # 2. Clear / Remove
         if action and action.strip().lower() in ("clear", "remove", "delete"):
-            if os.path.isfile(cookie_path):
-                try:
-                    os.remove(cookie_path)
-                    await ctx.send("🗑️ YouTube `cookies.txt` has been removed.")
-                except Exception as exc:
-                    await ctx.send(f"❌ Error deleting cookies file: `{exc}`")
+            removed = False
+            for cp in cookie_paths:
+                if os.path.isfile(cp):
+                    try:
+                        os.remove(cp)
+                        removed = True
+                    except Exception as exc:
+                        await ctx.send(f"Error deleting cookies file `{cp}`: `{exc}`")
+            if removed:
+                await ctx.send("YouTube `cookies.txt` has been removed.")
             else:
-                await ctx.send("ℹ️ No active `cookies.txt` found.")
+                await ctx.send("No active `cookies.txt` found.")
             return
 
         # 3. Check status
@@ -2063,7 +2075,7 @@ class JuiceVault(commands.Cog):
             except Exception:
                 count = "Active"
             await ctx.send(
-                f"🟢 **YouTube Cookies Active**\n"
+                f"**YouTube Cookies Active**\n"
                 f"• Location: `{active_cookie}`\n"
                 f"• Size: `{size:,} bytes`\n"
                 f"• YouTube Cookies: `{count}`\n\n"
@@ -2072,13 +2084,13 @@ class JuiceVault(commands.Cog):
             )
         else:
             await ctx.send(
-                f"🟡 **No YouTube Cookies Configured**\n\n"
+                f"**No YouTube Cookies Configured**\n\n"
                 f"YouTube frequently flags datacenter bot IPs with *'Sign in to confirm you’re not a bot'*.\n\n"
                 f"**How to configure YouTube cookies:**\n"
                 f"1. Open Chrome/Firefox and log into YouTube.\n"
                 f"2. Install the **'Get cookies.txt locally'** extension.\n"
                 f"3. Export YouTube cookies as `cookies.txt`.\n"
-                f"4. Type `[p]jv cookies` and attach the `cookies.txt` file!\n\n"
+                f"4. Type `[p]jv cookies` and attach the `cookies.txt` file.\n\n"
                 f"*Alternatively, place `cookies.txt` directly inside the `juicevault` folder.*"
             )
 

@@ -2395,8 +2395,12 @@ class JuiceVaultWebRemote:
         current_file = None
         requested_t = str(request.query.get("t", "")).strip()
 
-        # Check immediately and wait up to 2.4 seconds for the audio file to become ready
-        for attempt in range(12):
+        # Check immediately and wait for the audio file to become ready
+        cur_initial = getattr(main, "current", {}).get(gid)
+        is_ext = cur_initial and (cur_initial.get("_external") or any(d in str(cur_initial.get("url", "")).lower() for d in ("youtube.com", "youtu.be", "soundcloud.com", "bandcamp.com")))
+        max_attempts = 18 if is_ext else 12
+
+        for attempt in range(max_attempts):
             cur = getattr(main, "current", {}).get(gid)
             cur_key = ""
             if cur:
@@ -2423,9 +2427,10 @@ class JuiceVaultWebRemote:
             await asyncio.sleep(0.2)
 
         if not current_file or not os.path.isfile(current_file):
-            # Check if there is a direct playable stream URL on the current track (e.g. JuiceVault CDN)
             cur = getattr(main, "current", {}).get(gid)
-            if cur and cur.get("url") and str(cur["url"]).startswith(("http://", "https://")):
+            is_ext_track = cur and (cur.get("_external") or any(d in str(cur.get("url", "")).lower() for d in ("youtube.com", "youtu.be", "soundcloud.com", "bandcamp.com")))
+            # Check if there is a direct playable stream URL on the current track (e.g. JuiceVault CDN)
+            if cur and not is_ext_track and cur.get("url") and str(cur["url"]).startswith(("http://", "https://")):
                 remote_url = cur["url"]
                 req_headers = {"User-Agent": "Mozilla/5.0"}
                 if "Range" in request.headers:
@@ -2448,7 +2453,7 @@ class JuiceVaultWebRemote:
                 except Exception:
                     pass
                 raise web.HTTPTemporaryRedirect(location=remote_url, headers=cors_headers)
-            return web.Response(status=404, text="No track currently playing or audio not ready", headers=cors_headers)
+            return web.Response(status=503 if is_ext_track else 404, text="No track currently playing or audio not ready", headers={**cors_headers, "Retry-After": "1"})
 
         ext = os.path.splitext(current_file)[1].lower()
         content_type = {
